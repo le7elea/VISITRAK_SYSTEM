@@ -8,7 +8,7 @@ const Sidebar = ({ menu, activeTab, setActiveTab, darkMode }) => {
       }`}
     >
       <div className="flex items-center gap-3 mb-6"> 
-        <img src="/src/assets/logo04.png" alt="Logo" className="w-10 h-10" />
+        <img src="/src/assets/logo04.png" alt="VisiTrak" className="w-10 h-10" />
         <h2 className="text-xl font-bold text-[#491D76] dark:text-white">VisiTrak Admin</h2>
       </div>
 
