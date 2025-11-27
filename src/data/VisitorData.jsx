@@ -35,7 +35,7 @@ export const useVisitorData = () => {
         office: "Extension Office",
         date: "11/02/2025",
         timeIn: "11:45 AM",
-        timeOut: "12:10 PM",
+        timeOut: "12:10 PM", 
         status: "Checked Out",
         satisfaction: 4.9,
         comment: "Excellent service! Keep it up!",

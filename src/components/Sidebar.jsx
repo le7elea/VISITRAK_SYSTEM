@@ -11,9 +11,9 @@ const Sidebar = ({ menu, activeTab, setActiveTab, darkMode }) => {
         darkMode ? "bg-[#1f1f1f] text-gray-100 border-r border-gray-700" : "bg-gray-50 text-gray-800 border-r border-gray-200"
       }`}
     >
-      <div className="flex items-center gap-3 mb-6"> 
+      <div className="flex items-center gap-5 mb-6"> 
         <img src={logo} alt="VisiTrak" className="w-10 h-10" />
-        <h2 className="text-xl font-bold text-[#491D76] dark:text-white">VisiTrak Admin</h2>
+        <h2 className="text-3xl font-bold text-[#491D76] dark:text-white">VisiTrak</h2>
       </div>
 
       <div>

@@ -1,341 +1,230 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import * as Chart from "chart.js/auto";
-import { Download, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import React from 'react';
+import { 
+  BarChart2, 
+  ChevronDown, 
+  MoreHorizontal, 
+  Download, 
+  MessageSquare 
+} from 'lucide-react';
 
-// ChartCard Component
-const ChartCard = ({ title, subtitle, chartType = "bar", data, trend }) => {
-  const canvasRef = useRef(null);
 
-  useEffect(() => {
-    const ctx = canvasRef.current.getContext("2d");
+// --- Components ---
 
-    const chart = new Chart.Chart(ctx, {
-      type: chartType,
-      data,
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            labels: {
-              color: document.documentElement.classList.contains("dark")
-                ? "#e5e7eb"
-                : "#111827",
-            },
-          },
-          tooltip: {
-            backgroundColor: "#1f2937",
-            titleColor: "#fff",
-            bodyColor: "#d1d5db",
-            borderWidth: 1,
-            borderColor: "#374151",
-          },
-        },
-        scales: chartType !== "pie" && chartType !== "doughnut" ? {
-          x: {
-            ticks: {
-              color: document.documentElement.classList.contains("dark")
-                ? "#e5e7eb"
-                : "#111827",
-            },
-            grid: {
-              color: "rgba(156,163,175,0.2)",
-            },
-          },
-          y: {
-            ticks: {
-              color: document.documentElement.classList.contains("dark")
-                ? "#e5e7eb"
-                : "#111827",
-            },
-            grid: {
-              color: "rgba(156,163,175,0.2)",
-            },
-          },
-        } : {},
-      },
-    });
+// 1. Sidebar Item Component
+const SidebarItem = ({ icon: Icon, label, isActive, badge }) => (
+  <button
+    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors mb-1 ${
+      isActive
+        ? 'bg-[#6B46C1] text-white shadow-md'
+        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+    }`}
+  >
+    <div className="flex items-center gap-3">
+      <Icon size={20} />
+      <span className="font-medium">{label}</span>
+    </div>
+    {badge && (
+      <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+        {badge}
+      </span>
+    )}
+  </button>
+);
 
-    return () => chart.destroy();
-  }, [chartType, data]);
+// 2. Section Header
+const SectionHeader = ({ title }) => (
+  <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3 px-4 mt-6">
+    {title}
+  </h3>
+);
 
-  const TrendIcon =
-    trend?.includes("+") ? ArrowUpRight : trend?.includes("-") ? ArrowDownRight : Minus;
-  const trendColor = trend?.includes("+")
-    ? "text-green-500"
-    : trend?.includes("-")
-    ? "text-red-500"
-    : "text-gray-400";
+// 3. Card Component (Reusable Container)
+const Card = ({ children, className = "" }) => (
+  <div className={`bg-white rounded-xl border border-gray-100 shadow-sm p-6 ${className}`}>
+    {children}
+  </div>
+);
+
+// 4. Bar Chart Component (Custom CSS Implementation)
+const VisitorTrafficChart = () => {
+  const data = [
+    { day: 'MON', value: 30, full: 100 },
+    { day: 'TUE', value: 50, full: 100 },
+    { day: 'WED', value: 65, full: 100 },
+    { day: 'THU', value: 45, full: 100 },
+    { day: 'FRI', value: 55, full: 100 },
+    { day: 'SAT', value: 25, full: 100 },
+    { day: 'SUN', value: 10, full: 100 },
+  ];
+
+  const getBarColor = (value) => {
+    if (value >= 60) return 'bg-[#6B46C1] group-hover:bg-[#5B34B8]'; // Darker purple
+    if (value >= 30) return 'bg-[#7C5CCA] group-hover:bg-[#6B46C1]'; // Original purple
+    return 'bg-[#A48CD8] group-hover:bg-[#7C5CCA]'; // Lighter purple
+  };
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5 transition hover:shadow-md">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-            {title}
-          </h3>
-          {subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
-          )}
+    <div className="h-full flex flex-col">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="text-[#6B46C1]" size={20} />
+          <h3 className="font-bold text-gray-800">Visitor Traffic</h3>
+        </div>
+        <MoreHorizontal className="text-gray-400 cursor-pointer" />
+      </div>
+
+      <div className="flex-1 flex items-end justify-between gap-2 sm:gap-4 h-64">
+        {/* Y-Axis Labels (Simplified) - Now visible on all screens */}
+        <div className="flex flex-col justify-between h-full text-[10px] sm:text-xs text-gray-400 pb-8 pr-2">
+          <span>500</span>
+          <span>400</span>
+          <span>300</span>
+          <span>200</span>
+          <span>100</span>
+          <span>0</span>
         </div>
 
-        {trend && (
-          <div className={`flex items-center gap-1 text-sm font-medium ${trendColor}`}>
-            <TrendIcon size={16} />
-            {trend}
+        {/* Bars Container */}
+        <div className="flex-1 flex items-end justify-between gap-2 sm:gap-4 h-full pb-8">
+          {data.map((item, index) => (
+            <div key={index} className="flex flex-col items-center flex-1 group relative h-full">
+              
+              {/* Percentage Tooltip (Visible on Hover) */}
+              <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+                <div className="bg-gray-800 text-white text-[10px] font-bold py-1 px-2 rounded shadow-lg whitespace-nowrap">
+                  {item.value}%
+                </div>
+                {/* Tooltip Arrow */}
+                <div className="w-2 h-2 bg-gray-800 rotate-45 mx-auto -mt-1"></div>
+              </div>
+
+              {/* Bar Container */}
+              <div className="w-full h-full flex flex-col justify-end items-center">
+                <div className="relative w-4 sm:w-6 md:w-8 bg-gray-100 rounded-full overflow-hidden transition-all duration-300"
+                     style={{ height: `${item.value}%` }}>
+                   {/* Active Bar */}
+                   <div 
+                    className={`absolute inset-0 w-full rounded-full transition-all duration-500 ${getBarColor(item.value)}`}
+                   ></div>
+                </div>
+              </div>
+              
+              <span className="text-[10px] text-gray-400 mt-2 font-medium absolute -bottom-6">{item.day}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 5. Satisfaction Chart Component  
+
+const SatisfactionChart = () => {
+  const ratings = [
+    { label: 'Very Satisfied', pct: 95, emoji: '🤩', color: 'bg-yellow-400' },
+    { label: 'Satisfied', pct: 92, emoji: '😄', color: 'bg-yellow-400' },
+    { label: 'Neutral', pct: 89, emoji: '😐', color: 'bg-yellow-400' },
+    { label: 'Unsatisfied', pct: 48, emoji: '😟', color: 'bg-green-100' }, // Image showed lighter colors for lower
+    { label: 'Very unsatisfied', pct: 15, emoji: '😡', color: 'bg-green-100' },
+  ];
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100">
+             <span className="text-xs">⚖️</span> 
           </div>
-        )}
+          <h3 className="font-bold text-gray-800">Satisfaction Rate</h3>
+        </div>
+        <MoreHorizontal className="text-gray-400 cursor-pointer" />
       </div>
 
-      <div className="h-64">
-        <canvas ref={canvasRef}></canvas>
+      <div className="flex flex-col gap-5 justify-center h-full">
+        {ratings.map((item, idx) => (
+          <div key={idx} className="w-full">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-lg">{item.emoji}</span>
+              <span className="text-xs font-bold text-gray-700 w-24">{item.label}</span>
+              <div className="flex-1 h-2 bg-green-50 rounded-full overflow-hidden relative">
+                <div 
+                  className={`h-full rounded-full ${idx < 3 ? 'bg-yellow-400' : 'bg-[#D1FADF]'}`}
+                  style={{ width: `${item.pct}%` }}
+                ></div>
+              </div>
+              <span className="text-xs font-bold text-gray-600 w-8 text-right">{item.pct}%</span>
+              <span className="text-[10px] text-gray-300 hidden sm:block">Rate</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
-// Sample Visitor Data
-const sampleVisitors = [
-  { id: 1, name: "John Doe", date: "2025-11-04", satisfaction: 5, comment: "Great service!" },
-  { id: 2, name: "Jane Smith", date: "2025-11-04", satisfaction: 4, comment: "Very helpful staff." },
-  { id: 3, name: "Bob Wilson", date: "2025-11-03", satisfaction: 5, comment: "Excellent experience." },
-  { id: 4, name: "Alice Brown", date: "2025-11-03", satisfaction: 3, comment: "Could be better." },
-  { id: 5, name: "Charlie Davis", date: "2025-11-02", satisfaction: 4, comment: "Good overall." },
-  { id: 6, name: "Eva Martinez", date: "2025-11-02", satisfaction: 5, comment: "Amazing!" },
-  { id: 7, name: "Frank Lee", date: "2025-11-01", satisfaction: 4, comment: "Nice place." },
-  { id: 8, name: "Grace Chen", date: "2025-11-01", satisfaction: 5, comment: "Highly recommend!" },
-  { id: 9, name: "Henry Kim", date: "2025-10-31", satisfaction: 3, comment: "Average service." },
-  { id: 10, name: "Iris Wang", date: "2025-10-31", satisfaction: 4, comment: "Pretty good." },
-  { id: 11, name: "Jack Taylor", date: "2025-10-30", satisfaction: 5, comment: "Outstanding!" },
-  { id: 12, name: "Kelly Moore", date: "2025-10-30", satisfaction: 4, comment: "Satisfied." },
-];
+// --- Main Application ---
 
-// Main Analytics Component
-const Analytics = () => {
-  const visitors = sampleVisitors;
-  const [dateRange, setDateRange] = useState("This Week");
-  const user = { type: "SuperAdmin" }; // Mock user
-
-  // 📅 Calculate Real Daily Visitor Data
-  const visitorTrafficData = useMemo(() => {
-    const now = new Date();
-    let startDate = new Date();
-    
-    if (dateRange === "This Week") {
-      startDate.setDate(now.getDate() - 7);
-    } else if (dateRange === "This Month") {
-      startDate.setDate(now.getDate() - 30);
-    } else if (dateRange === "Last 3 Months") {
-      startDate.setDate(now.getDate() - 90);
-    }
-
-    const filteredVisitors = visitors.filter(v => {
-      const visitDate = new Date(v.date);
-      return visitDate >= startDate && visitDate <= now;
-    });
-
-    const dailyCounts = {};
-    filteredVisitors.forEach(v => {
-      const day = new Date(v.date).toLocaleDateString('en-US', { weekday: 'short' });
-      dailyCounts[day] = (dailyCounts[day] || 0) + 1;
-    });
-
-    const labels = dateRange === "This Week" 
-      ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-      : Object.keys(dailyCounts);
-    
-    const data = labels.map(label => dailyCounts[label] || 0);
-
-    const total = data.reduce((sum, val) => sum + val, 0);
-    const lastTwo = data.slice(-2);
-    const trend = lastTwo[1] > lastTwo[0] ? `+${Math.round(((lastTwo[1] - lastTwo[0]) / lastTwo[0]) * 100)}%` : 
-                  lastTwo[1] < lastTwo[0] ? `-${Math.round(((lastTwo[0] - lastTwo[1]) / lastTwo[0]) * 100)}%` : "Stable";
-
-    return {
-      chartData: {
-        labels,
-        datasets: [
-          {
-            label: "Visitors",
-            data,
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59,130,246,0.3)",
-            tension: 0.4,
-            fill: true,
-          },
-        ],
-      },
-      trend,
-      total
-    };
-  }, [visitors, dateRange]);
-
-  const satisfactionData = {
-    labels: ["Very Satisfied", "Satisfied", "Neutral", "Unsatisfied"],
-    datasets: [
-      {
-        label: "Responses",
-        data: [6, 4, 2, 0],
-        backgroundColor: ["#16a34a", "#84cc16", "#facc15", "#ef4444"],
-      },
-    ],
-  };
-
-  const visitorTypeData = {
-    labels: ["New Visitors", "Returning Visitors"],
-    datasets: [
-      {
-        label: "Visitors",
-        data: [65, 35],
-        backgroundColor: ["#3b82f6", "#6366f1"],
-      },
-    ],
-  };
-
-  const peakHoursData = {
-    labels: ["8AM", "10AM", "12PM", "2PM", "4PM", "6PM"],
-    datasets: [
-      {
-        label: "Visitors per Hour",
-        data: [30, 45, 70, 60, 50, 20],
-        backgroundColor: "#10b981",
-      },
-    ],
-  };
-
-  const handleFilterChange = (e) => setDateRange(e.target.value);
-  const isAdmin = user?.type === "SuperAdmin";
-
-  const comments = visitors.map((v) => v.comment).filter(Boolean);
-
-  const avgSatisfaction =
-    visitors.reduce((sum, v) => sum + (v.satisfaction || 0), 0) /
-    (visitors.length || 1);
-
-  const integratedSummary = useMemo(() => {
-    if (!comments.length) return "No visitor comments available yet.";
-
-    let combinedText = comments.join(" ").trim();
-
-    combinedText = combinedText
-      .replace(/\s+/g, " ")
-      .replace(/\s([.,!?])/g, "$1")
-      .replace(/\s\s+/g, " ")
-      .trim();
-
-    combinedText = combinedText.replace(
-      /(^\s*\w|[.!?]\s*\w)/g,
-      (c) => c.toUpperCase()
-    );
-
-    const total = comments.length;
-    return `${combinedText} Overall, ${total} visitors provided feedback with an average satisfaction rating of ${avgSatisfaction.toFixed(
-      1
-    )}/5.`;
-  }, [comments, avgSatisfaction]);
-
+const App = () => {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 md:p-10 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
-            Analytics Overview
-          </h2>
-          <p className="text-gray-500 dark:text-gray-400">
-            Data insights and visitor patterns ({dateRange})
-          </p>
+    <div className="min-h-screen bg-gray-50 font-sans text-slate-800">
+      {/* Main Content */}
+      <main className="flex flex-col">
+        {/* Dashboard Content */}
+        <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <div className="max-w-6xl mx-auto space-y-6">
+            
+            {/* Title Section */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+               <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Analytics Overview</h2>
+                  <p className="text-gray-500 text-sm mt-1">Data insights and visitors patterns</p>
+               </div>
+               <button className="flex items-center justify-between gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-shadow shadow-sm min-w-[140px]">
+                 <span>This Week</span>
+                 <ChevronDown size={16} />
+               </button>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="min-h-[350px]">
+                <VisitorTrafficChart />
+              </Card>
+              <Card className="min-h-[350px]">
+                <SatisfactionChart />
+              </Card>
+            </div>
+
+            {/* Insights Card */}
+            <Card className="relative overflow-hidden">
+               {/* Decorative top border line */}
+               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-200 to-transparent"></div>
+               
+               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gray-100 rounded-lg text-gray-700">
+                       <MessageSquare size={20} />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-800">Visitor Insights</h3>
+                 </div>
+                 <button className="flex items-center gap-2 px-4 py-2 bg-[#553C9A] text-white rounded-lg text-sm font-medium hover:bg-[#44307B] transition-colors shadow-lg shadow-purple-200">
+                    <Download size={16} />
+                    <span>Export PDF</span>
+                 </button>
+               </div>
+
+               <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                  <p className="text-gray-700 leading-relaxed text-sm sm:text-base">
+                    Great service! Very helpful staff. Excellent experience. Could be better. Good overall. Amazing! Nice place. Highly recommend! Average service. Pretty good. Outstanding! Satisfied. Overall, 12 visitors provided feedback with an average satisfaction rating of <span className="font-bold text-[#6B46C1]">4.3/5</span>.
+                  </p>
+               </div>
+            </Card>
+          </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <select
-            value={dateRange}
-            onChange={handleFilterChange}
-            className="border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-blue-400"
-          >
-            <option>This Week</option>
-            <option>This Month</option>
-            <option>Last 3 Months</option>
-          </select>
-
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition"
-          >
-            <Download size={16} /> Export
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-5 shadow-lg">
-          <p className="text-sm opacity-90 mb-1">Total Visitors</p>
-          <p className="text-3xl font-bold">{visitorTrafficData.total}</p>
-          <p className="text-xs opacity-75 mt-2">{dateRange}</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-5 shadow-lg">
-          <p className="text-sm opacity-90 mb-1">Avg Satisfaction</p>
-          <p className="text-3xl font-bold">{avgSatisfaction.toFixed(1)}/5</p>
-          <p className="text-xs opacity-75 mt-2">Based on {comments.length} reviews</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-5 shadow-lg">
-          <p className="text-sm opacity-90 mb-1">Trend</p>
-          <p className="text-3xl font-bold">{visitorTrafficData.trend}</p>
-          <p className="text-xs opacity-75 mt-2">vs previous period</p>
-        </div>
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
-        <ChartCard
-          title="📈 Visitor Traffic"
-          subtitle="Daily Visits Based on Real Data"
-          chartType="line"
-          data={visitorTrafficData.chartData}
-          trend={visitorTrafficData.trend}
-        />
-
-        <ChartCard
-          title="😊 Satisfaction Rate"
-          subtitle="Feedback Breakdown"
-          chartType="doughnut"
-          data={satisfactionData}
-          trend="Stable"
-        />
-
-        <ChartCard
-          title="👥 Visitor Type"
-          subtitle="New vs Returning Visitors"
-          chartType="pie"
-          data={visitorTypeData}
-          trend="+5% Returning"
-        />
-
-        {isAdmin && (
-          <ChartCard
-            title="🕒 Peak Visiting Hours"
-            subtitle="Most Active Times"
-            chartType="bar"
-            data={peakHoursData}
-            trend="Midday Peak"
-          />
-        )}
-      </div>
-
-      {/* Comment Summary Section */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-6 transition hover:shadow-md">
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
-          💬 Integrated Visitor Comment Summary
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300 whitespace-pre-line leading-relaxed">
-          {integratedSummary}
-        </p>
-      </div>
+      </main>
     </div>
   );
 };
 
-export default Analytics;
+export default App;
