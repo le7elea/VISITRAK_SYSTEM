@@ -5,7 +5,7 @@ const FilterBar = ({
   user,
   search,
   setSearch,
-  officeFilter,
+  officeFilter, 
   setOfficeFilter,
   dateFilter,
   setDateFilter,

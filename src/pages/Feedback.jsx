@@ -8,6 +8,9 @@ const Feedback = ({ visitors = [], user }) => {
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
 
+  const exportCSV = () => alert("Export CSV clicked!");
+  const exportPDF = () => alert("Export PDF clicked!");
+
   // 🧠 Generate unique office options
   const officeOptions = useMemo(() => {
     const offices = [...new Set(visitors.map((v) => v.office).filter(Boolean))];
@@ -15,28 +18,36 @@ const Feedback = ({ visitors = [], user }) => {
   }, [visitors]);
 
   // 🔎 Combined filter logic
-  const filteredVisitors = visitors.filter((v) => {
-    const matchesSearch = v.name.toLowerCase().includes(search.toLowerCase());
-    const matchesDate = !date || v.date === date.split("-").reverse().join("/");
-    const matchesOffice =
-      !office || v.office === office || user?.role === "Office Admin";
-    return matchesSearch && matchesDate && matchesOffice;
-  });
+  const filteredVisitors = visitors
+    .filter((v) => {
+      const matchesSearch = v.name.toLowerCase().includes(search.toLowerCase());
+      const matchesDate = !date || v.date === date.split("-").reverse().join("/");
+      const matchesOffice =
+        user?.role === "Office Admin"
+          ? v.office === user.office
+          : !office || v.office === office;
+      return matchesSearch && matchesDate && matchesOffice;
+    })
+    .map((v, idx) => ({
+      ...v,
+      alias: `Anonymous${String(idx + 1).padStart(3, "0")}`, // create alias
+    }));
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between dark:bg-[#1f1f1f]">
       <div className="px-4 sm:px-8 pt-8 space-y-6">
         {/* 🔍 Search & Filters */}
         <FilterBar
-          search={search}
-          setSearch={setSearch}
+          // search={search}
+          // setSearch={setSearch}
           date={date}
           setDate={setDate}
           office={office}
           setOffice={setOffice}
+          exportCSV={exportCSV}
+          exportPDF={exportPDF}
           officeOptions={officeOptions}
-          user = { user }
-
+          user={user}
         />
 
         {/* 📋 Feedback Records Section */}
@@ -48,7 +59,7 @@ const Feedback = ({ visitors = [], user }) => {
                   <div className="flex justify-between items-start">
                     <div>
                       <h4 className="font-medium text-gray-800 dark:text-white">
-                        {v.name}{" "}
+                        {v.alias}{" "}
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                           ({v.office})
                         </span>
@@ -93,7 +104,7 @@ const Feedback = ({ visitors = [], user }) => {
         visitor={selectedVisitor}
       />
     </div>
-  );
+  ); 
 };
 
 export default Feedback;

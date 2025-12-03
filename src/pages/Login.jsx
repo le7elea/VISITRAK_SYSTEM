@@ -11,30 +11,36 @@ import illustrator from "../assets/illustrator.png";
 import bgImage from "../assets/BG12.png";
 
 import InputField from "../components/InputField";
-import Dropdown from "../components/Dropdown";
 import RememberForgot from "../components/RememberForgot";
 
 const Login = ({ onLogin }) => {
-  const [userType, setUserType] = useState("SuperAdmin");
-  const [selectedOffice, setSelectedOffice] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+  // Email-to-role mapping
+  const userMapping = {
+  "superadmin@gmail.com": { type: "SuperAdmin", office: "", password: "super123" },
+  "ccisoffice@gmail.com": { type: "OfficeAdmin", office: "CCIS Office", password: "ccis123" },
+  "ctasoffice@gmail.com": { type: "OfficeAdmin", office: "CTAS Office", password: "ctas123" },
+  "ccjoffice@gmail.com": { type: "OfficeAdmin", office: "CCJ Office", password: "ccj123" },
+  "clinicoffice@gmail.com": { type: "OfficeAdmin", office: "Clinic", password: "clinic123" },
+  "registraroffice@gmail.com": { type: "OfficeAdmin", office: "Registrar", password: "registrar123" },
+};
+
+
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
-      setUserType(parsed.type || "SuperAdmin");
-      setSelectedOffice(parsed.office || "");
       setEmail(parsed.email || "");
       setPassword(parsed.password || "");
       setRememberMe(true);
     }
   }, []);
- 
+
   const handleForgotPassword = () => {
     const enteredEmail = prompt("🔑 Enter your registered email:");
     if (enteredEmail)
@@ -43,31 +49,32 @@ const Login = ({ onLogin }) => {
 
   const handleLoginClick = (e) => {
     e.preventDefault();
+
     if (!email || !password)
       return alert("⚠️ Please enter email and password.");
 
-    if (
-      userType === "SuperAdmin" &&
-      (email !== "superadmin@gmail.com" || password !== "12345")
-    )
-      return alert("❌ Invalid Super Admin credentials!");
+    const user = userMapping[email.toLowerCase()];
+    if (!user) return alert("❌ Invalid email!");
 
-    if (userType === "OfficeAdmin") {
-      if (!selectedOffice) return alert("⚠️ Please select an office.");
-      if (email !== "officeadmin@gmail.com" || password !== "12345")
-        return alert("❌ Invalid Office Admin credentials!");
-    }
+    // You can customize the password per user if needed
+    if (password !== user.password) return alert("❌ Invalid password!");
 
     if (rememberMe)
       localStorage.setItem(
         "user",
-        JSON.stringify({ type: userType, office: selectedOffice, email, password })
+        JSON.stringify({ email, password, ...user })
       );
     else localStorage.removeItem("user");
 
-    if (onLogin) onLogin({ type: userType, office: selectedOffice, email });
+    if (onLogin) onLogin({ email, ...user });
 
-    navigate("/dashboard"); 
+    // Redirect depending on type/office
+    if (user.type === "SuperAdmin") {
+      navigate("/dashboard"); // super admin dashboard
+    } else {
+      navigate(`/dashboard/${user.office.toLowerCase().replace(/\s/g, "")}`); 
+      // example: /dashboard/registrar
+    }
   };
 
   return (
@@ -75,7 +82,7 @@ const Login = ({ onLogin }) => {
       className="flex flex-col items-center justify-start min-h-screen pt-10 bg-cover bg-center bg-no-repeat"
       style={{ backgroundImage: `url(${bgImage})` }}
     >
-      {/* 🌟 Logo Section */}
+      {/* Logo Section */}
       <div className="flex flex-col items-center mb-6 mt-5">
         <div className="flex items-center justify-center gap-6 flex-wrap">
           <img src={bisuLogo} alt="BISU Logo" className="w-20" />
@@ -84,7 +91,7 @@ const Login = ({ onLogin }) => {
         <p className="text-white text-3xl font-semibold mt-4 mb-5">Hello, Welcome!</p>
       </div>
 
-      {/* 🪪 Login + Illustration */}
+      {/* Login + Illustration */}
       <div className="relative flex flex-col lg:flex-row items-center justify-center gap-10 w-full px-6">
         {/* Login Card */}
         <div className="bg-white shadow-xl rounded-2xl p-6 sm:p-8 w-[90%] sm:w-[400px] md:w-[450px] lg:w-[500px] text-center z-10 transition-all duration-300">
@@ -117,37 +124,6 @@ const Login = ({ onLogin }) => {
             onForgot={handleForgotPassword}
           />
 
-          {/* Dropdowns */}
-          <div
-            className={`flex ${
-              userType === "OfficeAdmin" ? "flex-col sm:flex-row gap-3" : "flex-col"
-            }`}
-          >
-            <Dropdown
-              value={userType}
-              onChange={(e) => setUserType(e.target.value)}
-              options={[
-                { value: "SuperAdmin", label: "Super Admin" },
-                { value: "OfficeAdmin", label: "Office Admin" },
-              ]}
-            />
-
-            {userType === "OfficeAdmin" && (
-              <Dropdown
-                value={selectedOffice}
-                onChange={(e) => setSelectedOffice(e.target.value)}
-                options={[
-                  { value: "", label: "-- Select Office --" },
-                  { value: "CCIS Office", label: "CCIS Office" },
-                  { value: "CTAS Office", label: "CTAS Office" },
-                  { value: "CCJ Office", label: "CCJ Office" },
-                  { value: "Clinic", label: "Clinic" },
-                  { value: "Registrar", label: "Registrar Office" },
-                ]}
-              />
-            )}
-          </div>
-
           <button
             onClick={handleLoginClick}
             className="w-full bg-purple-700 text-white rounded-md h-12 mt-5 font-semibold hover:bg-purple-800 transition"
@@ -164,7 +140,6 @@ const Login = ({ onLogin }) => {
             className="h-130 sm:h-140 lg:h-150 object-contain animate-bounce-slow"
           />
         </div>
-
       </div>
     </div>
   );

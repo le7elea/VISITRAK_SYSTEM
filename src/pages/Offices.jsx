@@ -4,11 +4,12 @@ import { Pencil, Trash2, Plus } from "lucide-react";
 const Offices = () => {
   const [offices, setOffices] = useState([]);
   const [newOffice, setNewOffice] = useState("");
+  const [inputEnabled, setInputEnabled] = useState(false); // <-- controls input
   const [editingIndex, setEditingIndex] = useState(null);
   const [editName, setEditName] = useState("");
   const [deleteIndex, setDeleteIndex] = useState(null);
 
-  // Load from localStorage or default
+  // Load offices from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("offices");
     if (saved && JSON.parse(saved).length > 0) {
@@ -30,17 +31,22 @@ const Offices = () => {
     localStorage.setItem("offices", JSON.stringify(offices));
   }, [offices]);
 
-  const handleAdd = () => {
-    if (!newOffice.trim()) {
-      alert("Please enter an office name.");
+  const handleAddClick = () => {
+    if (!inputEnabled) {
+      // Enable input first
+      setInputEnabled(true);
       return;
     }
+
+    // Add office if input enabled and has value
+    if (!newOffice.trim()) return;
     const newOfficeObj = {
       name: newOffice,
       id: newOffice.toLowerCase().replace(/\s+/g, "_"),
     };
     setOffices([...offices, newOfficeObj]);
     setNewOffice("");
+    setInputEnabled(false); // optionally reset input
   };
 
   const handleEdit = (index) => {
@@ -66,97 +72,109 @@ const Offices = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="border border-[#7400EA] rounded-xl shadow-sm p-4 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-        <h3 className="text-lg font-semibold mb-4">Office Accounts</h3>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <input
-            type="text"
-            placeholder="New office name"
-            className="flex-1 px-4 py-2 border border-[#7400EA] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            value={newOffice}
-            onChange={(e) => setNewOffice(e.target.value)}
-          />
-          <button
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 bg-[#7400EA] text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-all shadow-sm"
-          >
-            <Plus size={18} /> Add Office
-          </button>
+      <div className="border border-[#7400EA] rounded-xl shadow-sm p-4 dark:bg-gray-900 dark:text-gray-200">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <h3 className="text-lg font-semibold">Office Accounts</h3>
+
+          <div className="flex gap-2 w-full lg:w-auto">
+            <input
+              type="text"
+              placeholder="New office name"
+              disabled={!inputEnabled} // <-- controlled by state
+              className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                inputEnabled
+                  ? "border-[#7400EA] dark:border-indigo-400 text-black dark:text-white bg-white dark:bg-gray-800"
+                  : "bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
+              }`}
+              value={newOffice}
+              onChange={(e) => setNewOffice(e.target.value)}
+            />
+
+            <button
+              onClick={handleAddClick}
+              className="flex items-center justify-center gap-2 bg-[#7400EA] text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-all shadow-sm whitespace-nowrap"
+            >
+              <Plus size={18} /> {inputEnabled ? "Save Office" : "Add Office"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Office List */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {offices.map((office, index) => (
           <div
             key={index}
-            className="flex flex-col justify-between border border-[#7400EA] rounded-xl p-4 shadow-sm hover:shadow-md transition-all dark:bg-gray-900"
+            className="flex items-center justify-between border border-[#7400EA] rounded-xl p-4 shadow-sm hover:shadow-md transition-all dark:bg-gray-900"
           >
-            <div>
+            <div className="flex-1">
               {editingIndex === index ? (
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full border rounded-md px-2 py-1 focus:ring-2 focus:ring-indigo-400 mb-2"
+                  className="w-full border rounded-md px-2 py-1 focus:ring-2 focus:ring-indigo-400"
                 />
               ) : (
                 <>
-                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">{office.name}</h4>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                    {office.name}
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     ID: {office.id}
                   </p>
                 </>
               )}
             </div>
 
-            <div className="flex gap-2 mt-4">
-              {editingIndex === index ? (
+            {editingIndex === index ? (
+              <button
+                onClick={() => handleSave(index)}
+                className="ml-3 bg-[#7400EA] text-white px-3 py-2 rounded-md text-sm hover:bg-[#4700E6]"
+              >
+                Save
+              </button>
+            ) : (
+              <div className="flex gap-2 ml-4">
                 <button
-                  onClick={() => handleSave(index)}
-                  className="flex-1 bg-[#7400EA] text-white py-2 rounded-md hover:bg-[#4700E6] transition-all"
+                  onClick={() => handleEdit(index)}
+                  className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-2 rounded-md text-sm hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
-                  💾 Save
+                  <Pencil size={16} /> Edit
                 </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => handleEdit(index)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-gray-100 text-gray-700 py-2 rounded-md hover:bg-gray-200 transition-all"
-                  >
-                    <Pencil size={16} /> Edit
-                  </button>
-                  <button
-                    onClick={() => setDeleteIndex(index)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-red-100 text-red-600 py-2 rounded-md hover:bg-red-200 transition-all"
-                  >
-                    <Trash2 size={16} /> Delete
-                  </button>
-                </>
-              )}
-            </div>
+
+                <button
+                  onClick={() => setDeleteIndex(index)}
+                  className="flex items-center gap-1 bg-red-100 dark:bg-red-700 text-red-600 dark:text-white px-3 py-2 rounded-md text-sm hover:bg-red-200 dark:hover:bg-red-600"
+                >
+                  <Trash2 size={16} /> Delete
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Delete Confirmation */}
+      {/* Delete Modal */}
       {deleteIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full text-center">
-            <h4 className="text-lg font-semibold mb-2">Are you sure?</h4>
-            <p className="text-gray-600 mb-4">
-              Do you really want to delete{" "}
-              <strong>{offices[deleteIndex].name}</strong>?
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-sm w-full text-center border dark:border-gray-700">
+            <h4 className="text-lg font-semibold mb-2 dark:text-gray-100">
+              Are you sure?
+            </h4>
+            <p className="text-gray-600 dark:text-gray-300 mb-5">
+              Delete <strong>{offices[deleteIndex].name}</strong> permanently?
             </p>
+
             <div className="flex justify-center gap-3">
               <button
-                className="bg-gray-400 text-white px-4 py-2 rounded-md hover:bg-gray-500"
+                className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500"
                 onClick={() => setDeleteIndex(null)}
               >
                 Cancel
               </button>
               <button
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
                 onClick={confirmDelete}
               >
                 Yes, Delete
