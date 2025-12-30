@@ -67,6 +67,30 @@ export const useVisitorData = () => {
         satisfaction: 4.0,
         comment: "Good experience overall.",
       },
+      {
+        id: 6,
+        name: "Nicollete Vergara",
+        alias: "Anonymous006",
+        office: "Registrar",
+        date: "05/11/2025",
+        timeIn: "01:10 PM",
+        timeOut: "01:50 PM",
+        status: "Checked Out",
+        satisfaction: 4.2,
+        comment: "Good experience overall.",
+      },
+      {
+        id: 7,
+        name: "Mikha Lim",
+        alias: "Anonymous007",
+        office: "Admin Office",
+        date: "20/11/2025",
+        timeIn: "03:10 PM",
+        timeOut: "04:50 PM",
+        status: "Checked In",
+        satisfaction: 4.5,
+        comment: "Good experience overall.",
+      },
     ];
 
     setVisitors(fetchedVisitors);

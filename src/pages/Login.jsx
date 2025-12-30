@@ -1,6 +1,8 @@
+// pages/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/logo02.png";
 import emailIcon from "../assets/email.png";
@@ -9,7 +11,6 @@ import eyeOpen from "../assets/eye_open.png";
 import eyeClosed from "../assets/eye_closed.png";
 import illustrator from "../assets/illustrator.png";
 import bgImage from "../assets/BG12.png";
-
 import InputField from "../components/InputField";
 import RememberForgot from "../components/RememberForgot";
 
@@ -18,19 +19,10 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Email-to-role mapping
-  const userMapping = {
-  "superadmin@gmail.com": { type: "SuperAdmin", office: "", password: "super123" },
-  "ccisoffice@gmail.com": { type: "OfficeAdmin", office: "CCIS Office", password: "ccis123" },
-  "ctasoffice@gmail.com": { type: "OfficeAdmin", office: "CTAS Office", password: "ctas123" },
-  "ccjoffice@gmail.com": { type: "OfficeAdmin", office: "CCJ Office", password: "ccj123" },
-  "clinicoffice@gmail.com": { type: "OfficeAdmin", office: "Clinic", password: "clinic123" },
-  "registraroffice@gmail.com": { type: "OfficeAdmin", office: "Registrar", password: "registrar123" },
-};
-
-
+  // Load saved credentials
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
@@ -41,39 +33,103 @@ const Login = ({ onLogin }) => {
     }
   }, []);
 
+  // Function to create activity log
+  const createActivityLog = async (userData, action) => {
+    try {
+      const logData = {
+        title: "User Login",
+        description: `${userData.name} logged into the system`,
+        office: userData.office, // This is CRITICAL - must match Profile.jsx query
+        userId: userData.id,
+        userEmail: userData.email,
+        userRole: userData.role,
+        action: action,
+        timestamp: serverTimestamp(),
+        type: "login"
+      };
+
+      await addDoc(collection(db, "activityLogs"), logData);
+      console.log("✅ Activity log created for:", userData.office);
+    } catch (error) {
+      console.error("❌ Error creating activity log:", error);
+    }
+  };
+
   const handleForgotPassword = () => {
     const enteredEmail = prompt("🔑 Enter your registered email:");
     if (enteredEmail)
       alert(`📧 A password reset link has been sent to: ${enteredEmail}`);
   };
 
-  const handleLoginClick = (e) => {
+  const handleLoginClick = async (e) => {
     e.preventDefault();
+    if (!email || !password) return alert("⚠️ Please enter email and password.");
+    
+    setLoading(true);
 
-    if (!email || !password)
-      return alert("⚠️ Please enter email and password.");
+    try {
+      const officesRef = collection(db, "offices");
+      const q = query(officesRef, where("email", "==", email.toLowerCase()));
+      const snapshot = await getDocs(q);
 
-    const user = userMapping[email.toLowerCase()];
-    if (!user) return alert("❌ Invalid email!");
+      if (snapshot.empty) {
+        alert("❌ Email not found in database!");
+        setLoading(false);
+        return;
+      }
 
-    // You can customize the password per user if needed
-    if (password !== user.password) return alert("❌ Invalid password!");
+      const userDoc = snapshot.docs[0].data();
+      const docId = snapshot.docs[0].id;
 
-    if (rememberMe)
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ email, password, ...user })
-      );
-    else localStorage.removeItem("user");
+      if (password !== userDoc.password) {
+        alert("❌ Invalid password!");
+        setLoading(false);
+        return;
+      }
 
-    if (onLogin) onLogin({ email, ...user });
+      // 🔹 Create complete user data object
+      const userData = {
+        email: email.toLowerCase(),
+        name: userDoc.name,
+        type: userDoc.role === "super" ? "SuperAdmin" : "OfficeAdmin",
+        office: userDoc.name, // This is the office name from Firestore
+        role: userDoc.role,
+        id: docId,
+        password: password, // Store for password verification in Profile.jsx
+        isInDatabase: true,
+        // Store both name and office separately for clarity
+        officeName: userDoc.name
+      };
 
-    // Redirect depending on type/office
-    if (user.type === "SuperAdmin") {
-      navigate("/dashboard"); // super admin dashboard
-    } else {
-      navigate(`/dashboard/${user.office.toLowerCase().replace(/\s/g, "")}`); 
-      // example: /dashboard/registrar
+      console.log("✅ Login successful, user data:", userData);
+
+      // 🔹 Create login activity log
+      await createActivityLog(userData, "login");
+
+      if (rememberMe) {
+        localStorage.setItem("user", JSON.stringify({ 
+          email, 
+          password, 
+          ...userData 
+        }));
+      } else {
+        localStorage.setItem("user", JSON.stringify({
+          ...userData,
+          password: undefined // Don't store password if not remembering
+        }));
+      }
+
+      // Call onLogin callback if provided
+      if (onLogin) onLogin(userData);
+
+      // Navigate to profile
+      navigate("/profile");
+
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("❌ Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -106,6 +162,7 @@ const Login = ({ onLogin }) => {
             placeholder="Email / Username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
           />
 
           <InputField
@@ -116,20 +173,35 @@ const Login = ({ onLogin }) => {
             onChange={(e) => setPassword(e.target.value)}
             rightIcon={showPassword ? eyeOpen : eyeClosed}
             onRightIconClick={() => setShowPassword(!showPassword)}
+            disabled={loading}
           />
 
           <RememberForgot
             rememberMe={rememberMe}
             onRememberChange={setRememberMe}
             onForgot={handleForgotPassword}
+            disabled={loading}
           />
 
           <button
             onClick={handleLoginClick}
-            className="w-full bg-purple-700 text-white rounded-md h-12 mt-5 font-semibold hover:bg-purple-800 transition"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-purple-700 to-purple-900 text-white rounded-md h-12 mt-5 font-semibold hover:from-purple-800 hover:to-purple-950 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
-            Login
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Logging in...
+              </span>
+            ) : "Login"}
           </button>
+
+          {/* Debug info (remove in production) */}
+          <div className="mt-4 p-3 bg-gray-100 rounded-lg text-left text-xs text-gray-600 hidden">
+            <p><strong>Debug Info:</strong></p>
+            <p>Email: {email}</p>
+            <p>Office field will be set to: {email.split('@')[0] || 'office_name'}</p>
+          </div>
         </div>
 
         {/* Illustration */}

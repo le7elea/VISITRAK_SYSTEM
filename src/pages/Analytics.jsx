@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart2, 
   ChevronDown, 
@@ -9,19 +9,20 @@ import {
   FileText,
   Printer
 } from 'lucide-react';
-import { useVisitorData } from '../data/VisitorData';
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 // --- Helper Functions ---
-const calculateSatisfactionRates = (visitors) => {
-  const total = visitors.length;
+const calculateSatisfactionRates = (feedbacks = []) => {
+  const total = feedbacks.length;
   if (total === 0) return [];
 
   const counts = {
-    verySatisfied: visitors.filter(v => v.satisfaction >= 4.5).length,
-    satisfied: visitors.filter(v => v.satisfaction >= 4.0 && v.satisfaction < 4.5).length,
-    neutral: visitors.filter(v => v.satisfaction >= 3.0 && v.satisfaction < 4.0).length,
-    unsatisfied: visitors.filter(v => v.satisfaction >= 2.0 && v.satisfaction < 3.0).length,
-    veryUnsatisfied: visitors.filter(v => v.satisfaction < 2.0).length,
+    verySatisfied: feedbacks.filter(f => (f.averageRating || 0) >= 4.5).length,
+    satisfied: feedbacks.filter(f => (f.averageRating || 0) >= 4.0 && (f.averageRating || 0) < 4.5).length,
+    neutral: feedbacks.filter(f => (f.averageRating || 0) >= 3.0 && (f.averageRating || 0) < 4.0).length,
+    unsatisfied: feedbacks.filter(f => (f.averageRating || 0) >= 2.0 && (f.averageRating || 0) < 3.0).length,
+    veryUnsatisfied: feedbacks.filter(f => (f.averageRating || 0) < 2.0).length,
   };
 
   return [
@@ -33,14 +34,23 @@ const calculateSatisfactionRates = (visitors) => {
   ];
 };
 
-const calculateTrafficByDay = (visitors) => {
+const calculateTrafficByDay = (visits = []) => {
   const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   const counts = days.map(() => 0);
   
-  visitors.forEach(visitor => {
-    const date = new Date(visitor.date.split('/').reverse().join('-'));
-    const dayIndex = (date.getDay() + 6) % 7; // Monday=0
-    counts[dayIndex]++;
+  visits.forEach(visit => {
+    if (!visit?.checkInTime) return;
+    
+    try {
+      // Use checkInTime timestamp from visits collection
+      const checkInDate = visit.checkInTime.toDate ? visit.checkInTime.toDate() : new Date(visit.checkInTime);
+      if (isNaN(checkInDate.getTime())) return;
+      
+      const dayIndex = (checkInDate.getDay() + 6) % 7; // Monday=0
+      counts[dayIndex]++;
+    } catch (error) {
+      console.error('Error parsing check-in date:', visit.checkInTime, error);
+    }
   });
 
   const maxCount = Math.max(...counts, 1);
@@ -61,7 +71,32 @@ const Card = ({ children, className = "" }) => (
 );
 
 const VisitorTrafficChart = ({ trafficData }) => {
-  const getBarColor = (value) => {
+  // Check if there's any visitor data at all
+  const totalVisitors = trafficData.reduce((sum, day) => sum + day.count, 0);
+  
+  if (totalVisitors === 0) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="text-[#6B46C1]" size={20} />
+            <h3 className="font-bold text-gray-800">Visitor Traffic</h3>
+          </div>
+          <MoreHorizontal className="text-gray-400 cursor-pointer" />
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center text-gray-500 py-8">
+            <BarChart2 size={48} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-600">No visitors during this period</p>
+            <p className="text-sm text-gray-500 mt-1">Visitor traffic will appear here when visitors check in</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const getBarColor = (value, count) => {
+    if (count === 0) return 'bg-gray-200 group-hover:bg-gray-300';
     if (value >= 60) return 'bg-[#6B46C1] group-hover:bg-[#5B34B8]';
     if (value >= 30) return 'bg-[#7C5CCA] group-hover:bg-[#6B46C1]';
     return 'bg-[#A48CD8] group-hover:bg-[#7C5CCA]';
@@ -92,21 +127,23 @@ const VisitorTrafficChart = ({ trafficData }) => {
             <div key={index} className="flex flex-col items-center flex-1 group relative h-full">
               <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
                 <div className="bg-gray-800 text-white text-[10px] font-bold py-1 px-2 rounded shadow-lg whitespace-nowrap">
-                  {item.count} visitors
+                  {item.count} visitor{item.count !== 1 ? 's' : ''}
                 </div>
                 <div className="w-2 h-2 bg-gray-800 rotate-45 mx-auto -mt-1"></div>
               </div>
 
               <div className="w-full h-full flex flex-col justify-end items-center">
                 <div className="relative w-4 sm:w-6 md:w-8 bg-gray-100 rounded-full overflow-hidden transition-all duration-300"
-                     style={{ height: `${item.value}%` }}>
+                     style={{ height: `${item.count > 0 ? item.value : 5}%` }}>
                    <div 
-                    className={`absolute inset-0 w-full rounded-full transition-all duration-500 ${getBarColor(item.value)}`}
+                    className={`absolute inset-0 w-full rounded-full transition-all duration-500 ${getBarColor(item.value, item.count)}`}
                    ></div>
                 </div>
               </div>
               
-              <span className="text-[10px] text-gray-400 mt-2 font-medium absolute -bottom-6">{item.day}</span>
+              <span className={`text-[10px] ${item.count === 0 ? 'text-gray-300' : 'text-gray-400'} mt-2 font-medium absolute -bottom-6`}>
+                {item.day}
+              </span>
             </div>
           ))}
         </div>
@@ -129,30 +166,116 @@ const SatisfactionChart = ({ ratings }) => {
       </div>
 
       <div className="flex flex-col gap-5 justify-center h-full">
-        {ratings.map((item, idx) => (
-          <div key={idx} className="w-full">
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-lg">{item.emoji}</span>
-              <span className="text-xs font-bold text-gray-700 w-24">{item.label}</span>
-              <div className="flex-1 h-2 bg-green-50 rounded-full overflow-hidden relative">
-                <div 
-                  className={`h-full rounded-full ${idx < 3 ? 'bg-yellow-400' : 'bg-[#D1FADF]'}`}
-                  style={{ width: `${item.pct}%` }}
-                ></div>
+        {ratings.length > 0 ? (
+          ratings.map((item, idx) => (
+            <div key={idx} className="w-full">
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-lg">{item.emoji}</span>
+                <span className="text-xs font-bold text-gray-700 w-24">{item.label}</span>
+                <div className="flex-1 h-2 bg-green-50 rounded-full overflow-hidden relative">
+                  <div 
+                    className={`h-full rounded-full ${idx < 3 ? 'bg-yellow-400' : 'bg-[#D1FADF]'}`}
+                    style={{ width: `${item.pct}%` }}
+                  ></div>
+                </div>
+                <span className="text-xs font-bold text-gray-600 w-8 text-right">{item.pct}%</span>
+                <span className="text-[10px] text-gray-300 hidden sm:block">Rate</span>
               </div>
-              <span className="text-xs font-bold text-gray-600 w-8 text-right">{item.pct}%</span>
-              <span className="text-[10px] text-gray-300 hidden sm:block">Rate</span>
             </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500 py-8">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-50 mx-auto mb-3">
+              <span className="text-xl">😊</span>
+            </div>
+            <p className="text-gray-600">No satisfaction data available</p>
+            <p className="text-sm text-gray-500 mt-1">Ratings will appear here when visitors submit feedback</p>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
 };
 
-// --- Main Application ---
-const App = () => {
-  const { visitors } = useVisitorData();
+// --- Main Component ---
+const Analytics = ({ user }) => {
+  // State for visits from database
+  const [visits, setVisits] = useState([]);
+  // State for feedbacks from database
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch visits from Firestore (visitor check-ins)
+  useEffect(() => {
+    const fetchVisits = () => {
+      try {
+        const q = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
+        
+        const unsub = onSnapshot(q, (snapshot) => {
+          const data = snapshot.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: doc.id,
+              visitorId: d.visitorId,
+              visitorName: d.visitorName,
+              office: d.office,
+              checkInTime: d.checkInTime?.toDate() || new Date(),
+              checkOutTime: d.checkOutTime?.toDate() || null,
+              purpose: d.purpose || '',
+              status: d.status || 'checked-in'
+            };
+          });
+          
+          setVisits(data);
+        }, (error) => {
+          console.error("Error fetching visits:", error);
+        });
+
+        return () => unsub();
+      } catch (error) {
+        console.error("Error setting up visits listener:", error);
+      }
+    };
+
+    fetchVisits();
+  }, []);
+
+  // Fetch feedbacks from Firestore
+  useEffect(() => {
+    const fetchFeedbacks = () => {
+      try {
+        const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
+        
+        const unsub = onSnapshot(q, (snapshot) => {
+          const data = snapshot.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: doc.id,
+              visitId: d.visitId,
+              name: d.name,
+              answers: d.answers || [],
+              averageRating: d.averageRating || 0,
+              suggestion: d.suggestion || "",
+              createdAt: d.createdAt?.toDate() || new Date(),
+            };
+          });
+          
+          setFeedbacks(data);
+          setLoading(false);
+        }, (error) => {
+          console.error("Error fetching feedbacks:", error);
+          setLoading(false);
+        });
+
+        return () => unsub();
+      } catch (error) {
+        console.error("Error setting up feedbacks listener:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchFeedbacks();
+  }, []);
 
   // --- State for date range ---
   const getDefaultDateRange = () => {
@@ -182,195 +305,211 @@ const App = () => {
   const [showOverallModal, setShowOverallModal] = useState(false);
 
   const formatDateDisplay = (dateStr) => {
-    const date = new Date(dateStr);
-    const options = { month: 'short', day: '2-digit', year: 'numeric' };
-    return date.toLocaleDateString('en-US', options);
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      const options = { month: 'short', day: '2-digit', year: 'numeric' };
+      return date.toLocaleDateString('en-US', options);
+    } catch (error) {
+      return dateStr;
+    }
   };
+
+  // --- Office Filtering Logic ---
+  const filteredVisitsByOffice = useMemo(() => {
+    if (!Array.isArray(visits)) return [];
+    
+    if (user && user.type === "OfficeAdmin" && user.office) {
+      return visits.filter((v) => v?.office === user.office);
+    }
+    return visits;
+  }, [visits, user]);
+
+  const filteredFeedbacksByOffice = useMemo(() => {
+    if (!Array.isArray(feedbacks)) return [];
+    
+    if (user && user.type === "OfficeAdmin" && user.office) {
+      // Filter feedbacks by matching visit office
+      const visitOfficeMap = {};
+      visits.forEach(v => {
+        if (v?.id) visitOfficeMap[v.id] = v.office;
+      });
+      
+      return feedbacks.filter(f => {
+        const visitOffice = visitOfficeMap[f?.visitId];
+        return visitOffice === user.office;
+      });
+    }
+    return feedbacks;
+  }, [feedbacks, visits, user]);
+
+  // --- Filter visits based on date range AND office ---
+  const filteredVisits = useMemo(() => {
+    return filteredVisitsByOffice.filter(v => {
+      try {
+        const checkInDate = v?.checkInTime ? new Date(v.checkInTime) : new Date();
+        if (isNaN(checkInDate.getTime())) return false;
+        
+        checkInDate.setHours(0, 0, 0, 0);
+        
+        const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0);
+        
+        const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+        
+        return checkInDate >= startDate && checkInDate <= endDate;
+      } catch (error) {
+        return false;
+      }
+    });
+  }, [filteredVisitsByOffice, dateRange]);
+
+  // --- Filter feedbacks based on date range AND office ---
+  const filteredFeedbacks = useMemo(() => {
+    return filteredFeedbacksByOffice.filter(f => {
+      try {
+        const feedbackDate = f?.createdAt ? new Date(f.createdAt) : new Date();
+        if (isNaN(feedbackDate.getTime())) return false;
+        
+        const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0);
+        
+        const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+        
+        return feedbackDate >= startDate && feedbackDate <= endDate;
+      } catch (error) {
+        return false;
+      }
+    });
+  }, [filteredFeedbacksByOffice, dateRange]);
+
+  // Get visit details for each feedback
+  const feedbacksWithVisitDetails = useMemo(() => {
+    return filteredFeedbacks.map(feedback => {
+      const visit = visits.find(v => v?.id === feedback?.visitId);
+      return {
+        ...feedback,
+        visitorName: visit?.visitorName || feedback?.name || 'Unknown Visitor',
+        visitorOffice: visit?.office,
+        visitorDate: visit?.checkInTime ? new Date(visit.checkInTime).toLocaleDateString() : '',
+        comment: feedback?.suggestion || feedback?.answers?.join?.(' ') || 'No comment provided'
+      };
+    });
+  }, [filteredFeedbacks, visits]);
+
+  const trafficData = calculateTrafficByDay(filteredVisits);
+  const satisfactionRates = calculateSatisfactionRates(filteredFeedbacks);
+
+  // Calculate average satisfaction from feedbacks
+  const avgSatisfaction = useMemo(() => {
+    if (filteredFeedbacks.length === 0) return "0.0";
+    const total = filteredFeedbacks.reduce((sum, f) => sum + (f.averageRating || 0), 0);
+    return (total / filteredFeedbacks.length).toFixed(1);
+  }, [filteredFeedbacks]);
 
   // --- Export Functions ---
   const exportToCSV = () => {
-    const avgSat = filteredVisitors.length > 0 
-      ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2)
-      : 0;
+    try {
+      const avgSat = avgSatisfaction;
 
-    // Create proper CSV content
-    let csvContent = '';
-    
-    // Header
-    csvContent += 'VISITOR ANALYTICS REPORT\n';
-    csvContent += `Date Range:,${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}\n`;
-    csvContent += `Generated:,${new Date().toLocaleString()}\n`;
-    csvContent += '\n';
-    
-    // Summary Statistics
-    csvContent += 'SUMMARY STATISTICS\n';
-    csvContent += 'Total Visitors,' + filteredVisitors.length + '\n';
-    csvContent += 'Average Satisfaction,' + avgSat + ' / 5.0\n';
-    csvContent += '\n';
-    
-    // Visitor Traffic by Day
-    csvContent += 'VISITOR TRAFFIC BY DAY\n';
-    csvContent += 'Day,Visitor Count,Chart\n';
-    
-    const maxTrafficCount = Math.max(...trafficData.map(d => d.count), 1);
-    trafficData.forEach(item => {
-      const barWidth = Math.round((item.count / maxTrafficCount) * 20);
-      const bars = '█'.repeat(barWidth);
-      csvContent += `${item.day},${item.count},${bars}\n`;
-    });
-    csvContent += '\n';
-    
-    // Satisfaction Rates
-    csvContent += 'SATISFACTION RATE DISTRIBUTION\n';
-    csvContent += 'Category,Emoji,Percentage,Count,Chart\n';
-    
-    satisfactionRates.forEach(item => {
-      const count = Math.round((item.pct / 100) * filteredVisitors.length);
-      const barWidth = Math.round(item.pct / 5);
-      const bars = '█'.repeat(barWidth);
-      csvContent += `${item.label},${item.emoji},${item.pct}%,${count},${bars}\n`;
-    });
-    csvContent += '\n';
-    
-    // Visitor Details
-    csvContent += 'DETAILED VISITOR FEEDBACK\n';
-    csvContent += 'Date,Name,Alias,Office,Rating,Stars,Comment\n';
-    
-    filteredVisitors.forEach(v => {
-      const ratingStars = '★'.repeat(Math.round(v.satisfaction)) + '☆'.repeat(5 - Math.round(v.satisfaction));
-      const comment = v.comment.replace(/"/g, '""'); // Escape quotes for CSV
-      csvContent += `${v.date},${v.name},${v.alias || '-'},${v.office},${v.satisfaction}/5,${ratingStars},"${comment}"\n`;
-    });
+      let csvContent = '';
+      
+      // Header
+      csvContent += `VISITOR ANALYTICS REPORT\n`;
+      csvContent += `Period: ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}\n`;
+      if (user && user.type === "OfficeAdmin") {
+        csvContent += `Office: ${user.office}\n`;
+      }
+      csvContent += `Total Visitors: ${filteredVisits.length}\n`;
+      csvContent += `Total Feedbacks: ${filteredFeedbacks.length}\n`;
+      csvContent += `Average Satisfaction: ${avgSat}/5\n\n`;
+      
+      // Visitor Traffic Data
+      csvContent += 'VISITOR TRAFFIC BY DAY\n';
+      csvContent += 'Day,Visitors Count,Relative Percentage\n';
+      trafficData.forEach(item => {
+        csvContent += `${item.day},${item.count},${item.value}%\n`;
+      });
+      
+      csvContent += '\n';
+      
+      // Satisfaction Data
+      csvContent += 'SATISFACTION RATES\n';
+      csvContent += 'Category,Percentage,Count\n';
+      satisfactionRates.forEach(rate => {
+        const count = Math.round((rate.pct / 100) * filteredFeedbacks.length);
+        csvContent += `${rate.label},${rate.pct}%,${count}\n`;
+      });
+      
+      csvContent += '\n';
+      
+      // Feedback Details
+      csvContent += 'DETAILED FEEDBACK ANALYSIS\n';
+      csvContent += 'Date,Visitor,Office,Rating,Stars,Comments\n';
+      
+      feedbacksWithVisitDetails.forEach(f => {
+        const ratingStars = '★'.repeat(Math.round(f.averageRating)) + '☆'.repeat(5 - Math.round(f.averageRating));
+        const comment = (f.comment || '').replace(/"/g, '""');
+        const dateStr = f.visitorDate || (f.createdAt ? new Date(f.createdAt).toLocaleDateString() : 'N/A');
+        csvContent += `${dateStr},${f.visitorName},${f.visitorOffice || 'N/A'},${f.averageRating}/5,${ratingStars},"${comment}"\n`;
+      });
 
-    // Create blob and download as CSV
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `visitor-analytics-${dateRange.start}-to-${dateRange.end}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setShowExportMenu(false);
-  };
-
-  const exportInsightsToPDF = () => {
-    const narrative = generateIntegratedNarrative();
-    
-    const printContent = document.createElement('div');
-    printContent.innerHTML = `
-      <div style="font-family: sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
-        <h1 style="color: #1f2937; margin-bottom: 8px; font-size: 28px; border-bottom: 3px solid #6B46C1; padding-bottom: 12px;">
-          Integrated Visitor Insights Report
-        </h1>
-        <p style="color: #6b7280; font-size: 14px; margin-bottom: 32px;">
-          Date Range: ${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}<br/>
-          Generated: ${new Date().toLocaleString()}<br/>
-          Total Visitors: ${filteredVisitors.length}
-        </p>
-        
-        <div style="margin-top: 24px; line-height: 1.8; color: #374151; font-size: 15px;">
-          ${narrative.split('\n').map(line => line.trim() ? `<p style="margin-bottom: 16px; text-align: justify;">${line}</p>` : '').join('')}
-        </div>
-      </div>
-    `;
-    
-    const originalContent = document.body.innerHTML;
-    document.body.innerHTML = printContent.innerHTML;
-    window.print();
-    document.body.innerHTML = originalContent;
-    window.location.reload();
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      const fileName = user && user.type === "OfficeAdmin" 
+        ? `${user.office}-analytics-${dateRange.start}-to-${dateRange.end}.csv`
+        : `visitor-analytics-${dateRange.start}-to-${dateRange.end}.csv`;
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setShowExportMenu(false);
+    } catch (error) {
+      console.error('Error exporting to CSV:', error);
+      alert('Failed to export CSV. Please try again.');
+    }
   };
 
   const exportToPDF = () => {
-    window.print();
-    setShowExportMenu(false);
+    try {
+      window.print();
+      setShowExportMenu(false);
+    } catch (error) {
+      console.error('Error printing:', error);
+      alert('Failed to print. Please try again.');
+    }
   };
-
-  const exportOverallToPDF = () => {
-    const narrative = generateOverallNarrative();
-    
-    const printContent = document.createElement('div');
-    printContent.innerHTML = `
-      <div style="font-family: sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
-        <h1 style="color: #1f2937; margin-bottom: 8px; font-size: 32px; border-bottom: 4px solid #6B46C1; padding-bottom: 16px;">
-          Analytics Overview Report
-        </h1>
-        <p style="color: #6b7280; font-size: 14px; margin-bottom: 40px;">
-          Comprehensive Analysis | ${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}<br/>
-          Generated: ${new Date().toLocaleString()}<br/>
-          Total Visitors: ${filteredVisitors.length} | Average Satisfaction: ${filteredVisitors.length > 0 ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2) : '0.00'}/5.0
-        </p>
-        
-        <div style="margin-top: 24px; line-height: 1.8; color: #374151; font-size: 15px;">
-          ${narrative.split('\n').map(line => {
-            const trimmed = line.trim();
-            if (!trimmed) return '';
-            if (trimmed.startsWith('# ')) {
-              return `<h1 style="color: #1f2937; font-size: 28px; margin-top: 32px; margin-bottom: 16px; font-weight: bold;">${trimmed.substring(2)}</h1>`;
-            }
-            if (trimmed.startsWith('## ')) {
-              return `<h2 style="color: #374151; font-size: 22px; margin-top: 28px; margin-bottom: 12px; font-weight: bold; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">${trimmed.substring(3)}</h2>`;
-            }
-            if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
-              return `<p style="margin-bottom: 12px; font-weight: bold; color: #1f2937;">${trimmed.replace(/\*\*/g, '')}</p>`;
-            }
-            if (trimmed.startsWith('- ')) {
-              return `<li style="margin-left: 20px; margin-bottom: 8px;">${trimmed.substring(2)}</li>`;
-            }
-            return `<p style="margin-bottom: 16px; text-align: justify;">${trimmed}</p>`;
-          }).join('')}
-        </div>
-      </div>
-    `;
-    
-    const originalContent = document.body.innerHTML;
-    document.body.innerHTML = printContent.innerHTML;
-    window.print();
-    document.body.innerHTML = originalContent;
-    window.location.reload();
-  };
-
-  // --- Filter visitors based on date range ---
-  const filteredVisitors = useMemo(() => {
-    return visitors.filter(v => {
-      const [day, month, year] = v.date.split('/').map(Number);
-      const visitorDate = new Date(year, month - 1, day);
-      visitorDate.setHours(0, 0, 0, 0);
-      
-      const startDate = new Date(dateRange.start);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(dateRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      
-      return visitorDate >= startDate && visitorDate <= endDate;
-    });
-  }, [visitors, dateRange]);
-
-  const trafficData = calculateTrafficByDay(filteredVisitors);
-  const satisfactionRates = calculateSatisfactionRates(filteredVisitors);
 
   // Generate integrated narrative
   const generateIntegratedNarrative = () => {
-    const avgSat = filteredVisitors.length > 0 
-      ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2)
-      : 0;
+    const avgSat = avgSatisfaction;
     
-    let narrative = `During the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, our facility recorded ${filteredVisitors.length} visitor${filteredVisitors.length !== 1 ? 's' : ''} with an average satisfaction rating of ${avgSat} out of 5. `;
+    let narrative = `During the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, `;
     
-    if (filteredVisitors.length > 0) {
-      narrative += `The feedback received reveals valuable insights into visitor experiences across different offices. `;
+    if (user && user.type === "OfficeAdmin") {
+      narrative += `the ${user.office} office `;
+    } else {
+      narrative += `our facility `;
+    }
+    
+    narrative += `recorded ${filteredVisits.length} visitor check-in${filteredVisits.length !== 1 ? 's' : ''} with ${filteredFeedbacks.length} feedback response${filteredFeedbacks.length !== 1 ? 's' : ''}. The average satisfaction rating was ${avgSat} out of 5. `;
+    
+    if (filteredFeedbacks.length > 0) {
+      narrative += `The feedback received reveals valuable insights into visitor experiences${user && user.type === "OfficeAdmin" ? ' at this office' : ' across different offices'}. `;
       
-      const highSat = filteredVisitors.filter(v => v.satisfaction >= 4.0);
-      const mediumSat = filteredVisitors.filter(v => v.satisfaction >= 3.0 && v.satisfaction < 4.0);
-      const lowSat = filteredVisitors.filter(v => v.satisfaction < 3.0);
+      const highSat = filteredFeedbacks.filter(f => f.averageRating >= 4.0);
+      const mediumSat = filteredFeedbacks.filter(f => f.averageRating >= 3.0 && f.averageRating < 4.0);
+      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 3.0);
       
       if (highSat.length > 0) {
-        narrative += `${highSat.length} visitor${highSat.length !== 1 ? 's' : ''} expressed high satisfaction (4.0+), highlighting positive experiences. `;
+        narrative += `${highSat.length} feedback${highSat.length !== 1 ? 's' : ''} expressed high satisfaction (4.0+), highlighting positive experiences. `;
       }
       
       if (mediumSat.length > 0) {
@@ -381,10 +520,12 @@ const App = () => {
         narrative += `${lowSat.length} indicated concerns with lower satisfaction scores (below 3.0), requiring attention. `;
       }
       
-      narrative += `\n\nKey observations from individual visitor feedback:\n\n`;
+      narrative += `\n\nKey observations from feedback analysis:\n\n`;
       
-      filteredVisitors.forEach((v, idx) => {
-        narrative += `${idx + 1}. ${v.alias || v.name} from ${v.office} (${v.date}) rated their experience ${v.satisfaction}/5: "${v.comment}"\n\n`;
+      feedbacksWithVisitDetails.forEach((f, idx) => {
+        if (f.comment && f.comment.trim() !== '' && f.comment !== 'No comment provided') {
+          narrative += `${idx + 1}. ${f.visitorName}${user && user.type === "SuperAdmin" ? ` from ${f.visitorOffice || 'Unknown Office'}` : ''} rated their experience ${f.averageRating}/5: "${f.comment}"\n\n`;
+        }
       });
     }
     
@@ -393,14 +534,24 @@ const App = () => {
 
   // Generate overall analytics narrative
   const generateOverallNarrative = () => {
-    const avgSat = filteredVisitors.length > 0 
-      ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2)
-      : 0;
+    let narrative = `# Executive Summary\n\nThis comprehensive analytics report covers the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, `;
     
-    let narrative = `# Executive Summary\n\nThis comprehensive analytics report covers the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, providing insights into visitor traffic patterns, satisfaction rates, and individual feedback.\n\n`;
+    if (user && user.type === "OfficeAdmin") {
+      narrative += `specifically for the ${user.office} office, `;
+    }
+    
+    narrative += `providing insights into visitor traffic patterns, satisfaction rates, and feedback analysis.\n\n`;
     
     // Overview Section
-    narrative += `## Overview\n\nDuring this reporting period, our facility welcomed ${filteredVisitors.length} visitor${filteredVisitors.length !== 1 ? 's' : ''}, achieving an overall average satisfaction rating of ${avgSat} out of 5.0. This represents a ${avgSat >= 4.0 ? 'strong' : avgSat >= 3.0 ? 'moderate' : 'developing'} level of visitor satisfaction across all touchpoints.\n\n`;
+    narrative += `## Overview\n\nDuring this reporting period, `;
+    
+    if (user && user.type === "OfficeAdmin") {
+      narrative += `the ${user.office} office had `;
+    } else {
+      narrative += `our facility had `;
+    }
+    
+    narrative += `${filteredVisits.length} visitor check-in${filteredVisits.length !== 1 ? 's' : ''} and received ${filteredFeedbacks.length} feedback response${filteredFeedbacks.length !== 1 ? 's' : ''}, achieving an overall average satisfaction rating of ${avgSatisfaction} out of 5.0. This represents a ${parseFloat(avgSatisfaction) >= 4.0 ? 'strong' : parseFloat(avgSatisfaction) >= 3.0 ? 'moderate' : 'developing'} level of visitor satisfaction across all touchpoints.\n\n`;
     
     // Traffic Analysis
     narrative += `## Visitor Traffic Analysis\n\n`;
@@ -413,14 +564,14 @@ const App = () => {
     
     if (maxTrafficDay.count > 0) {
       const dayName = daysOfWeek[trafficData.indexOf(maxTrafficDay)];
-      narrative += `${dayName} recorded the highest traffic with ${maxTrafficDay.count} visitor${maxTrafficDay.count !== 1 ? 's' : ''}, `;
+      narrative += `${dayName} recorded the highest traffic with ${maxTrafficDay.count} visitor check-in${maxTrafficDay.count !== 1 ? 's' : ''}, `;
       
       if (minTrafficDay.count === 0) {
         const minDayName = daysOfWeek[trafficData.indexOf(minTrafficDay)];
         narrative += `while ${minDayName} saw no visitor activity. `;
       } else if (minTrafficDay.count < maxTrafficDay.count) {
         const minDayName = daysOfWeek[trafficData.indexOf(minTrafficDay)];
-        narrative += `while ${minDayName} had the lowest with ${minTrafficDay.count} visitor${minTrafficDay.count !== 1 ? 's' : ''}. `;
+        narrative += `while ${minDayName} had the lowest with ${minTrafficDay.count} visitor check-in${minTrafficDay.count !== 1 ? 's' : ''}. `;
       }
     }
     
@@ -448,7 +599,7 @@ const App = () => {
     narrative += `Our satisfaction metrics reveal a comprehensive picture of visitor experiences. `;
     
     if (positivePct > 0) {
-      narrative += `${positivePct}% of visitors expressed positive satisfaction (satisfied or very satisfied), `;
+      narrative += `${positivePct}% of feedback expressed positive satisfaction (satisfied or very satisfied), `;
     }
     
     if (neutral?.pct > 0) {
@@ -462,52 +613,46 @@ const App = () => {
     narrative += `\n\nBreaking down the satisfaction categories:\n`;
     satisfactionRates.forEach(rate => {
       if (rate.pct > 0) {
-        const count = Math.round((rate.pct / 100) * filteredVisitors.length);
-        narrative += `- ${rate.label}: ${rate.pct}% (${count} visitor${count !== 1 ? 's' : ''})\n`;
+        const count = Math.round((rate.pct / 100) * filteredFeedbacks.length);
+        narrative += `- ${rate.label}: ${rate.pct}% (${count} feedback${count !== 1 ? 's' : ''})\n`;
       }
     });
     
     narrative += `\n`;
     
     // Key Insights Section
-    if (filteredVisitors.length > 0) {
-      narrative += `## Key Visitor Insights\n\n`;
+    if (filteredFeedbacks.length > 0) {
+      const feedbacksWithComments = feedbacksWithVisitDetails.filter(
+        f => f.comment && f.comment.trim() !== '' && f.comment !== 'No comment provided'
+      );
       
-      const highSat = filteredVisitors.filter(v => v.satisfaction >= 4.0);
-      const lowSat = filteredVisitors.filter(v => v.satisfaction < 3.0);
+      narrative += `## Key Insights from Feedback\n\n`;
+      
+      const highSat = filteredFeedbacks.filter(f => f.averageRating >= 4.0);
+      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 3.0);
       
       if (highSat.length > 0) {
-        narrative += `**Positive Highlights:** ${highSat.length} visitor${highSat.length !== 1 ? 's' : ''} provided high satisfaction ratings (4.0+), representing ${Math.round((highSat.length / filteredVisitors.length) * 100)}% of all responses. `;
-        
-        const topComment = highSat.sort((a, b) => b.satisfaction - a.satisfaction)[0];
-        narrative += `Notably, ${topComment.alias || topComment.name} from ${topComment.office} gave the highest rating of ${topComment.satisfaction}/5, commenting: "${topComment.comment}"\n\n`;
+        const highestFeedback = highSat.sort((a, b) => b.averageRating - a.averageRating)[0];
+        const highestVisit = visits.find(v => v.id === highestFeedback.visitId);
+        narrative += `**Positive Highlights:** ${highSat.length} feedback${highSat.length !== 1 ? 's' : ''} provided high satisfaction ratings (4.0+), representing ${Math.round((highSat.length / filteredFeedbacks.length) * 100)}% of all responses. `;
+        if (feedbacksWithComments.length > 0) {
+          const positiveComments = feedbacksWithComments.filter(f => f.averageRating >= 4.0);
+          narrative += `${positiveComments.length} of these included detailed written comments praising their experience.\n\n`;
+        }
       }
       
       if (lowSat.length > 0) {
-        narrative += `**Areas for Improvement:** ${lowSat.length} visitor${lowSat.length !== 1 ? 's' : ''} indicated lower satisfaction levels (below 3.0), representing ${Math.round((lowSat.length / filteredVisitors.length) * 100)}% of responses. `;
-        
-        const criticalComment = lowSat.sort((a, b) => a.satisfaction - b.satisfaction)[0];
-        narrative += `Critical feedback from ${criticalComment.alias || criticalComment.name} (${criticalComment.office}) highlighted: "${criticalComment.comment}"\n\n`;
+        const lowestFeedback = lowSat.sort((a, b) => a.averageRating - b.averageRating)[0];
+        const lowestVisit = visits.find(v => v.id === lowestFeedback.visitId);
+        narrative += `**Areas for Improvement:** ${lowSat.length} feedback${lowSat.length !== 1 ? 's' : ''} indicated lower satisfaction levels (below 3.0), representing ${Math.round((lowSat.length / filteredFeedbacks.length) * 100)}% of responses. `;
+        if (feedbacksWithComments.length > 0) {
+          const negativeComments = feedbacksWithComments.filter(f => f.averageRating < 3.0);
+          narrative += `${negativeComments.length} included specific suggestions for improvement.\n\n`;
+        }
       }
       
-      // Office-based analysis
-      const officeGroups = {};
-      filteredVisitors.forEach(v => {
-        if (!officeGroups[v.office]) {
-          officeGroups[v.office] = [];
-        }
-        officeGroups[v.office].push(v);
-      });
-      
-      const offices = Object.keys(officeGroups);
-      if (offices.length > 1) {
-        narrative += `**Office Distribution:** Visitors represented ${offices.length} different office${offices.length !== 1 ? 's' : ''}: `;
-        offices.forEach((office, idx) => {
-          const officeAvg = (officeGroups[office].reduce((sum, v) => sum + v.satisfaction, 0) / officeGroups[office].length).toFixed(2);
-          narrative += `${office} (${officeGroups[office].length} visitor${officeGroups[office].length !== 1 ? 's' : ''}, avg: ${officeAvg})`;
-          if (idx < offices.length - 1) narrative += ', ';
-        });
-        narrative += `.\n\n`;
+      if (feedbacksWithComments.length > 0) {
+        narrative += `**Written Feedback Summary:** Out of ${filteredFeedbacks.length} total feedback submissions, ${feedbacksWithComments.length} included detailed written comments providing deeper insights into visitor experiences.\n\n`;
       }
     }
     
@@ -530,10 +675,25 @@ const App = () => {
       narrative += `- **Maintain Excellence:** With ${positivePct}% positive satisfaction, continue current best practices while addressing remaining improvement areas.\n`;
     }
     
-    narrative += `\n## Conclusion\n\nThis reporting period demonstrates ${avgSat >= 4.0 ? 'strong visitor engagement and satisfaction' : avgSat >= 3.0 ? 'steady visitor engagement with room for enhancement' : 'developing visitor engagement requiring focused improvements'}. Continued monitoring of these metrics will ensure sustained quality of visitor experiences and inform strategic decisions for facility management.`;
+    if (filteredVisits.length === 0) {
+      narrative += `- **Promote Visitation:** With no recorded visits during this period, consider promoting facility access or reviewing visitor check-in procedures.\n`;
+    }
+    
+    narrative += `\n## Conclusion\n\nThis reporting period demonstrates ${parseFloat(avgSatisfaction) >= 4.0 ? 'strong visitor engagement and satisfaction' : parseFloat(avgSatisfaction) >= 3.0 ? 'steady visitor engagement with room for enhancement' : 'developing visitor engagement requiring focused improvements'}. Continued monitoring of these metrics will ensure sustained quality of visitor experiences and inform strategic decisions for facility management.`;
     
     return narrative;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#6B46C1] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading analytics data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-slate-800">
@@ -571,7 +731,12 @@ const App = () => {
                <div>
                   <h2 className="text-2xl font-bold text-gray-800">Analytics Overview</h2>
                   <p className="text-gray-500 text-sm mt-1">
-                    Data insights and visitors patterns
+                    Data insights and visitor patterns
+                    {user && user.type === "OfficeAdmin" && (
+                      <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                        {user.office} Office
+                      </span>
+                    )}
                     <span className="hidden print:inline"> | {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}</span>
                   </p>
                </div>
@@ -607,6 +772,16 @@ const App = () => {
                          <div>
                            <div className="text-sm font-medium text-gray-800">Export CSV</div>
                            <div className="text-xs text-gray-500">Download with charts (.csv)</div>
+                         </div>
+                       </button>
+                       <button
+                         onClick={exportToPDF}
+                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-t border-gray-100"
+                       >
+                         <Printer size={16} className="text-gray-600" />
+                         <div>
+                           <div className="text-sm font-medium text-gray-800">Print Report</div>
+                           <div className="text-xs text-gray-500">Print or save as PDF</div>
                          </div>
                        </button>
                      </div>
@@ -673,24 +848,24 @@ const App = () => {
             <div className="hidden print:block">
               <Card>
                 <h3 className="font-bold text-lg text-gray-800 mb-4">Summary Statistics</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Total Visitors</p>
-                    <p className="text-2xl font-bold text-gray-800">{filteredVisitors.length}</p>
+                    <p className="text-2xl font-bold text-gray-800">{filteredVisits.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Total Feedbacks</p>
+                    <p className="text-2xl font-bold text-gray-800">{filteredFeedbacks.length}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Average Satisfaction</p>
-                    <p className="text-2xl font-bold text-gray-800">
-                      {filteredVisitors.length > 0 
-                        ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2)
-                        : '0.00'}
-                    </p>
+                    <p className="text-2xl font-bold text-gray-800">{avgSatisfaction}/5.0</p>
                   </div>
                 </div>
               </Card>
             </div>
 
-            {/* Visitor Insights */}
+            {/* Feedback Insights */}
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-200 to-transparent no-print"></div>
 
@@ -699,7 +874,7 @@ const App = () => {
                   <div className="p-2 bg-gray-100 rounded-lg text-gray-700">
                     <MessageSquare size={20} />
                   </div>
-                  <h3 className="font-bold text-lg text-gray-800">Visitor Insights</h3>
+                  <h3 className="font-bold text-lg text-gray-800">Feedback Insights</h3>
                 </div>
                 
                 <div className="relative no-print">
@@ -715,22 +890,69 @@ const App = () => {
 
               {/* Scrollable Insights */}
               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar print:max-h-none print:overflow-visible">
-                {filteredVisitors.map((visitor) => (
-                  <div key={visitor.id} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-bold text-gray-800">
-                          {visitor.alias || visitor.name} 
-                          <span className="text-gray-500 font-normal ml-2">
-                            ({visitor.office})
-                          </span>
-                        </h4>
-                        <p className="text-gray-600 text-sm mt-1">{visitor.comment}</p>
+                {feedbacksWithVisitDetails.length > 0 ? (
+                  (() => {
+                    // Filter feedbacks that have comments
+                    const feedbacksWithComments = feedbacksWithVisitDetails.filter(
+                      feedback => feedback.comment && 
+                                 feedback.comment.trim() !== '' && 
+                                 feedback.comment !== 'No comment provided'
+                    );
+                    
+                    // Show message if no feedbacks have comments
+                    if (feedbacksWithComments.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-gray-500">
+                          <MessageSquare size={48} className="mx-auto text-gray-300 mb-3" />
+                          <p className="text-gray-600">No feedback with comments available</p>
+                          <p className="text-sm text-gray-500 mt-1">Only feedback with written comments are displayed here</p>
+                        </div>
+                      );
+                    }
+                    
+                    // Display feedbacks that have comments
+                    return feedbacksWithComments.map((feedback) => (
+                      <div key={feedback.id} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-bold text-gray-800">
+                              {feedback.visitorName} 
+                              {user && user.type === "SuperAdmin" && (
+                                <span className="text-gray-500 font-normal ml-2">
+                                  ({feedback.visitorOffice || 'Unknown Office'})
+                                </span>
+                              )}
+                            </h4>
+                            <p className="text-gray-600 text-sm mt-1">{feedback.comment}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex">
+                              {[...Array(5)].map((_, i) => (
+                                <span 
+                                  key={i} 
+                                  className={`text-lg ${i < Math.round(feedback.averageRating) ? 'text-yellow-400' : 'text-gray-300'}`}
+                                >
+                                  ★
+                                </span>
+                              ))}
+                            </div>
+                            <span className="text-sm font-medium text-gray-700">{feedback.averageRating}/5</span>
+                          </div>
+                        </div>
+                        <p className="text-gray-400 text-xs">
+                          {feedback.visitorDate || (feedback.createdAt ? new Date(feedback.createdAt).toLocaleDateString() : 'N/A')} | 
+                          Rating: {feedback.averageRating}/5
+                        </p>
                       </div>
-                    </div>
-                    <p className="text-gray-400 text-xs">{visitor.date} | Satisfaction: {visitor.satisfaction}/5</p>
+                    ));
+                  })()
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare size={48} className="mx-auto text-gray-300 mb-3" />
+                    <p className="text-gray-600">No feedback available for this period</p>
+                    <p className="text-sm text-gray-500 mt-1">Feedback will appear here once visitors submit their reviews</p>
                   </div>
-                ))}
+                )}
               </div>
             </Card>
 
@@ -747,7 +969,9 @@ const App = () => {
                   <div>
                     <h2 className="text-2xl font-bold mb-2">Integrated Visitor Insights</h2>
                     <p className="text-purple-100 text-sm">
-                      {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)} | {filteredVisitors.length} Total Visitors
+                      {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)} | 
+                      {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks
+                      {user && user.type === "OfficeAdmin" && ` | ${user.office} Office`}
                     </p>
                   </div>
                   <button 
@@ -783,7 +1007,7 @@ const App = () => {
                     Close
                   </button>
                   <button
-                    onClick={exportInsightsToPDF}
+                    onClick={exportToPDF}
                     className="flex items-center gap-2 px-6 py-2.5 bg-[#553C9A] text-white rounded-lg text-sm font-medium hover:bg-[#44307B] transition-colors shadow-lg"
                   >
                     <Printer size={16} />
@@ -809,9 +1033,10 @@ const App = () => {
                     </h2>
                     <p className="text-purple-100 text-sm">
                       Comprehensive Report | {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
+                      {user && user.type === "OfficeAdmin" && ` | ${user.office} Office`}
                     </p>
                     <p className="text-purple-200 text-xs mt-1">
-                      {filteredVisitors.length} Total Visitors | Avg Satisfaction: {filteredVisitors.length > 0 ? (filteredVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / filteredVisitors.length).toFixed(2) : '0.00'}/5.0
+                      {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks | Avg Satisfaction: {avgSatisfaction}/5.0
                     </p>
                   </div>
                   <button 
@@ -885,7 +1110,7 @@ const App = () => {
                       Close
                     </button>
                     <button
-                      onClick={exportOverallToPDF}
+                      onClick={exportToPDF}
                       className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#6B46C1] to-[#553C9A] text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
                     >
                       <Download size={16} />
@@ -902,4 +1127,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default Analytics;

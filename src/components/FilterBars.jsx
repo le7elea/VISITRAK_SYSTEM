@@ -59,7 +59,7 @@ const FilterBar = ({
         </div> */}
 
         {/* Office Filter (hidden for OfficeAdmin) */}
-        {!hideOfficeFilter && (
+        
           <select
             value={office}
             onChange={(e) => setOffice(e.target.value)}
@@ -72,7 +72,6 @@ const FilterBar = ({
               </option>
             ))}
           </select>
-        )}
 
         {/* Date Filter */}
         <input

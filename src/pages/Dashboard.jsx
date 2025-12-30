@@ -10,7 +10,9 @@ import Visitors from "../pages/Visitors";
 import Offices from "../pages/Offices";
 import Feedback from "../pages/Feedback";
 import Footer from "../components/Footer";
-import { useVisitorData } from "../data/VisitorData";
+import Profile from "../pages/Profile"
+import useAdminVisitors from "../hooks/useAdminVisitors";
+import useFeedbackRatings from "../hooks/useFeedbackRatings";
 
 const Dashboard = ({
   user = { type: "SuperAdmin", office: null },
@@ -20,7 +22,8 @@ const Dashboard = ({
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem("activeTab") || "dashboard");
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { visitors } = useVisitorData(); // ✅ Shared visitor data
+  const { visitors } = useAdminVisitors(); 
+  const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
 
   useEffect(() => localStorage.setItem("darkMode", darkMode), [darkMode]);
   useEffect(() => localStorage.setItem("activeTab", activeTab), [activeTab]);
@@ -48,33 +51,75 @@ const Dashboard = ({
       : visitors;
   }, [visitors, user]);
 
-  // 🧮 Compute average satisfaction
-  const avgSatisfaction =
-    filteredVisitors.length > 0
-      ? (
-          filteredVisitors.reduce((sum, v) => sum + (v.satisfaction || 0), 0) /
-          filteredVisitors.length
-        ).toFixed(1)
-      : 0;
+  // 🧮 Compute average satisfaction FROM FEEDBACKS averageRating field
+  const avgSatisfaction = useMemo(() => {
+    if (!feedbacks || feedbacks.length === 0) return "0.0";
+    
+    let relevantFeedbacks = feedbacks;
+    
+    // Filter feedbacks by office if needed
+    if (user.type === "OfficeAdmin" && user.office) {
+      // Since feedbacks might not have office field, let's try to match with visitors
+      // Create a map of visitId to office from visitors
+      const visitorOfficeMap = {};
+      visitors.forEach(v => {
+        if (v.id) visitorOfficeMap[v.id] = v.office;
+      });
+      
+      // Filter feedbacks where the corresponding visitor has the right office
+      relevantFeedbacks = feedbacks.filter(f => {
+        const visitorOffice = visitorOfficeMap[f.visitId];
+        return visitorOffice === user.office;
+      });
+    }
+    
+    if (relevantFeedbacks.length === 0) return "0.0";
+    
+    const totalRating = relevantFeedbacks.reduce(
+      (sum, f) => sum + (f.averageRating || 0), 
+      0
+    );
+    const average = totalRating / relevantFeedbacks.length;
+    
+    return average.toFixed(1);
+  }, [feedbacks, visitors, user.type, user.office]);
 
   // 📅 Helper for "today" visitors
-  const visitorsToday = filteredVisitors.filter((v) => {
+  const visitorsToday = useMemo(() => {
     const today = new Date().toLocaleDateString();
-    return v.date === today;
-  }).length;
+    return filteredVisitors.filter((v) => v.date === today).length;
+  }, [filteredVisitors]);
 
   // 📆 Helper for "this week" visitors
-  const visitorsThisWeek = filteredVisitors.filter((v) => {
+  const visitorsThisWeek = useMemo(() => {
     const today = new Date();
-    const visitorDate = new Date(v.date);
-    const diffDays = (today - visitorDate) / (1000 * 60 * 60 * 24);
-    return diffDays <= 7;
-  }).length;
+    return filteredVisitors.filter((v) => {
+      const visitorDate = new Date(v.date);
+      if (isNaN(visitorDate.getTime())) {
+        const [month, day, year] = v.date.split('/');
+        const parsedDate = new Date(year, month - 1, day);
+        if (!isNaN(parsedDate.getTime())) {
+          const diffDays = (today - parsedDate) / (1000 * 60 * 60 * 24);
+          return diffDays <= 7 && diffDays >= 0;
+        }
+        return false;
+      }
+      const diffDays = (today - visitorDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7 && diffDays >= 0;
+    }).length;
+  }, [filteredVisitors]);
 
   // 🕒 Checked-in visitors
-  const currentlyCheckedIn = filteredVisitors.filter(
-    (v) => v.status === "Check In"
-  ).length;
+  const currentlyCheckedIn = useMemo(() => 
+    filteredVisitors.filter((v) => v.status === "Check In").length,
+    [filteredVisitors]
+  );
+
+  // Format average satisfaction with /5 suffix
+  const formattedAvgSatisfaction = useMemo(() => {
+    if (feedbacksLoading) return "Loading...";
+    return `${avgSatisfaction}/5`;
+  }, [avgSatisfaction, feedbacksLoading]);
 
   return (
     <div
@@ -87,6 +132,7 @@ const Dashboard = ({
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         darkMode={darkMode}
+        setShowConfirm={setShowConfirm}
       />
 
       <div className="flex flex-col flex-1 min-h-screen">
@@ -95,17 +141,28 @@ const Dashboard = ({
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             setActiveTab={setActiveTab}
-            setShowConfirm={setShowConfirm}
           />
 
           {activeTab === "dashboard" && (
             <>
               {/* 📊 Statistics Section */}
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <CardStat title="Visitor Today" value={visitorsToday} />
-                <CardStat title="Visitor This Week" value={visitorsThisWeek} />
-                <CardStat title="Currently Checked-in" value={currentlyCheckedIn} />
-                <CardStat title="Avg. Satisfaction" value={avgSatisfaction} />
+                <CardStat 
+                  title="Visitor Today" 
+                  value={visitorsToday} 
+                />
+                <CardStat 
+                  title="Visitor This Week" 
+                  value={visitorsThisWeek} 
+                />
+                <CardStat 
+                  title="Currently Checked-in" 
+                  value={currentlyCheckedIn} 
+                />
+                <CardStat 
+                  title="Avg. Satisfaction" 
+                  value={formattedAvgSatisfaction}
+                />
               </div>
 
               {/* 🧍 Live Visitor Feed */}
@@ -113,11 +170,13 @@ const Dashboard = ({
             </>
           )}
 
-          {activeTab === "analytics" && <Analytics visitors={filteredVisitors} />}
+          {activeTab === "analytics" && <Analytics visitors={filteredVisitors} feedbacks={feedbacks} />}
           {activeTab === "visitors" && <Visitors user={user} />}
           {activeTab === "offices" && user.type === "SuperAdmin" && <Offices />}
-          {activeTab === "feedback" && <Feedback visitors={filteredVisitors} user={user} />}
+          {activeTab === "feedback" && <Feedback visitors={filteredVisitors} feedbacks={feedbacks} user={user} />}
           {activeTab === "notifications" && <NotificationCard user={user} />}
+          {activeTab === "profile" && <Profile user={user} onLogout={onLogout} />}
+          
 
           {/* 🔒 Logout Confirmation Modal */}
           {showConfirm && (
