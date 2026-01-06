@@ -61,7 +61,7 @@ const LiveVisitorFeed = ({ visitors = [] }) => {
                         v.status
                       )}`}
                     >
-                      {v.status}
+                      {v.status} 
                     </span>
                   </td>
                 </tr>

@@ -11,6 +11,7 @@ const FilterBar = ({
   setDateFilter,
   exportCSV,
   exportPDF,
+  uniqueOffices = [] // Add this prop
 }) => {
   return (
     <div className="border border-[#7400EA] dark:border-[#7400EA] rounded-xl shadow-sm p-5 mb-6 bg-white dark:bg-gray-900 dark:text-gray-200 ">
@@ -42,7 +43,7 @@ const FilterBar = ({
           <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
           <input
             type="text"
-            placeholder="Search visitor name"
+            placeholder="Search visitor name, email, or phone"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none"
@@ -56,11 +57,11 @@ const FilterBar = ({
             onChange={(e) => setOfficeFilter(e.target.value)}
             className="w-full md:w-1/4 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none"
           >
-            <option>All Offices</option>
-            <option>Admin Office</option>
-            <option>Registrar</option>
-            <option>Clinic</option>
-            <option>Extension Office</option>
+            {uniqueOffices.map((office) => (
+              <option key={office} value={office}>
+                {office}
+              </option>
+            ))}
           </select>
         )}
 

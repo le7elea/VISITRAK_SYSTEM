@@ -76,7 +76,16 @@ const getCurrentUser = () => {
 export const fetchOffices = async () => {
   try {
     const snapshot = await getDocs(officesCollection);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const offices = snapshot.docs.map((doc) => ({ 
+      id: doc.id, 
+      ...doc.data(),
+      // Ensure purposes and staffToVisit arrays exist
+      purposes: doc.data().purposes || [],
+      staffToVisit: doc.data().staffToVisit || []
+    }));
+    
+    console.log(`✅ Fetched ${offices.length} offices`);
+    return offices;
   } catch (error) {
     console.error("Error fetching offices:", error);
     throw error;
@@ -92,7 +101,14 @@ export const getOfficeById = async (id) => {
     const officeSnap = await getDoc(officeRef);
     
     if (officeSnap.exists()) {
-      return { id: officeSnap.id, ...officeSnap.data() };
+      const data = officeSnap.data();
+      return { 
+        id: officeSnap.id, 
+        ...data,
+        // Ensure purposes and staffToVisit arrays exist
+        purposes: data.purposes || [],
+        staffToVisit: data.staffToVisit || []
+      };
     }
     return null;
   } catch (error) {
@@ -114,11 +130,52 @@ export const getOfficeByEmail = async (email) => {
     }
     
     const docSnap = snapshot.docs[0];
-    return { id: docSnap.id, ...docSnap.data() };
+    const data = docSnap.data();
+    return { 
+      id: docSnap.id, 
+      ...data,
+      // Ensure purposes and staffToVisit arrays exist
+      purposes: data.purposes || [],
+      staffToVisit: data.staffToVisit || []
+    };
   } catch (error) {
     console.error("Error getting office by email:", error);
     throw error;
   }
+};
+
+/**
+ * Validate office data structure
+ */
+const validateOfficeData = (office) => {
+  // Ensure arrays are properly formatted
+  const validatedOffice = { ...office };
+  
+  // Validate purposes array
+  if (!validatedOffice.purposes || !Array.isArray(validatedOffice.purposes)) {
+    validatedOffice.purposes = [];
+  } else {
+    // Ensure each purpose has required fields
+    validatedOffice.purposes = validatedOffice.purposes.map((purpose, index) => ({
+      id: purpose.id || `purpose_${Date.now()}_${index}`,
+      name: purpose.name || `Purpose ${index + 1}`,
+      ...purpose
+    }));
+  }
+  
+  // Validate staffToVisit array
+  if (!validatedOffice.staffToVisit || !Array.isArray(validatedOffice.staffToVisit)) {
+    validatedOffice.staffToVisit = [];
+  } else {
+    // Ensure each staff has required fields
+    validatedOffice.staffToVisit = validatedOffice.staffToVisit.map((staff, index) => ({
+      id: staff.id || `staff_${Date.now()}_${index}`,
+      name: staff.name || `Staff ${index + 1}`,
+      ...staff
+    }));
+  }
+  
+  return validatedOffice;
 };
 
 /**
@@ -135,9 +192,16 @@ export const addOffice = async (office) => {
     const defaultPassword =
       office.role === "super" ? "superadmin2025" : "officeadmin2025";
 
+    // Validate and format office data
+    const validatedOffice = validateOfficeData(office);
+    
     const officeWithPassword = {
-      ...office,
+      name: validatedOffice.name,
+      email: validatedOffice.email,
+      role: validatedOffice.role,
       password: defaultPassword,
+      purposes: validatedOffice.purposes,
+      staffToVisit: validatedOffice.staffToVisit,
       createdAt: serverTimestamp(),
     };
 
@@ -147,7 +211,7 @@ export const addOffice = async (office) => {
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Created",
-      description: `New office "${office.name}" was created`,
+      description: `New office "${office.name}" was created with ${office.purposes?.length || 0} purposes and ${office.staffToVisit?.length || 0} staff members`,
       office: office.name, // THIS MUST MATCH the office name exactly
       type: "office_created",
       userEmail: currentUser.email,
@@ -155,10 +219,14 @@ export const addOffice = async (office) => {
       userRole: currentUser.role,
       officeEmail: office.email,
       officeRole: office.role,
+      purposesCount: office.purposes?.length || 0,
+      staffCount: office.staffToVisit?.length || 0,
       action: "create"
     });
     
     console.log(`✅ Office "${office.name}" added successfully with activity log`);
+    console.log(`   - Purposes: ${office.purposes?.length || 0} items`);
+    console.log(`   - Staff to visit: ${office.staffToVisit?.length || 0} items`);
     
     // Return with ID and a fallback date for immediate UI display
     return { 
@@ -187,10 +255,15 @@ export const updateOffice = async (office) => {
     
     const currentData = currentOfficeSnap.data();
     
+    // Validate and format update data
+    const validatedOffice = validateOfficeData(office);
+    
     const updateData = {
-      name: office.name,
-      email: office.email,
-      role: office.role,
+      name: validatedOffice.name,
+      email: validatedOffice.email,
+      role: validatedOffice.role,
+      purposes: validatedOffice.purposes,
+      staffToVisit: validatedOffice.staffToVisit,
       updatedAt: serverTimestamp(),
     };
 
@@ -221,6 +294,19 @@ export const updateOffice = async (office) => {
       changes.push(`role changed from "${currentData.role}" to "${office.role}"`);
     }
     
+    // Track array changes
+    const currentPurposesCount = currentData.purposes?.length || 0;
+    const newPurposesCount = office.purposes?.length || 0;
+    if (currentPurposesCount !== newPurposesCount) {
+      changes.push(`purposes changed from ${currentPurposesCount} to ${newPurposesCount}`);
+    }
+    
+    const currentStaffCount = currentData.staffToVisit?.length || 0;
+    const newStaffCount = office.staffToVisit?.length || 0;
+    if (currentStaffCount !== newStaffCount) {
+      changes.push(`staff list changed from ${currentStaffCount} to ${newStaffCount}`);
+    }
+    
     if (changes.length > 0) {
       description += ` (${changes.join(', ')})`;
     }
@@ -235,13 +321,23 @@ export const updateOffice = async (office) => {
       userRole: currentUser.role,
       previousName: currentData.name,
       newName: office.name,
+      purposesCount: newPurposesCount,
+      staffCount: newStaffCount,
       action: "update"
     });
     
     console.log(`✅ Office "${office.name}" updated successfully with activity log`);
+    console.log(`   - New purposes count: ${newPurposesCount}`);
+    console.log(`   - New staff count: ${newStaffCount}`);
     
     // Return updated office data
-    return { id: office.id, ...updateData };
+    return { 
+      id: office.id, 
+      ...updateData,
+      // Ensure we return the arrays
+      purposes: validatedOffice.purposes,
+      staffToVisit: validatedOffice.staffToVisit
+    };
   } catch (error) {
     console.error("Error updating office:", error);
     throw error;
@@ -266,7 +362,7 @@ export const deleteOffice = async (id) => {
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Deleted",
-      description: `Office "${officeData.name}" was deleted from the system`,
+      description: `Office "${officeData.name}" was deleted from the system. Removed ${officeData.purposes?.length || 0} purposes and ${officeData.staffToVisit?.length || 0} staff records`,
       office: officeData.name, // THIS MUST MATCH the office name exactly
       type: "office_deleted",
       userEmail: currentUser.email,
@@ -274,6 +370,8 @@ export const deleteOffice = async (id) => {
       userRole: currentUser.role,
       deletedOfficeName: officeData.name,
       deletedOfficeEmail: officeData.email,
+      deletedPurposesCount: officeData.purposes?.length || 0,
+      deletedStaffCount: officeData.staffToVisit?.length || 0,
       action: "delete"
     });
     
@@ -281,12 +379,20 @@ export const deleteOffice = async (id) => {
     await deleteDoc(officeRef);
     
     console.log(`✅ Office "${officeData.name}" deleted successfully with activity log`);
-    return { success: true, id, deletedOffice: officeData.name };
+    console.log(`   - Removed ${officeData.purposes?.length || 0} purposes`);
+    console.log(`   - Removed ${officeData.staffToVisit?.length || 0} staff records`);
+    return { 
+      success: true, 
+      id, 
+      deletedOffice: officeData.name,
+      deletedPurposesCount: officeData.purposes?.length || 0,
+      deletedStaffCount: officeData.staffToVisit?.length || 0
+    };
   } catch (error) {
     console.error("Error deleting office:", error);
     throw error;
   }
-};
+}; 
 
 /**
  * Update office WITH ACTIVITY LOG (wrapper for backward compatibility)
@@ -357,5 +463,241 @@ export const createLoginActivityLog = async (userData) => {
   } catch (error) {
     console.error("❌ Error creating login activity log:", error);
     return false;
+  }
+};
+
+/**
+ * Get offices with specific purpose (for filtering/searching)
+ */
+export const getOfficesByPurpose = async (purposeName) => {
+  try {
+    const allOffices = await fetchOffices();
+    
+    // Filter offices that have the specified purpose
+    const filteredOffices = allOffices.filter(office => 
+      office.purposes && 
+      office.purposes.some(purpose => 
+        purpose.name.toLowerCase().includes(purposeName.toLowerCase())
+      )
+    );
+    
+    console.log(`✅ Found ${filteredOffices.length} offices with purpose containing "${purposeName}"`);
+    return filteredOffices;
+  } catch (error) {
+    console.error("Error getting offices by purpose:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get offices with specific staff (for filtering/searching)
+ */
+export const getOfficesByStaff = async (staffName) => {
+  try {
+    const allOffices = await fetchOffices();
+    
+    // Filter offices that have the specified staff
+    const filteredOffices = allOffices.filter(office => 
+      office.staffToVisit && 
+      office.staffToVisit.some(staff => 
+        staff.name.toLowerCase().includes(staffName.toLowerCase())
+      )
+    );
+    
+    console.log(`✅ Found ${filteredOffices.length} offices with staff containing "${staffName}"`);
+    return filteredOffices;
+  } catch (error) {
+    console.error("Error getting offices by staff:", error);
+    throw error;
+  }
+};
+
+/**
+ * Add a new purpose to an existing office
+ */
+export const addPurposeToOffice = async (officeId, purpose) => {
+  try {
+    const office = await getOfficeById(officeId);
+    if (!office) {
+      throw new Error(`Office with ID ${officeId} not found`);
+    }
+    
+    const newPurpose = {
+      id: `purpose_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: purpose.name || "New Purpose",
+      ...purpose
+    };
+    
+    const updatedPurposes = [...(office.purposes || []), newPurpose];
+    
+    const updateData = {
+      purposes: updatedPurposes,
+      updatedAt: serverTimestamp()
+    };
+    
+    const officeRef = doc(db, "offices", officeId);
+    await updateDoc(officeRef, updateData);
+    
+    // Create activity log
+    const currentUser = getCurrentUser();
+    await createActivityLog({
+      title: "Purpose Added",
+      description: `Purpose "${purpose.name}" was added to office "${office.name}"`,
+      office: office.name,
+      type: "purpose_added",
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      purposeName: purpose.name,
+      action: "update"
+    });
+    
+    console.log(`✅ Purpose "${purpose.name}" added to office "${office.name}"`);
+    return { success: true, purpose: newPurpose };
+  } catch (error) {
+    console.error("Error adding purpose to office:", error);
+    throw error;
+  }
+};
+
+/**
+ * Add a new staff member to an existing office
+ */
+export const addStaffToOffice = async (officeId, staff) => {
+  try {
+    const office = await getOfficeById(officeId);
+    if (!office) {
+      throw new Error(`Office with ID ${officeId} not found`);
+    }
+    
+    const newStaff = {
+      id: `staff_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: staff.name || "New Staff",
+      ...staff
+    };
+    
+    const updatedStaff = [...(office.staffToVisit || []), newStaff];
+    
+    const updateData = {
+      staffToVisit: updatedStaff,
+      updatedAt: serverTimestamp()
+    };
+    
+    const officeRef = doc(db, "offices", officeId);
+    await updateDoc(officeRef, updateData);
+    
+    // Create activity log
+    const currentUser = getCurrentUser();
+    await createActivityLog({
+      title: "Staff Added",
+      description: `Staff "${staff.name}" was added to office "${office.name}"`,
+      office: office.name,
+      type: "staff_added",
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      staffName: staff.name,
+      action: "update"
+    });
+    
+    console.log(`✅ Staff "${staff.name}" added to office "${office.name}"`);
+    return { success: true, staff: newStaff };
+  } catch (error) {
+    console.error("Error adding staff to office:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove a purpose from an office
+ */
+export const removePurposeFromOffice = async (officeId, purposeId) => {
+  try {
+    const office = await getOfficeById(officeId);
+    if (!office) {
+      throw new Error(`Office with ID ${officeId} not found`);
+    }
+    
+    const purposeToRemove = office.purposes.find(p => p.id === purposeId);
+    if (!purposeToRemove) {
+      throw new Error(`Purpose with ID ${purposeId} not found`);
+    }
+    
+    const updatedPurposes = office.purposes.filter(p => p.id !== purposeId);
+    
+    const updateData = {
+      purposes: updatedPurposes,
+      updatedAt: serverTimestamp()
+    };
+    
+    const officeRef = doc(db, "offices", officeId);
+    await updateDoc(officeRef, updateData);
+    
+    // Create activity log
+    const currentUser = getCurrentUser();
+    await createActivityLog({
+      title: "Purpose Removed",
+      description: `Purpose "${purposeToRemove.name}" was removed from office "${office.name}"`,
+      office: office.name,
+      type: "purpose_removed",
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      purposeName: purposeToRemove.name,
+      action: "update"
+    });
+    
+    console.log(`✅ Purpose "${purposeToRemove.name}" removed from office "${office.name}"`);
+    return { success: true, purpose: purposeToRemove };
+  } catch (error) {
+    console.error("Error removing purpose from office:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove a staff member from an office
+ */
+export const removeStaffFromOffice = async (officeId, staffId) => {
+  try {
+    const office = await getOfficeById(officeId);
+    if (!office) {
+      throw new Error(`Office with ID ${officeId} not found`);
+    }
+    
+    const staffToRemove = office.staffToVisit.find(s => s.id === staffId);
+    if (!staffToRemove) {
+      throw new Error(`Staff with ID ${staffId} not found`);
+    }
+    
+    const updatedStaff = office.staffToVisit.filter(s => s.id !== staffId);
+    
+    const updateData = {
+      staffToVisit: updatedStaff,
+      updatedAt: serverTimestamp()
+    };
+    
+    const officeRef = doc(db, "offices", officeId);
+    await updateDoc(officeRef, updateData);
+    
+    // Create activity log
+    const currentUser = getCurrentUser();
+    await createActivityLog({
+      title: "Staff Removed",
+      description: `Staff "${staffToRemove.name}" was removed from office "${office.name}"`,
+      office: office.name,
+      type: "staff_removed",
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      staffName: staffToRemove.name,
+      action: "update"
+    });
+    
+    console.log(`✅ Staff "${staffToRemove.name}" removed from office "${office.name}"`);
+    return { success: true, staff: staffToRemove };
+  } catch (error) {
+    console.error("Error removing staff from office:", error);
+    throw error;
   }
 };

@@ -10,7 +10,7 @@ import Visitors from "../pages/Visitors";
 import Offices from "../pages/Offices";
 import Feedback from "../pages/Feedback";
 import Footer from "../components/Footer";
-import Profile from "../pages/Profile"
+import Profile from "../pages/Profile";
 import useAdminVisitors from "../hooks/useAdminVisitors";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
 
@@ -18,11 +18,15 @@ const Dashboard = ({
   user = { type: "SuperAdmin", office: null },
   onLogout,
 }) => {
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("darkMode") === "true");
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem("activeTab") || "dashboard");
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("darkMode") === "true"
+  );
+  const [activeTab, setActiveTab] = useState(
+    () => localStorage.getItem("activeTab") || "dashboard"
+  );
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { visitors } = useAdminVisitors(); 
+  const { visitors } = useAdminVisitors();
   const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
 
   useEffect(() => localStorage.setItem("darkMode", darkMode), [darkMode]);
@@ -51,44 +55,14 @@ const Dashboard = ({
       : visitors;
   }, [visitors, user]);
 
-  // 🧮 Compute average satisfaction FROM FEEDBACKS averageRating field
-  const avgSatisfaction = useMemo(() => {
-    if (!feedbacks || feedbacks.length === 0) return "0.0";
-    
-    let relevantFeedbacks = feedbacks;
-    
-    // Filter feedbacks by office if needed
-    if (user.type === "OfficeAdmin" && user.office) {
-      // Since feedbacks might not have office field, let's try to match with visitors
-      // Create a map of visitId to office from visitors
-      const visitorOfficeMap = {};
-      visitors.forEach(v => {
-        if (v.id) visitorOfficeMap[v.id] = v.office;
-      });
-      
-      // Filter feedbacks where the corresponding visitor has the right office
-      relevantFeedbacks = feedbacks.filter(f => {
-        const visitorOffice = visitorOfficeMap[f.visitId];
-        return visitorOffice === user.office;
-      });
-    }
-    
-    if (relevantFeedbacks.length === 0) return "0.0";
-    
-    const totalRating = relevantFeedbacks.reduce(
-      (sum, f) => sum + (f.averageRating || 0), 
-      0
-    );
-    const average = totalRating / relevantFeedbacks.length;
-    
-    return average.toFixed(1);
-  }, [feedbacks, visitors, user.type, user.office]);
-
-  // 📅 Helper for "today" visitors
-  const visitorsToday = useMemo(() => {
+  // 🧮 TODAY'S VISITORS (for Live Visitor Feed)
+  const todaysVisitors = useMemo(() => {
     const today = new Date().toLocaleDateString();
-    return filteredVisitors.filter((v) => v.date === today).length;
+    return filteredVisitors.filter((v) => v.date === today);
   }, [filteredVisitors]);
+
+  // 📊 TODAY'S VISITORS COUNT (for CardStat)
+  const visitorsToday = useMemo(() => todaysVisitors.length, [todaysVisitors]);
 
   // 📆 Helper for "this week" visitors
   const visitorsThisWeek = useMemo(() => {
@@ -96,7 +70,7 @@ const Dashboard = ({
     return filteredVisitors.filter((v) => {
       const visitorDate = new Date(v.date);
       if (isNaN(visitorDate.getTime())) {
-        const [month, day, year] = v.date.split('/');
+        const [month, day, year] = v.date.split("/");
         const parsedDate = new Date(year, month - 1, day);
         if (!isNaN(parsedDate.getTime())) {
           const diffDays = (today - parsedDate) / (1000 * 60 * 60 * 24);
@@ -110,10 +84,43 @@ const Dashboard = ({
   }, [filteredVisitors]);
 
   // 🕒 Checked-in visitors
-  const currentlyCheckedIn = useMemo(() => 
-    filteredVisitors.filter((v) => v.status === "Check In").length,
+  const currentlyCheckedIn = useMemo(
+    () => filteredVisitors.filter((v) => v.status === "Check In").length,
     [filteredVisitors]
   );
+
+  // 🧮 Compute average satisfaction FROM FEEDBACKS averageRating field
+  const avgSatisfaction = useMemo(() => {
+    if (!feedbacks || feedbacks.length === 0) return "0.0";
+
+    let relevantFeedbacks = feedbacks;
+
+    // Filter feedbacks by office if needed
+    if (user.type === "OfficeAdmin" && user.office) {
+      // Since feedbacks might not have office field, let's try to match with visitors
+      // Create a map of visitId to office from visitors
+      const visitorOfficeMap = {};
+      visitors.forEach((v) => {
+        if (v.id) visitorOfficeMap[v.id] = v.office;
+      });
+
+      // Filter feedbacks where the corresponding visitor has the right office
+      relevantFeedbacks = feedbacks.filter((f) => {
+        const visitorOffice = visitorOfficeMap[f.visitId];
+        return visitorOffice === user.office;
+      });
+    }
+
+    if (relevantFeedbacks.length === 0) return "0.0";
+
+    const totalRating = relevantFeedbacks.reduce(
+      (sum, f) => sum + (f.averageRating || 0),
+      0
+    );
+    const average = totalRating / relevantFeedbacks.length;
+
+    return average.toFixed(1);
+  }, [feedbacks, visitors, user.type, user.office]);
 
   // Format average satisfaction with /5 suffix
   const formattedAvgSatisfaction = useMemo(() => {
@@ -147,36 +154,39 @@ const Dashboard = ({
             <>
               {/* 📊 Statistics Section */}
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <CardStat 
-                  title="Visitor Today" 
-                  value={visitorsToday} 
+                <CardStat title="Visitor Today" value={visitorsToday} />
+                <CardStat title="Visitor This Week" value={visitorsThisWeek} />
+                <CardStat
+                  title="Currently Checked-in"
+                  value={currentlyCheckedIn}
                 />
-                <CardStat 
-                  title="Visitor This Week" 
-                  value={visitorsThisWeek} 
-                />
-                <CardStat 
-                  title="Currently Checked-in" 
-                  value={currentlyCheckedIn} 
-                />
-                <CardStat 
-                  title="Avg. Satisfaction" 
+                <CardStat
+                  title="Avg. Satisfaction"
                   value={formattedAvgSatisfaction}
                 />
               </div>
 
-              {/* 🧍 Live Visitor Feed */}
-              <LiveVisitorFeed visitors={filteredVisitors} />
+              {/* 🧍 Live Visitor Feed - Now showing only today's visitors */}
+              <LiveVisitorFeed visitors={todaysVisitors} />
             </>
           )}
 
-          {activeTab === "analytics" && <Analytics visitors={filteredVisitors} feedbacks={feedbacks} />}
+          {activeTab === "analytics" && (
+            <Analytics visitors={filteredVisitors} feedbacks={feedbacks} />
+          )}
           {activeTab === "visitors" && <Visitors user={user} />}
           {activeTab === "offices" && user.type === "SuperAdmin" && <Offices />}
-          {activeTab === "feedback" && <Feedback visitors={filteredVisitors} feedbacks={feedbacks} user={user} />}
+          {activeTab === "feedback" && (
+            <Feedback
+              visitors={filteredVisitors}
+              feedbacks={feedbacks}
+              user={user}
+            />
+          )}
           {activeTab === "notifications" && <NotificationCard user={user} />}
-          {activeTab === "profile" && <Profile user={user} onLogout={onLogout} />}
-          
+          {activeTab === "profile" && (
+            <Profile user={user} onLogout={onLogout} />
+          )}
 
           {/* 🔒 Logout Confirmation Modal */}
           {showConfirm && (

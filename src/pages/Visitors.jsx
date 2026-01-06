@@ -10,7 +10,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [dateFilter, setDateFilter] = useState("");
   const [visits, setVisits] = useState([]);
   const [feedbacks, setFeedbacks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
 
   // Fetch visits from Firestore
   useEffect(() => {
@@ -264,7 +264,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         uniqueOffices={uniqueOffices}
       />
 
-      {/* 📋 Visitor Table */}
+      {/* 📋 Visitor Table - Using your existing VisitorTable component */}
       <VisitorTable visitors={filteredVisitors} renderStars={renderStars} />
     </div>
   );

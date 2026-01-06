@@ -1,18 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  BarChart2, 
-  ChevronDown, 
-  MoreHorizontal, 
-  Download, 
-  MessageSquare,
-  Calendar,
-  FileText,
-  Printer
-} from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { BarChart2, ChevronDown, MoreHorizontal, Download, MessageSquare,Calendar,FileText,Printer} from 'lucide-react';
+import { collection, query, orderBy, onSnapshot, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-// --- Helper Functions ---
 const calculateSatisfactionRates = (feedbacks = []) => {
   const total = feedbacks.length;
   if (total === 0) return [];
@@ -63,9 +53,38 @@ const calculateTrafficByDay = (visits = []) => {
   }));
 };
 
-// --- Components ---
+// Helper function to normalize office names
+const normalizeOfficeName = (officeName) => {
+  if (!officeName) return "";
+  let normalized = officeName.toString().trim();
+  normalized = normalized.replace(/\s+/g, ' ');
+  normalized = normalized.replace(/[^\w\s.,-]/g, '');
+  return normalized;
+};
+
+// Get user from localStorage
+const getCurrentUser = () => {
+  try {
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    const user = JSON.parse(userStr);
+    
+    // Ensure office is properly normalized
+    if (user.office) {
+      user.office = normalizeOfficeName(user.office);
+      user.normalizedOffice = user.office.toLowerCase();
+    }
+    
+    return user;
+  } catch (error) {
+    console.error("Error parsing user from localStorage:", error);
+    return null;
+  }
+};
+
+// --- Components (unchanged) ---
 const Card = ({ children, className = "" }) => (
-  <div className={`bg-white rounded-xl border border-gray-100 shadow-sm p-6 ${className}`}>
+  <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 shadow-sm p-6 ${className}`}>
     {children}
   </div>
 );
@@ -103,11 +122,11 @@ const VisitorTrafficChart = ({ trafficData }) => {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col ">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
           <BarChart2 className="text-[#6B46C1]" size={20} />
-          <h3 className="font-bold text-gray-800">Visitor Traffic</h3>
+          <h3 className="font-bold text-gray-800 dark:text-white">Visitor Traffic</h3>
         </div>
         <MoreHorizontal className="text-gray-400 cursor-pointer" />
       </div>
@@ -154,13 +173,13 @@ const VisitorTrafficChart = ({ trafficData }) => {
 
 const SatisfactionChart = ({ ratings }) => {
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col ">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100">
              <span className="text-xs">⚖️</span> 
           </div>
-          <h3 className="font-bold text-gray-800">Satisfaction Rate</h3>
+          <h3 className="font-bold text-gray-800 dark:text-white">Satisfaction Rate</h3>
         </div>
         <MoreHorizontal className="text-gray-400 cursor-pointer" />
       </div>
@@ -197,19 +216,55 @@ const SatisfactionChart = ({ ratings }) => {
   );
 };
 
-// --- Main Component ---
-const Analytics = ({ user }) => {
+// --- Main Component with Office Filtering ---
+const Analytics = () => {
   // State for visits from database
   const [visits, setVisits] = useState([]);
   // State for feedbacks from database
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Fetch visits from Firestore (visitor check-ins)
+  // Get current user on component mount
   useEffect(() => {
+    const user = getCurrentUser();
+    setCurrentUser(user);
+    
+    if (!user) {
+      console.warn("⚠️ No user found in localStorage");
+    } else {
+      console.log("👤 Current user:", user);
+    }
+  }, []);
+
+  // Fetch visits from Firestore with office filtering
+  useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
     const fetchVisits = () => {
       try {
-        const q = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
+        let q;
+        
+        if (currentUser && currentUser.type === "OfficeAdmin" && currentUser.office) {
+          // OfficeAdmin: Only fetch visits for their specific office
+          console.log(`🏢 Fetching visits for office: "${currentUser.office}"`);
+          
+          // Try exact match first
+          q = query(
+            collection(db, "visits"), 
+            where("office", "==", currentUser.office),
+            orderBy("checkInTime", "desc")
+          );
+          
+          console.log("📊 Query created for office:", currentUser.office);
+        } else {
+          // SuperAdmin or no office: Fetch all visits
+          console.log("👑 Fetching all visits (SuperAdmin)");
+          q = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
+        }
         
         const unsub = onSnapshot(q, (snapshot) => {
           const data = snapshot.docs.map((doc) => {
@@ -226,9 +281,66 @@ const Analytics = ({ user }) => {
             };
           });
           
-          setVisits(data);
+          console.log(`📊 Fetched ${data.length} visits`);
+          
+          // For OfficeAdmin, also filter client-side for safety
+          let filteredData = data;
+          if (currentUser && currentUser.type === "OfficeAdmin" && currentUser.office) {
+            const userOfficeNormalized = normalizeOfficeName(currentUser.office).toLowerCase();
+            
+            filteredData = data.filter(visit => {
+              const visitOfficeNormalized = normalizeOfficeName(visit.office || "").toLowerCase();
+              return visitOfficeNormalized === userOfficeNormalized;
+            });
+            
+            console.log(`🏢 After client-side filtering: ${filteredData.length} visits`);
+            
+            // Debug: Show office distribution
+            const officeCounts = data.reduce((acc, visit) => {
+              const office = visit.office || "Unknown";
+              acc[office] = (acc[office] || 0) + 1;
+              return acc;
+            }, {});
+            console.log("📊 Office distribution:", officeCounts);
+          }
+          
+          setVisits(filteredData);
         }, (error) => {
           console.error("Error fetching visits:", error);
+          
+          // Fallback: Try without where clause and filter client-side
+          if (currentUser && currentUser.type === "OfficeAdmin") {
+            console.log("⚠️ Trying fallback query...");
+            const fallbackQ = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
+            
+            const fallbackUnsub = onSnapshot(fallbackQ, (snapshot) => {
+              const data = snapshot.docs.map((doc) => {
+                const d = doc.data();
+                return {
+                  id: doc.id,
+                  visitorId: d.visitorId,
+                  visitorName: d.visitorName,
+                  office: d.office,
+                  checkInTime: d.checkInTime?.toDate() || new Date(),
+                  checkOutTime: d.checkOutTime?.toDate() || null,
+                  purpose: d.purpose || '',
+                  status: d.status || 'checked-in'
+                };
+              });
+              
+              // Filter client-side
+              const userOfficeNormalized = normalizeOfficeName(currentUser.office).toLowerCase();
+              const filteredData = data.filter(visit => {
+                const visitOfficeNormalized = normalizeOfficeName(visit.office || "").toLowerCase();
+                return visitOfficeNormalized === userOfficeNormalized;
+              });
+              
+              console.log(`🏢 Fallback: ${filteredData.length} visits for office`);
+              setVisits(filteredData);
+            });
+            
+            return () => fallbackUnsub();
+          }
         });
 
         return () => unsub();
@@ -238,36 +350,111 @@ const Analytics = ({ user }) => {
     };
 
     fetchVisits();
-  }, []);
+  }, [currentUser]);
 
-  // Fetch feedbacks from Firestore
+  // Fetch feedbacks from Firestore with office filtering
   useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
     const fetchFeedbacks = () => {
       try {
-        const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
+        // First, if user is OfficeAdmin, we need to get visits for their office
+        // to get the visit IDs, then filter feedbacks by those visit IDs
         
-        const unsub = onSnapshot(q, (snapshot) => {
-          const data = snapshot.docs.map((doc) => {
-            const d = doc.data();
-            return {
-              id: doc.id,
-              visitId: d.visitId,
-              name: d.name,
-              answers: d.answers || [],
-              averageRating: d.averageRating || 0,
-              suggestion: d.suggestion || "",
-              createdAt: d.createdAt?.toDate() || new Date(),
-            };
+        if (currentUser && currentUser.type === "OfficeAdmin" && currentUser.office) {
+          console.log(`📝 Fetching feedbacks for office: "${currentUser.office}"`);
+          
+          // First, fetch visits for this office to get the visit IDs
+          const visitsQuery = query(
+            collection(db, "visits"), 
+            where("office", "==", currentUser.office)
+          );
+          
+          const visitsUnsub = onSnapshot(visitsQuery, (visitsSnapshot) => {
+            const officeVisitIds = visitsSnapshot.docs.map(doc => doc.id);
+            
+            console.log(`📊 Found ${officeVisitIds.length} visits for this office`);
+            
+            if (officeVisitIds.length === 0) {
+              // No visits for this office, so no feedbacks
+              console.log("📝 No visits found for this office, setting empty feedbacks");
+              setFeedbacks([]);
+              setLoading(false);
+              return;
+            }
+            
+            // Now fetch feedbacks for these specific visit IDs
+            const feedbackQuery = query(
+              collection(db, "feedbacks"), 
+              orderBy("createdAt", "desc")
+            );
+            
+            const feedbackUnsub = onSnapshot(feedbackQuery, (feedbackSnapshot) => {
+              const data = feedbackSnapshot.docs.map((doc) => {
+                const d = doc.data();
+                return {
+                  id: doc.id,
+                  visitId: d.visitId,
+                  name: d.name,
+                  answers: d.answers || [],
+                  averageRating: d.averageRating || 0,
+                  suggestion: d.suggestion || "",
+                  createdAt: d.createdAt?.toDate() || new Date(),
+                };
+              });
+              
+              // Filter feedbacks by office visit IDs
+              const filteredData = data.filter(feedback => 
+                officeVisitIds.includes(feedback.visitId)
+              );
+              
+              console.log(`📝 Found ${data.length} total feedbacks, ${filteredData.length} for this office`);
+              setFeedbacks(filteredData);
+              setLoading(false);
+            }, (error) => {
+              console.error("Error fetching feedbacks:", error);
+              setLoading(false);
+            });
+            
+            return () => feedbackUnsub();
+          }, (error) => {
+            console.error("Error fetching office visits:", error);
+            setLoading(false);
           });
           
-          setFeedbacks(data);
-          setLoading(false);
-        }, (error) => {
-          console.error("Error fetching feedbacks:", error);
-          setLoading(false);
-        });
+          return () => visitsUnsub();
+        } else {
+          // SuperAdmin or no office: Fetch all feedbacks
+          console.log("📝 Fetching all feedbacks (SuperAdmin)");
+          const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
+          
+          const unsub = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map((doc) => {
+              const d = doc.data();
+              return {
+                id: doc.id,
+                visitId: d.visitId,
+                name: d.name,
+                answers: d.answers || [],
+                averageRating: d.averageRating || 0,
+                suggestion: d.suggestion || "",
+                createdAt: d.createdAt?.toDate() || new Date(),
+              };
+            });
+            
+            console.log(`📝 Fetched ${data.length} feedbacks`);
+            setFeedbacks(data);
+            setLoading(false);
+          }, (error) => {
+            console.error("Error fetching feedbacks:", error);
+            setLoading(false);
+          });
 
-        return () => unsub();
+          return () => unsub();
+        }
       } catch (error) {
         console.error("Error setting up feedbacks listener:", error);
         setLoading(false);
@@ -275,7 +462,7 @@ const Analytics = ({ user }) => {
     };
 
     fetchFeedbacks();
-  }, []);
+  }, [currentUser]);
 
   // --- State for date range ---
   const getDefaultDateRange = () => {
@@ -315,37 +502,9 @@ const Analytics = ({ user }) => {
     }
   };
 
-  // --- Office Filtering Logic ---
-  const filteredVisitsByOffice = useMemo(() => {
-    if (!Array.isArray(visits)) return [];
-    
-    if (user && user.type === "OfficeAdmin" && user.office) {
-      return visits.filter((v) => v?.office === user.office);
-    }
-    return visits;
-  }, [visits, user]);
-
-  const filteredFeedbacksByOffice = useMemo(() => {
-    if (!Array.isArray(feedbacks)) return [];
-    
-    if (user && user.type === "OfficeAdmin" && user.office) {
-      // Filter feedbacks by matching visit office
-      const visitOfficeMap = {};
-      visits.forEach(v => {
-        if (v?.id) visitOfficeMap[v.id] = v.office;
-      });
-      
-      return feedbacks.filter(f => {
-        const visitOffice = visitOfficeMap[f?.visitId];
-        return visitOffice === user.office;
-      });
-    }
-    return feedbacks;
-  }, [feedbacks, visits, user]);
-
-  // --- Filter visits based on date range AND office ---
+  // --- Filter visits based on date range (already filtered by office at query level) ---
   const filteredVisits = useMemo(() => {
-    return filteredVisitsByOffice.filter(v => {
+    return visits.filter(v => {
       try {
         const checkInDate = v?.checkInTime ? new Date(v.checkInTime) : new Date();
         if (isNaN(checkInDate.getTime())) return false;
@@ -363,11 +522,11 @@ const Analytics = ({ user }) => {
         return false;
       }
     });
-  }, [filteredVisitsByOffice, dateRange]);
+  }, [visits, dateRange]);
 
-  // --- Filter feedbacks based on date range AND office ---
+  // --- Filter feedbacks based on date range (already filtered by office) ---
   const filteredFeedbacks = useMemo(() => {
-    return filteredFeedbacksByOffice.filter(f => {
+    return feedbacks.filter(f => {
       try {
         const feedbackDate = f?.createdAt ? new Date(f.createdAt) : new Date();
         if (isNaN(feedbackDate.getTime())) return false;
@@ -383,16 +542,26 @@ const Analytics = ({ user }) => {
         return false;
       }
     });
-  }, [filteredFeedbacksByOffice, dateRange]);
+  }, [feedbacks, dateRange]);
 
-  // Get visit details for each feedback
+  // Get visit details for each feedback with anonymous names
   const feedbacksWithVisitDetails = useMemo(() => {
-    return filteredFeedbacks.map(feedback => {
+    // Create a map of visit IDs to office names
+    const visitOfficeMap = {};
+    visits.forEach(v => {
+      if (v?.id) visitOfficeMap[v.id] = v.office;
+    });
+    
+    return filteredFeedbacks.map((feedback, index) => {
       const visit = visits.find(v => v?.id === feedback?.visitId);
+      
+      // Generate anonymous ID
+      const anonymousId = `Anonymous${String(index + 1).padStart(3, '0')}`;
+      
       return {
         ...feedback,
-        visitorName: visit?.visitorName || feedback?.name || 'Unknown Visitor',
-        visitorOffice: visit?.office,
+        visitorName: anonymousId,
+        visitorOffice: visitOfficeMap[feedback.visitId] || visit?.office,
         visitorDate: visit?.checkInTime ? new Date(visit.checkInTime).toLocaleDateString() : '',
         comment: feedback?.suggestion || feedback?.answers?.join?.(' ') || 'No comment provided'
       };
@@ -409,7 +578,7 @@ const Analytics = ({ user }) => {
     return (total / filteredFeedbacks.length).toFixed(1);
   }, [filteredFeedbacks]);
 
-  // --- Export Functions ---
+  // --- Export Functions (unchanged) ---
   const exportToCSV = () => {
     try {
       const avgSat = avgSatisfaction;
@@ -419,8 +588,8 @@ const Analytics = ({ user }) => {
       // Header
       csvContent += `VISITOR ANALYTICS REPORT\n`;
       csvContent += `Period: ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}\n`;
-      if (user && user.type === "OfficeAdmin") {
-        csvContent += `Office: ${user.office}\n`;
+      if (currentUser && currentUser.type === "OfficeAdmin") {
+        csvContent += `Office: ${currentUser.office}\n`;
       }
       csvContent += `Total Visitors: ${filteredVisits.length}\n`;
       csvContent += `Total Feedbacks: ${filteredFeedbacks.length}\n`;
@@ -447,13 +616,14 @@ const Analytics = ({ user }) => {
       
       // Feedback Details
       csvContent += 'DETAILED FEEDBACK ANALYSIS\n';
-      csvContent += 'Date,Visitor,Office,Rating,Stars,Comments\n';
+      csvContent += 'Date,Visitor ID,Office,Rating,Stars,Comments\n';
       
       feedbacksWithVisitDetails.forEach(f => {
         const ratingStars = '★'.repeat(Math.round(f.averageRating)) + '☆'.repeat(5 - Math.round(f.averageRating));
         const comment = (f.comment || '').replace(/"/g, '""');
         const dateStr = f.visitorDate || (f.createdAt ? new Date(f.createdAt).toLocaleDateString() : 'N/A');
-        csvContent += `${dateStr},${f.visitorName},${f.visitorOffice || 'N/A'},${f.averageRating}/5,${ratingStars},"${comment}"\n`;
+        const anonymousName = f.visitorName;
+        csvContent += `${dateStr},${anonymousName},${f.visitorOffice || 'N/A'},${f.averageRating}/5,${ratingStars},"${comment}"\n`;
       });
 
       const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -461,8 +631,8 @@ const Analytics = ({ user }) => {
       const url = URL.createObjectURL(blob);
       
       link.setAttribute('href', url);
-      const fileName = user && user.type === "OfficeAdmin" 
-        ? `${user.office}-analytics-${dateRange.start}-to-${dateRange.end}.csv`
+      const fileName = currentUser && currentUser.type === "OfficeAdmin" 
+        ? `${currentUser.office}-analytics-${dateRange.start}-to-${dateRange.end}.csv`
         : `visitor-analytics-${dateRange.start}-to-${dateRange.end}.csv`;
       link.setAttribute('download', fileName);
       link.style.visibility = 'hidden';
@@ -487,14 +657,14 @@ const Analytics = ({ user }) => {
     }
   };
 
-  // Generate integrated narrative
+  // Generate integrated narrative (unchanged)
   const generateIntegratedNarrative = () => {
     const avgSat = avgSatisfaction;
     
     let narrative = `During the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, `;
     
-    if (user && user.type === "OfficeAdmin") {
-      narrative += `the ${user.office} office `;
+    if (currentUser && currentUser.type === "OfficeAdmin") {
+      narrative += `the ${currentUser.office} office `;
     } else {
       narrative += `our facility `;
     }
@@ -502,7 +672,7 @@ const Analytics = ({ user }) => {
     narrative += `recorded ${filteredVisits.length} visitor check-in${filteredVisits.length !== 1 ? 's' : ''} with ${filteredFeedbacks.length} feedback response${filteredFeedbacks.length !== 1 ? 's' : ''}. The average satisfaction rating was ${avgSat} out of 5. `;
     
     if (filteredFeedbacks.length > 0) {
-      narrative += `The feedback received reveals valuable insights into visitor experiences${user && user.type === "OfficeAdmin" ? ' at this office' : ' across different offices'}. `;
+      narrative += `The feedback received reveals valuable insights into visitor experiences${currentUser && currentUser.type === "OfficeAdmin" ? ' at this office' : ' across different offices'}. `;
       
       const highSat = filteredFeedbacks.filter(f => f.averageRating >= 4.0);
       const mediumSat = filteredFeedbacks.filter(f => f.averageRating >= 3.0 && f.averageRating < 4.0);
@@ -524,7 +694,7 @@ const Analytics = ({ user }) => {
       
       feedbacksWithVisitDetails.forEach((f, idx) => {
         if (f.comment && f.comment.trim() !== '' && f.comment !== 'No comment provided') {
-          narrative += `${idx + 1}. ${f.visitorName}${user && user.type === "SuperAdmin" ? ` from ${f.visitorOffice || 'Unknown Office'}` : ''} rated their experience ${f.averageRating}/5: "${f.comment}"\n\n`;
+          narrative += `${idx + 1}. ${f.visitorName}${currentUser && currentUser.type === "SuperAdmin" ? ` from ${f.visitorOffice || 'Unknown Office'}` : ''} rated their experience ${f.averageRating}/5: "${f.comment}"\n\n`;
         }
       });
     }
@@ -532,12 +702,12 @@ const Analytics = ({ user }) => {
     return narrative;
   };
 
-  // Generate overall analytics narrative
+  // Generate overall analytics narrative (unchanged)
   const generateOverallNarrative = () => {
     let narrative = `# Executive Summary\n\nThis comprehensive analytics report covers the period from ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, `;
     
-    if (user && user.type === "OfficeAdmin") {
-      narrative += `specifically for the ${user.office} office, `;
+    if (currentUser && currentUser.type === "OfficeAdmin") {
+      narrative += `specifically for the ${currentUser.office} office, `;
     }
     
     narrative += `providing insights into visitor traffic patterns, satisfaction rates, and feedback analysis.\n\n`;
@@ -545,8 +715,8 @@ const Analytics = ({ user }) => {
     // Overview Section
     narrative += `## Overview\n\nDuring this reporting period, `;
     
-    if (user && user.type === "OfficeAdmin") {
-      narrative += `the ${user.office} office had `;
+    if (currentUser && currentUser.type === "OfficeAdmin") {
+      narrative += `the ${currentUser.office} office had `;
     } else {
       narrative += `our facility had `;
     }
@@ -690,6 +860,11 @@ const Analytics = ({ user }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#6B46C1] mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading analytics data...</p>
+          {currentUser && currentUser.type === "OfficeAdmin" && (
+            <p className="text-sm text-gray-500 mt-2">
+              Loading data for {currentUser.office}...
+            </p>
+          )}
         </div>
       </div>
     );
@@ -723,18 +898,23 @@ const Analytics = ({ user }) => {
       `}</style>
       
       <main className="flex flex-col print-section">
-        <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto dark:bg-gray-900 ">
           <div className="max-w-6xl mx-auto space-y-6">
             
-            {/* Header & Filters */}
+            {/* Header & Filters - Original UI */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Analytics Overview</h2>
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Analytics Overview</h2>
                   <p className="text-gray-500 text-sm mt-1">
                     Data insights and visitor patterns
-                    {user && user.type === "OfficeAdmin" && (
+                    {currentUser && currentUser.type === "OfficeAdmin" && (
                       <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                        {user.office} Office
+                        {currentUser.office} Office
+                      </span>
+                    )}
+                    {currentUser && currentUser.type === "SuperAdmin" && (
+                      <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                        Super Admin View
                       </span>
                     )}
                     <span className="hidden print:inline"> | {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}</span>
@@ -834,7 +1014,7 @@ const Analytics = ({ user }) => {
              </div>
             </div>
 
-            {/* Charts */}
+            {/* Charts - Original UI */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="min-h-[350px]">
                 <VisitorTrafficChart trafficData={trafficData} />
@@ -844,28 +1024,8 @@ const Analytics = ({ user }) => {
               </Card>
             </div>
 
-            {/* Summary Stats for Print */}
-            <div className="hidden print:block">
-              <Card>
-                <h3 className="font-bold text-lg text-gray-800 mb-4">Summary Statistics</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Visitors</p>
-                    <p className="text-2xl font-bold text-gray-800">{filteredVisits.length}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Total Feedbacks</p>
-                    <p className="text-2xl font-bold text-gray-800">{filteredFeedbacks.length}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Average Satisfaction</p>
-                    <p className="text-2xl font-bold text-gray-800">{avgSatisfaction}/5.0</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
 
-            {/* Feedback Insights */}
+            {/* Feedback Insights - Original UI */}
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-200 to-transparent no-print"></div>
 
@@ -874,7 +1034,7 @@ const Analytics = ({ user }) => {
                   <div className="p-2 bg-gray-100 rounded-lg text-gray-700">
                     <MessageSquare size={20} />
                   </div>
-                  <h3 className="font-bold text-lg text-gray-800">Feedback Insights</h3>
+                  <h3 className="font-bold text-lg text-gray-800 dark:text-white">Feedback Insights</h3>
                 </div>
                 
                 <div className="relative no-print">
@@ -888,7 +1048,7 @@ const Analytics = ({ user }) => {
                 </div>
               </div>
 
-              {/* Scrollable Insights */}
+              {/* Scrollable Insights - Original UI */}
               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar print:max-h-none print:overflow-visible">
                 {feedbacksWithVisitDetails.length > 0 ? (
                   (() => {
@@ -915,15 +1075,15 @@ const Analytics = ({ user }) => {
                       <div key={feedback.id} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h4 className="font-bold text-gray-800">
+                            <h4 className="font-bold text-gray-800 dark:text-white">
                               {feedback.visitorName} 
-                              {user && user.type === "SuperAdmin" && (
+                              {currentUser && currentUser.type === "SuperAdmin" && (
                                 <span className="text-gray-500 font-normal ml-2">
                                   ({feedback.visitorOffice || 'Unknown Office'})
                                 </span>
                               )}
                             </h4>
-                            <p className="text-gray-600 text-sm mt-1">{feedback.comment}</p>
+                            <p className="text-gray-600 text-sm mt-1 dark:text-white">{feedback.comment}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex">
@@ -936,7 +1096,7 @@ const Analytics = ({ user }) => {
                                 </span>
                               ))}
                             </div>
-                            <span className="text-sm font-medium text-gray-700">{feedback.averageRating}/5</span>
+                            <span className="text-sm font-medium text-gray-700 dark:text-white">{feedback.averageRating}/5</span>
                           </div>
                         </div>
                         <p className="text-gray-400 text-xs">
@@ -959,7 +1119,7 @@ const Analytics = ({ user }) => {
           </div>
         </div>
 
-        {/* Integrated Insights Modal */}
+        {/* Integrated Insights Modal - Original UI */}
         {showIntegratedModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -971,7 +1131,7 @@ const Analytics = ({ user }) => {
                     <p className="text-purple-100 text-sm">
                       {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)} | 
                       {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks
-                      {user && user.type === "OfficeAdmin" && ` | ${user.office} Office`}
+                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${currentUser.office} Office`}
                     </p>
                   </div>
                   <button 
@@ -1019,7 +1179,7 @@ const Analytics = ({ user }) => {
           </div>
         )}
 
-        {/* Overall Analytics Integration Modal */}
+        {/* Overall Analytics Integration Modal - Original UI */}
         {showOverallModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -1033,7 +1193,7 @@ const Analytics = ({ user }) => {
                     </h2>
                     <p className="text-purple-100 text-sm">
                       Comprehensive Report | {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
-                      {user && user.type === "OfficeAdmin" && ` | ${user.office} Office`}
+                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${currentUser.office} Office`}
                     </p>
                     <p className="text-purple-200 text-xs mt-1">
                       {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks | Avg Satisfaction: {avgSatisfaction}/5.0

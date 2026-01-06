@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Download } from "lucide-react"; // ⬅️ Added Download icon
+import { Search, Download } from "lucide-react";
 
 const FilterBar = ({
   search,
@@ -12,8 +12,15 @@ const FilterBar = ({
   exportPDF,
   officeOptions = [],
   user,
+  totalCount,
+  filteredCount,
 }) => {
-  const hideOfficeFilter = user?.type === "OfficeAdmin"; // Adjust as needed based on your backend
+  // Check both 'type' and 'role' fields to match Login.jsx structure
+  const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
+  
+  console.log("FilterBar - User type:", user?.type);
+  console.log("FilterBar - User role:", user?.role);
+  console.log("FilterBar - isOfficeAdmin:", isOfficeAdmin);
 
   return (
     <div className="border border-[#7400EA] rounded-xl bg-white shadow-sm dark:bg-gray-900 dark:text-gray-200">
@@ -25,13 +32,6 @@ const FilterBar = ({
         </h3>
 
         <div className="flex gap-2">
-          {/* <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 bg-[#7400EA] hover:bg-indigo-800 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
-          >
-            <Download size={16} /> Export CSV
-          </button> */}
-
           <button
             onClick={exportPDF}
             className="flex items-center gap-2 bg-[#7400EA] hover:bg-blue-800 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
@@ -43,35 +43,26 @@ const FilterBar = ({
 
       {/* Filters */}
       <div className="p-4 sm:p-6 flex flex-col lg:flex-row gap-4 lg:gap-4">
-        {/* Search Input */}
-        {/* <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            size={18}
-          />
-          <input
-            type="text"
-            placeholder="Search visitor name"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-black dark:bg-gray-900 dark:text-gray-200"
-          />
-        </div> */}
-
-        {/* Office Filter (hidden for OfficeAdmin) */}
         
-          <select
-            value={office}
-            onChange={(e) => setOffice(e.target.value)}
-            className="w-full lg:w-135 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white dark:bg-gray-900 dark:text-gray-200"
-          >
-            <option value="">All Offices</option>
-            {officeOptions.map((o, i) => (
-              <option key={i} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
+        {/* Office Filter (DISABLED for Office Admin) */}
+        <select
+          value={office}
+          onChange={(e) => setOffice(e.target.value)}
+          disabled={isOfficeAdmin}
+          className={`w-full lg:w-135 px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+            focus:outline-none focus:ring-2 focus:ring-indigo-400
+            ${isOfficeAdmin
+              ? "bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400"
+              : "bg-white dark:bg-gray-900 dark:text-gray-200"}
+          `}
+        >
+          <option value="">All Offices</option>
+          {officeOptions.map((o, i) => (
+            <option key={i} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
 
         {/* Date Filter */}
         <input

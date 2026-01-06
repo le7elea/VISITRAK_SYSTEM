@@ -48,6 +48,12 @@ const Profile = () => {
     { value: "custom", label: "Custom Range" }
   ];
 
+  // Helper function to normalize office names
+  const normalizeOfficeName = (officeName) => {
+    if (!officeName) return "";
+    return officeName.toString().trim().toLowerCase();
+  };
+
   useEffect(() => {
     const loadUserData = async () => {
       setLoading(true);
@@ -154,7 +160,7 @@ const Profile = () => {
       const allLogsQuery = query(
         collection(db, "activityLogs"),
         orderBy("timestamp", "desc"),
-        limit(100)
+        limit(10000)
       );
       
       const snapshot = await getDocs(allLogsQuery);
@@ -191,7 +197,8 @@ const Profile = () => {
             minute: '2-digit'
           }),
           fullDate: date,
-          timestamp: date.getTime() // Store timestamp for filtering
+          timestamp: date.getTime(), // Store timestamp for filtering
+          normalizedOffice: normalizeOfficeName(data.office) // Add normalized office for easier filtering
         };
       });
       
@@ -262,7 +269,7 @@ const Profile = () => {
         return logs.filter(log => 
           log.timestamp >= yesterdayStart.getTime() && 
           log.timestamp <= yesterdayEnd.getTime()
-        );
+        ); 
         
       case "week":
         const weekStart = new Date(now);
@@ -293,12 +300,12 @@ const Profile = () => {
   const filteredHistoryData = useMemo(() => {
     if (!user) return [];
     
-    console.log("🔍 Filtering history data:");
-    console.log("  User Role:", user.role);
-    console.log("  User Type:", user.type);
-    console.log("  User Office:", user.office);
-    console.log("  Total Logs:", activityLogs.length);
-    console.log("  Date Filter:", dateFilter);
+    // console.log("🔍 Filtering history data:");
+    // console.log("  User Role:", user.role);
+    // console.log("  User Type:", user.type);
+    // console.log("  User Office:", user.office);
+    // console.log("  Total Logs:", activityLogs.length);
+    // console.log("  Date Filter:", dateFilter);
     
     // First filter by office/user role
     let filteredLogs = [];
@@ -309,22 +316,53 @@ const Profile = () => {
       filteredLogs = [...activityLogs];
     } else {
       // Office admin sees ONLY their office logs
-      const userOffice = user.office || user.name;
-      console.log("  🔍 Filtering for office:", `"${userOffice}"`);
+      const userNormalizedOffice = normalizeOfficeName(user.office || user.name);
+      const userNormalizedEmail = user.email ? user.email.toLowerCase() : "";
+      
+      console.log("  🔍 Filtering for office:", `"${user.office}" (normalized: "${userNormalizedOffice}")`);
       
       filteredLogs = activityLogs.filter(log => {
-        const logOffice = log.office || "";
-        const matches = logOffice === userOffice;
+        // Get normalized values
+        const logNormalizedOffice = log.normalizedOffice || normalizeOfficeName(log.office);
+        const logNormalizedUserName = normalizeOfficeName(log.userName);
+        const logUserEmail = log.userEmail ? log.userEmail.toLowerCase() : "";
         
-        // Debug first few non-matches
-        if (!matches && activityLogs.indexOf(log) < 3) {
-          console.log(`  ❌ Log doesn't match: "${logOffice}" !== "${userOffice}"`);
+        // Check multiple conditions for matching
+        const matchesOffice = logNormalizedOffice === userNormalizedOffice;
+        const matchesUserName = logNormalizedUserName === userNormalizedOffice;
+        const createdByUser = logUserEmail === userNormalizedEmail;
+        const systemLogForUser = logNormalizedOffice === "system" && createdByUser;
+        
+        // Special case: Check if log office contains user office (for partial matches)
+        const containsUserOffice = logNormalizedOffice.includes(userNormalizedOffice) || 
+                                   userNormalizedOffice.includes(logNormalizedOffice);
+        
+        const shouldInclude = matchesOffice || matchesUserName || createdByUser || systemLogForUser || containsUserOffice;
+        
+        // Debug first few logs
+        if (activityLogs.indexOf(log) < 3) {
+          console.log(`  Log ${activityLogs.indexOf(log) + 1}:`, {
+            logOffice: log.office,
+            normalized: logNormalizedOffice,
+            userOffice: user.office,
+            userNormalized: userNormalizedOffice,
+            matches: shouldInclude,
+            conditions: { matchesOffice, matchesUserName, createdByUser, systemLogForUser, containsUserOffice }
+          });
         }
         
-        return matches;
+        return shouldInclude;
       });
       
-      console.log(`✅ Office Admin (${userOffice}) - showing ${filteredLogs.length} logs after office filter`);
+      console.log(`✅ Office Admin (${user.office}) - showing ${filteredLogs.length} logs after office filter`);
+      
+      // Debug: Show what logs we found
+      if (filteredLogs.length > 0) {
+        console.log("📝 Found logs:");
+        filteredLogs.slice(0, Math.min(3, filteredLogs.length)).forEach((log, idx) => {
+          console.log(`  ${idx + 1}. Office: "${log.office}" | Title: "${log.title}" | User: "${log.userName}"`);
+        });
+      }
     }
     
     // Then apply date filtering
@@ -472,10 +510,11 @@ const Profile = () => {
       }
       
       try {
+        // Make sure to use the exact office name for the log
         await addDoc(collection(db, "activityLogs"), {
           title: "Password Changed",
           description: `${user.name} updated their password`,
-          office: user.office,
+          office: user.office || user.name, // Use exact office name
           userId: user.id,
           userEmail: user.email,
           userName: user.name,
@@ -485,7 +524,7 @@ const Profile = () => {
         
         await loadActivityLogs(user);
       } catch (logError) {
-        console.log("Activity log error");
+        console.log("Activity log error:", logError);
       }
       
       alert("Password updated successfully!");
@@ -611,7 +650,7 @@ const Profile = () => {
       <Tabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {activeTab === "Overview" && (
-        <div className="bg-white p-5 rounded-xl shadow-md border border-purple-200 mt-4">
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md border border-purple-200 mt-4">
           <div className="flex justify-between items-center mb-6">
             <h2 className="font-semibold text-lg">Personal Information</h2>
           </div>
@@ -625,7 +664,7 @@ const Profile = () => {
       )}
 
       {activeTab === "Password" && (
-        <div className="bg-white p-5 mt-4 rounded-xl shadow-md border border-purple-200">
+        <div className="bg-white dark:bg-gray-800 p-5 mt-4 rounded-xl shadow-md border border-purple-200">
           <div className="flex items-center gap-2 mb-6">
             <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
@@ -726,7 +765,7 @@ const Profile = () => {
       )}
 
       {activeTab === "History" && (
-        <div className="bg-white p-5 mt-4 rounded-xl shadow-md border border-purple-200">
+        <div className="bg-white dark:bg-gray-800 p-5 mt-4 rounded-xl shadow-md border border-purple-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
             <h2 className="text-xl font-semibold">Activity History</h2>
             <div className="flex flex-wrap items-center gap-3">
@@ -735,7 +774,7 @@ const Profile = () => {
                 <select
                   value={dateFilter}
                   onChange={(e) => handleDateFilterChange(e.target.value)}
-                  className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-sm font-medium"
+                  className="appearance-none px-4 py-2 pr-8 border border-gray-300   rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800 text-sm font-medium"
                 >
                   {dateFilterOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -752,9 +791,9 @@ const Profile = () => {
               
               {/* Custom Date Range Picker */}
               {showCustomDatePicker && (
-                <div className="flex flex-wrap items-center gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div className="flex flex-wrap items-center gap-2 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg border border-gray-200">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">From:</label>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">From:</label>
                     <input
                       type="date"
                       value={customStartDate}
@@ -764,7 +803,7 @@ const Profile = () => {
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">To:</label>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-400">To:</label>
                     <input
                       type="date"
                       value={customEndDate}
@@ -776,7 +815,7 @@ const Profile = () => {
                   </div>
                   <button
                     onClick={resetCustomDateFilter}
-                    className="px-3 py-1.5 text-sm text-red-600 hover:text-red-800 font-medium"
+                    className="px-3 py-1.5 text-sm text-red-600 hover:text-red-800 font-medium dark:text-red-400 dark:hover:text-red-600"
                   >
                     Reset
                   </button>
@@ -786,7 +825,7 @@ const Profile = () => {
               {/* Activity Count Badge */}
               <div className="flex items-center gap-3">
                 {user.role === "super" ? (
-                  <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-sm font-medium">
+                  <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-sm font-medium dark:from-purple-400 dark:to-purple-400">
                     All Offices
                   </span>
                 ) : (
@@ -803,8 +842,8 @@ const Profile = () => {
 
           {/* Filter Summary */}
           {dateFilter !== "all" && filteredHistoryData.length > 0 && (
-            <div className="mb-4 p-3 bg-purple-50 border border-purple-100 rounded-lg">
-              <p className="text-sm text-purple-700">
+            <div className="mb-4 p-3 bg-purple-50 dark:bg-gray-700  border border-purple-100 rounded-lg">
+              <p className="text-sm text-purple-700 dark:text-white">
                 Showing activities for: <strong>{dateFilterOptions.find(opt => opt.value === dateFilter)?.label}</strong>
                 {dateFilter === "custom" && customStartDate && customEndDate && (
                   <span> ({customStartDate} to {customEndDate})</span>
@@ -867,13 +906,13 @@ const Profile = () => {
                             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                               <div className="flex-1">
                                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                                  <h3 className="font-medium text-gray-800 group-hover:text-purple-700 transition-colors">
+                                  <h3 className="font-medium text-gray-800 dark:text-white group-hover:text-purple-700 transition-colors">
                                     {log.title}
                                   </h3>
                                   {log.type && (
                                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                      log.type === 'password_change' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                                      log.type === 'login' ? 'bg-green-100 text-green-700 border border-green-200' :
+                                      log.type === 'password_change' ? 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-purple-200 dark:text-black-300' :
+                                      log.type === 'login' ? 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900 dark:text-green-300' :
                                       log.type === 'office_created' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
                                       log.type === 'office_updated' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
                                       log.type === 'office_deleted' ? 'bg-red-100 text-red-700 border border-red-200' :

@@ -19,7 +19,7 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
           {visitors.map((v) => (
             <li key={v.id} className="py-3 sm:py-4 rounded-lg px-2">
               <div className="flex justify-between items-start">
-                <div>
+                <div className="flex-1 mr-4">
                   <h4 className="font-medium text-gray-800 dark:text-white">
                     {v.alias}{" "}
                     <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -27,15 +27,15 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
                     </span>
                   </h4>
 
-                  <div className="mt-1 flex items-center">
-                    <p className="text-sm text-gray-600 truncate max-w-xs dark:text-gray-300">
+                  <div className="mt-1 flex items-start">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 flex-1">
                       {v.comment || "No feedback given."}
                     </p>
 
                     {v.comment && v.comment.length > 50 && (
                       <button
                         onClick={() => onViewFull(v)}
-                        className="ml-2 text-indigo-600 text-xs font-medium hover:underline"
+                        className="ml-2 text-indigo-600 text-xs font-medium hover:underline whitespace-nowrap"
                       >
                         View Full
                       </button>
@@ -44,8 +44,8 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
 
                   <p className="text-xs text-gray-400 mt-1">{v.date}</p>
                 </div>
-
-                <div className="text-yellow-500 font-semibold">
+ 
+                <div className="text-yellow-500 font-semibold whitespace-nowrap">
                   ⭐ {v.satisfaction?.toFixed(1) || "N/A"}
                 </div>
               </div>

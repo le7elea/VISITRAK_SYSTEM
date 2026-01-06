@@ -26,10 +26,15 @@ const Login = ({ onLogin }) => {
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      setEmail(parsed.email || "");
-      setPassword(parsed.password || "");
-      setRememberMe(true);
+      try {
+        const parsed = JSON.parse(savedUser);
+        setEmail(parsed.email || "");
+        setPassword(parsed.password || "");
+        setRememberMe(true);
+      } catch (error) {
+        console.error("Error parsing saved user:", error);
+        localStorage.removeItem("user");
+      }
     }
   }, []);
 
@@ -39,7 +44,7 @@ const Login = ({ onLogin }) => {
       const logData = {
         title: "User Login",
         description: `${userData.name} logged into the system`,
-        office: userData.office, // This is CRITICAL - must match Profile.jsx query
+        office: userData.office,
         userId: userData.id,
         userEmail: userData.email,
         userRole: userData.role,
@@ -49,7 +54,7 @@ const Login = ({ onLogin }) => {
       };
 
       await addDoc(collection(db, "activityLogs"), logData);
-      console.log("✅ Activity log created for:", userData.office);
+      console.log("✅ Activity log created for office:", userData.office);
     } catch (error) {
       console.error("❌ Error creating activity log:", error);
     }
@@ -81,52 +86,118 @@ const Login = ({ onLogin }) => {
       const userDoc = snapshot.docs[0].data();
       const docId = snapshot.docs[0].id;
 
+      console.log("📄 Firestore office document:", userDoc);
+      console.log("🏢 Office name from Firestore:", userDoc.name);
+      console.log("📧 Office email:", userDoc.email);
+      console.log("🎭 User role:", userDoc.role);
+
+      // Debug: Check the exact value and type
+      console.log("🔍 Type of office name:", typeof userDoc.name);
+      console.log("🔍 Raw office name value:", JSON.stringify(userDoc.name));
+      console.log("🔍 Office name length:", userDoc.name.length);
+      
+      // Check for whitespace
+      const trimmedName = userDoc.name.trim();
+      console.log("🔍 Trimmed office name:", JSON.stringify(trimmedName));
+      console.log("🔍 Trimmed length:", trimmedName.length);
+
       if (password !== userDoc.password) {
         alert("❌ Invalid password!");
         setLoading(false);
         return;
       }
 
-      // 🔹 Create complete user data object
+      // Create complete user data object with consistent office name
+      const officeName = userDoc.name.trim(); // Trim whitespace for consistency
+      
       const userData = {
         email: email.toLowerCase(),
-        name: userDoc.name,
+        name: officeName,
         type: userDoc.role === "super" ? "SuperAdmin" : "OfficeAdmin",
-        office: userDoc.name, // This is the office name from Firestore
+        office: officeName, // Use trimmed version for consistency
         role: userDoc.role,
         id: docId,
-        password: password, // Store for password verification in Profile.jsx
+        password: password,
         isInDatabase: true,
-        // Store both name and office separately for clarity
-        officeName: userDoc.name
+        officeName: officeName,
+        // Add normalized versions for comparison
+        normalizedOffice: officeName.toLowerCase(),
+        trimmedOffice: officeName
       };
 
-      console.log("✅ Login successful, user data:", userData);
+      console.log("✅ Login successful!");
+      console.log("👤 User Type:", userData.type);
+      console.log("🏢 Office Name (trimmed):", userData.office);
+      console.log("🏢 Office Name (original):", userDoc.name);
+      console.log("📧 Email:", userData.email);
+      console.log("📦 Full User Data:", userData);
 
       // 🔹 Create login activity log
       await createActivityLog(userData, "login");
 
+      // Fetch sample visits to debug office name matching
+      try {
+        const visitsRef = collection(db, "visits");
+        const visitsQuery = query(visitsRef, limit(5));
+        const visitsSnapshot = await getDocs(visitsQuery);
+        
+        if (!visitsSnapshot.empty) {
+          console.log("🔍 SAMPLE VISITS FOR DEBUGGING:");
+          visitsSnapshot.docs.forEach((doc, index) => {
+            const visitData = doc.data();
+            console.log(`Visit ${index + 1}:`);
+            console.log(`  - Office field: "${visitData.office}"`);
+            console.log(`  - Type: ${typeof visitData.office}`);
+            console.log(`  - Length: ${visitData.office?.length || 0}`);
+            console.log(`  - Trimmed: "${visitData.office?.trim()}"`);
+            console.log(`  - Matches user office? ${visitData.office?.trim() === officeName}`);
+            console.log(`  - Case-insensitive match? ${visitData.office?.trim().toLowerCase() === officeName.toLowerCase()}`);
+          });
+        }
+      } catch (error) {
+        console.log("Note: Could not fetch sample visits for debugging");
+      }
+
+      // Store user data based on remember me preference
       if (rememberMe) {
-        localStorage.setItem("user", JSON.stringify({ 
+        const userToStore = { 
           email, 
           password, 
           ...userData 
-        }));
+        };
+        localStorage.setItem("user", JSON.stringify(userToStore));
+        console.log("💾 User data saved to localStorage (with password)");
       } else {
-        localStorage.setItem("user", JSON.stringify({
+        const userToStore = {
           ...userData,
-          password: undefined // Don't store password if not remembering
-        }));
+          password: undefined // Don't save password if not remembering
+        };
+        localStorage.setItem("user", JSON.stringify(userToStore));
+        console.log("💾 User data saved to localStorage (without password)");
       }
 
+      // Also save a separate copy for debugging
+      localStorage.setItem("last_login_debug", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        officeName: officeName,
+        originalOfficeName: userDoc.name,
+        trimmedOfficeName: trimmedName,
+        email: email.toLowerCase()
+      }));
+
+      console.log("💾 Debug info saved to localStorage");
+
       // Call onLogin callback if provided
-      if (onLogin) onLogin(userData);
+      if (onLogin) {
+        console.log("🔄 Calling onLogin callback with user data");
+        onLogin(userData);
+      }
 
       // Navigate to profile
       navigate("/profile");
 
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("❌ Login error:", error);
       alert("❌ Login failed. Please try again.");
     } finally {
       setLoading(false);
@@ -196,12 +267,6 @@ const Login = ({ onLogin }) => {
             ) : "Login"}
           </button>
 
-          {/* Debug info (remove in production) */}
-          <div className="mt-4 p-3 bg-gray-100 rounded-lg text-left text-xs text-gray-600 hidden">
-            <p><strong>Debug Info:</strong></p>
-            <p>Email: {email}</p>
-            <p>Office field will be set to: {email.split('@')[0] || 'office_name'}</p>
-          </div>
         </div>
 
         {/* Illustration */}
