@@ -78,7 +78,7 @@ const VisitorInfoModal = ({ isOpen, onClose, visitorData }) => {
               Staff / Instructor to Visit:
             </label>
             <p className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase">
-              {visitorData.staffToVisit || "N/A"}
+              {visitorData.staffName || "N/A"}
             </p>
           </div>
 

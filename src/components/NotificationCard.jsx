@@ -131,7 +131,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
               contactNumber: data.contactNumber || data.phone,
               address: data.address,
               purpose: data.purpose,
-              staffToVisit: data.staffToVisit || data.personToVisit,
+              staffName: data.staffName || data.personToVisit,
               timestamp: checkInDate
             });
           });
@@ -177,7 +177,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
           address: fullData.address || notification.address,
           office: fullData.office || notification.office,
           purpose: fullData.purpose || notification.purpose,
-          staffToVisit: fullData.staffToVisit || fullData.personToVisit || notification.staffToVisit,
+          staffName: fullData.staffName || fullData.personToVisit || notification.staffName,
           date: notification.date,
           timeIn: notification.timeIn,
           status: fullData.status || notification.status
