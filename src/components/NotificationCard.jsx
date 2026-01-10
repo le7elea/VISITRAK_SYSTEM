@@ -581,7 +581,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
         
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: linear-gradient(to bottom, #a855f7, #3b82f6);
-          border-radius: 10px;
+          border-radius: 5px;
         }
         
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {

@@ -1025,7 +1025,7 @@ const Analytics = () => {
             </div>
 
 
-            {/* Feedback Insights - Original UI */}
+            {/* Feedback Insights - Updated with one decimal place */}
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-200 to-transparent no-print"></div>
 
@@ -1048,7 +1048,7 @@ const Analytics = () => {
                 </div>
               </div>
 
-              {/* Scrollable Insights - Original UI */}
+              {/* Scrollable Insights - Updated with one decimal place */}
               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar print:max-h-none print:overflow-visible">
                 {feedbacksWithVisitDetails.length > 0 ? (
                   (() => {
@@ -1096,12 +1096,18 @@ const Analytics = () => {
                                 </span>
                               ))}
                             </div>
-                            <span className="text-sm font-medium text-gray-700 dark:text-white">{feedback.averageRating}/5</span>
+                            <span className="text-sm font-medium text-gray-700 dark:text-white">
+                              {typeof feedback.averageRating === 'number' 
+                                ? feedback.averageRating.toFixed(1) 
+                                : parseFloat(feedback.averageRating || 0).toFixed(1)}/5
+                            </span>
                           </div>
                         </div>
                         <p className="text-gray-400 text-xs">
                           {feedback.visitorDate || (feedback.createdAt ? new Date(feedback.createdAt).toLocaleDateString() : 'N/A')} | 
-                          Rating: {feedback.averageRating}/5
+                          Rating: {typeof feedback.averageRating === 'number' 
+                                  ? feedback.averageRating.toFixed(1) 
+                                  : parseFloat(feedback.averageRating || 0).toFixed(1)}/5
                         </p>
                       </div>
                     ));

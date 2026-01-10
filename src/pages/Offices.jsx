@@ -1,5 +1,5 @@
 // pages/Offices.jsx
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target } from "lucide-react";
 import { fetchOffices, addOffice, updateOffice, deleteOffice } from "../lib/info.services";
 
@@ -12,6 +12,7 @@ const Offices = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addData, setAddData] = useState({ 
     name: "", 
+    officialName: "", 
     email: "", 
     role: "office",
     purposes: [],
@@ -27,6 +28,7 @@ const Offices = () => {
   const [editData, setEditData] = useState({ 
     id: "", 
     name: "", 
+    officialName: "", 
     email: "", 
     role: "office",
     purposes: [],
@@ -51,23 +53,20 @@ const Offices = () => {
   const generateEmailFromName = (name) => {
     if (!name.trim()) return "";
     
-    // Convert to lowercase and remove special characters
     let emailPart = name.toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '') // Remove special characters
-      .replace(/\s+/g, '.') // Replace spaces with dots
-      .replace(/\.+/g, '.') // Remove duplicate dots
-      .replace(/^\.+|\.+$/g, ''); // Remove dots from start/end
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '.')
+      .replace(/\.+/g, '.')
+      .replace(/^\.+|\.+$/g, '');
     
-    // If email part is empty after cleaning, use a default
     if (!emailPart) {
       emailPart = "office";
     }
     
-    // Add @gmail.com suffix
     return emailPart + "@gmail.com";
   };
 
-  // 🔹 Helper function to handle office name change (auto-generates email)
+  // 🔹 Helper function to handle office name change
   const handleAddNameChange = (value) => {
     const uppercaseName = toUppercase(value);
     const generatedEmail = generateEmailFromName(value);
@@ -79,7 +78,15 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Helper function to handle edit office name change (auto-generates email)
+  // 🔹 Helper function to handle official office name change - PRESERVE ORIGINAL CASING
+  const handleAddOfficialNameChange = (value) => {
+    setAddData(prev => ({
+      ...prev,
+      officialName: value  // Keep original casing
+    }));
+  };
+
+  // 🔹 Helper function to handle edit office name change
   const handleEditNameChange = (value) => {
     const uppercaseName = toUppercase(value);
     const generatedEmail = generateEmailFromName(value);
@@ -91,53 +98,11 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Helper function to manually override email if needed
-  const handleAddEmailChange = (value) => {
-    // Only allow changing the part before @gmail.com
-    const domain = "@gmail.com";
-    let emailValue = value.toLowerCase();
-    
-    // Ensure @gmail.com is always present
-    if (!emailValue.endsWith(domain)) {
-      // If user is trying to delete the domain, prevent it
-      if (emailValue.includes(domain)) {
-        // Find the position of @gmail.com
-        const atIndex = emailValue.indexOf(domain);
-        emailValue = emailValue.substring(0, atIndex + domain.length);
-      } else {
-        // Add @gmail.com if not present
-        emailValue = emailValue.replace(/@.*$/, '') + domain;
-      }
-    }
-    
-    setAddData(prev => ({
-      ...prev,
-      email: emailValue
-    }));
-  };
-
-  // 🔹 Helper function to handle edit email change
-  const handleEditEmailChange = (value) => {
-    // Only allow changing the part before @gmail.com
-    const domain = "@gmail.com";
-    let emailValue = value.toLowerCase();
-    
-    // Ensure @gmail.com is always present
-    if (!emailValue.endsWith(domain)) {
-      // If user is trying to delete the domain, prevent it
-      if (emailValue.includes(domain)) {
-        // Find the position of @gmail.com
-        const atIndex = emailValue.indexOf(domain);
-        emailValue = emailValue.substring(0, atIndex + domain.length);
-      } else {
-        // Add @gmail.com if not present
-        emailValue = emailValue.replace(/@.*$/, '') + domain;
-      }
-    }
-    
+  // 🔹 Helper function to handle edit official office name change - PRESERVE ORIGINAL CASING
+  const handleEditOfficialNameChange = (value) => {
     setEditData(prev => ({
       ...prev,
-      email: emailValue
+      officialName: value  // Keep original casing
     }));
   };
 
@@ -159,13 +124,18 @@ const Offices = () => {
     }
   };
 
-  // 🔹 Load offices from Firestore
+  // 🔹 Load offices from Firestore (only on initial load)
   useEffect(() => {
     const loadOffices = async () => {
       setLoading(true);
       setError(null);
       try {
         const data = await fetchOffices();
+        console.log("Loaded offices data:", data);
+        if (data.length > 0) {
+          console.log("First office structure:", data[0]);
+          console.log("First office officialName:", data[0].officialName);
+        }
         setOffices(data);
       } catch (err) {
         console.error("Error loading offices:", err);
@@ -177,36 +147,27 @@ const Offices = () => {
     loadOffices();
   }, []);
 
-  // 🔹 Smart date formatter - handles all cases
+  // 🔹 Smart date formatter
   const formatDate = (timestamp) => {
     if (!timestamp) return "Just now";
     
     try {
       let date;
       
-      // Case 1: Firestore Timestamp object with toDate()
       if (timestamp.toDate && typeof timestamp.toDate === 'function') {
         date = timestamp.toDate();
-      } 
-      // Case 2: Firestore timestamp format {seconds, nanoseconds}
-      else if (timestamp.seconds && typeof timestamp.seconds === 'number') {
+      } else if (timestamp.seconds && typeof timestamp.seconds === 'number') {
         date = new Date(timestamp.seconds * 1000);
-      }
-      // Case 3: Already a Date object
-      else if (timestamp instanceof Date) {
+      } else if (timestamp instanceof Date) {
         date = timestamp;
-      }
-      // Case 4: String or number
-      else {
+      } else {
         date = new Date(timestamp);
       }
       
-      // Check if valid date
       if (!date || isNaN(date.getTime())) {
         return "Just now";
       }
       
-      // Return formatted date
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -217,7 +178,7 @@ const Offices = () => {
     }
   };
 
-  // 🔹 Add purpose to list (automatically uppercase)
+  // 🔹 Add purpose to list
   const addPurposeToList = () => {
     if (newPurpose.trim() === "") return;
     
@@ -239,7 +200,7 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Add staff to visit list (automatically uppercase)
+  // 🔹 Add staff to visit list
   const addStaffToList = () => {
     if (newStaff.trim() === "") return;
     
@@ -261,7 +222,7 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Add purpose to edit list (automatically uppercase)
+  // 🔹 Add purpose to edit list
   const addPurposeToEditList = () => {
     if (editNewPurpose.trim() === "") return;
     
@@ -283,7 +244,7 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Add staff to edit list (automatically uppercase)
+  // 🔹 Add staff to edit list
   const addStaffToEditList = () => {
     if (editNewStaff.trim() === "") return;
     
@@ -305,21 +266,15 @@ const Offices = () => {
     }));
   };
 
-  // 🔹 Add Office with proper date handling
+  // 🔹 OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = async () => {
     if (!addData.name.trim()) {
       setAddError("Office name is required");
       return;
     }
     
-    if (!addData.email.trim()) {
-      setAddError("Email is required");
-      return;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(addData.email)) {
-      setAddError("Please enter a valid email address");
+    if (!addData.officialName.trim()) {
+      setAddError("Official office name is required");
       return;
     }
     
@@ -336,21 +291,35 @@ const Offices = () => {
     setAddError("");
     
     try {
-      // Add office to Firestore (all fields already uppercase except email)
-      const newOffice = await addOffice(addData);
+      // Generate default password based on role
+      const defaultPassword = addData.role === "super" ? "superadmin2025" : "officeadmin2025";
       
-      // 🔹 FIX: Add current date for immediate display
-      const officeWithDate = {
-        ...newOffice,
-        // If createdAt is not available yet, use current date
-        createdAt: newOffice.createdAt || new Date()
+      // Create temporary ID for immediate UI update
+      const tempId = `temp_${Date.now()}`;
+      
+      // Create temporary office object for immediate display
+      const tempOffice = {
+        id: tempId,
+        name: addData.name,
+        officialName: addData.officialName, // Original casing preserved
+        email: addData.email,
+        role: addData.role,
+        password: defaultPassword,
+        purposes: addData.purposes,
+        staffToVisit: addData.staffToVisit,
+        createdAt: new Date()
       };
       
-      setOffices([...offices, officeWithDate]);
+      // 🔹 OPTIMIZATION: Update local state immediately
+      setOffices(prev => [...prev, tempOffice]);
+      
+      // Close modal immediately
+      setShowAddModal(false);
       
       // Reset form
       setAddData({ 
         name: "", 
+        officialName: "",
         email: "", 
         role: "office",
         purposes: [],
@@ -358,25 +327,62 @@ const Offices = () => {
       });
       setNewPurpose("");
       setNewStaff("");
-      setShowAddModal(false);
       
-      alert(`Office "${newOffice.name}" added successfully!`);
+      // 🔹 OPTIMIZATION: Show success message immediately
+      alert(`Office "${addData.name}" added successfully!`);
+      
+      // 🔹 OPTIMIZATION: Save to Firestore in background (non-blocking)
+      setTimeout(async () => {
+        try {
+          // Log what's being sent to Firestore for debugging
+          console.log("Saving to Firestore - officialName:", addData.officialName);
+          
+          const newOffice = await addOffice({
+            ...addData,
+            password: defaultPassword
+          });
+          
+          // Update with real Firestore ID
+          setOffices(prev => prev.map(office => 
+            office.id === tempId 
+              ? { ...newOffice, createdAt: newOffice.createdAt || new Date() }
+              : office
+          ));
+          
+          console.log(`✅ Office "${addData.name}" saved to Firestore`);
+        } catch (err) {
+          console.error("Error saving office to Firestore:", err);
+          
+          // Remove temporary office if Firestore save fails
+          setOffices(prev => prev.filter(office => office.id !== tempId));
+          
+          // Show error alert
+          alert(`Warning: Office "${addData.name}" was added locally but failed to save to database: ${err.message}`);
+        }
+      }, 0);
+      
     } catch (err) {
-      console.error("Error adding office:", err);
+      console.error("Error in add office process:", err);
       setAddError(`Failed to add office: ${err.message}`);
     } finally {
       setAddLoading(false);
     }
   };
 
-  // 🔹 Open edit modal
+  // 🔹 Open edit modal - FIXED: Added proper debugging and data extraction
   const openEditModal = (index) => {
     if (index >= 0 && index < offices.length) {
       const office = offices[index];
+      
+      console.log("Office object in edit modal:", office);
+      console.log("Official name value:", office.officialName);
+      console.log("All keys:", Object.keys(office));
+      
       setEditIndex(index);
       setEditData({
         id: office.id,
         name: office.name || "",
+        officialName: office.officialName || "", // Original casing preserved
         email: office.email || "",
         role: office.role || "office",
         purposes: office.purposes || [],
@@ -388,7 +394,7 @@ const Offices = () => {
     }
   };
 
-  // 🔹 Save edit
+  // 🔹 OPTIMIZED: Save edit - Update local state immediately
   const saveEdit = async () => {
     if (editIndex === null) return;
     
@@ -397,14 +403,8 @@ const Offices = () => {
       return;
     }
     
-    if (!editData.email.trim()) {
-      setEditError("Email is required");
-      return;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(editData.email)) {
-      setEditError("Please enter a valid email address");
+    if (!editData.officialName.trim()) {
+      setEditError("Official office name is required");
       return;
     }
     
@@ -423,29 +423,55 @@ const Offices = () => {
     setEditError("");
     
     try {
-      const officeToUpdate = {
+      const originalOffice = offices[editIndex];
+      
+      // Create updated office object
+      const updatedOffice = {
         id: editData.id,
         name: editData.name,
+        officialName: editData.officialName, // Original casing preserved
         email: editData.email,
         role: editData.role,
         purposes: editData.purposes,
-        staffToVisit: editData.staffToVisit
+        staffToVisit: editData.staffToVisit,
+        createdAt: originalOffice.createdAt,
+        password: originalOffice.password
       };
       
-      await updateOffice(officeToUpdate);
-      
+      // 🔹 OPTIMIZATION: Update local state immediately
       const updatedOffices = [...offices];
-      updatedOffices[editIndex] = {
-        ...officeToUpdate,
-        createdAt: offices[editIndex].createdAt, // Keep original date
-        password: offices[editIndex].password // Keep original password
-      };
+      updatedOffices[editIndex] = updatedOffice;
       setOffices(updatedOffices);
       
+      // Close modal immediately
       setEditIndex(null);
+      
+      // 🔹 OPTIMIZATION: Show success message immediately
       alert(`Office "${editData.name}" updated successfully!`);
+      
+      // 🔹 OPTIMIZATION: Save to Firestore in background (non-blocking)
+      setTimeout(async () => {
+        try {
+          // Log what's being sent to Firestore for debugging
+          console.log("Updating in Firestore - officialName:", editData.officialName);
+          
+          await updateOffice(updatedOffice);
+          console.log(`✅ Office "${editData.name}" updated in Firestore`);
+        } catch (err) {
+          console.error("Error updating office in Firestore:", err);
+          
+          // Revert local changes if Firestore update fails
+          const revertedOffices = [...offices];
+          revertedOffices[editIndex] = originalOffice;
+          setOffices(revertedOffices);
+          
+          // Show error alert
+          alert(`Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`);
+        }
+      }, 0);
+      
     } catch (err) {
-      console.error("Error updating office:", err);
+      console.error("Error in edit process:", err);
       setEditError(`Failed to update office: ${err.message}`);
     } finally {
       setEditLoading(false);
@@ -459,31 +485,58 @@ const Offices = () => {
     }
   }, [deleteIndex]);
 
-  // 🔹 Confirm delete
+  // 🔹 OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = async () => {
     if (deleteIndex === null || !deleteConfirmed) return;
     
     const officeToDelete = offices[deleteIndex];
     if (!officeToDelete || !officeToDelete.id) return;
     
+    // Store original data for potential rollback
+    const originalOffice = officeToDelete;
+    
     setDeleteLoading(true);
     
     try {
-      await deleteOffice(officeToDelete.id);
+      // 🔹 OPTIMIZATION: Update local state immediately
       const updatedOffices = offices.filter((_, i) => i !== deleteIndex);
       setOffices(updatedOffices);
+      
+      // Close modal immediately
       setDeleteIndex(null);
       setDeleteConfirmed(false);
+      
+      // 🔹 OPTIMIZATION: Show success message immediately
       alert(`Office "${officeToDelete.name}" deleted successfully!`);
+      
+      // 🔹 OPTIMIZATION: Delete from Firestore in background (non-blocking)
+      setTimeout(async () => {
+        try {
+          await deleteOffice(officeToDelete.id);
+          console.log(`✅ Office "${officeToDelete.name}" deleted from Firestore`);
+        } catch (err) {
+          console.error("Error deleting office from Firestore:", err);
+          
+          // Restore office if Firestore delete fails
+          setOffices(prev => {
+            const restored = [...prev];
+            restored.splice(deleteIndex, 0, originalOffice);
+            return restored;
+          });
+          
+          // Show error alert
+          alert(`Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`);
+        }
+      }, 0);
+      
     } catch (err) {
-      console.error("Error deleting office:", err);
+      console.error("Error in delete process:", err);
       alert(`Failed to delete office: ${err.message}`);
-    } finally {
       setDeleteLoading(false);
     }
   };
 
-  // 🔹 Refresh offices list
+  // 🔹 Refresh offices list (only when explicitly needed)
   const refreshOffices = async () => {
     setLoading(true);
     try {
@@ -567,83 +620,35 @@ const Offices = () => {
     </div>
   );
 
-  // 🔹 Custom email input component
-  const EmailInput = ({ value, onChange, disabled, isEdit = false, isReadOnly = false }) => {
-    const domain = "@gmail.com";
-    const username = value.replace(domain, '');
-    
-    const handleUsernameChange = (e) => {
-      const newUsername = e.target.value.toLowerCase();
-      if (isEdit) {
-        onChange(newUsername + domain);
-      } else {
-        onChange(newUsername + domain);
-      }
-    };
-
-    const handleKeyDown = (e) => {
-      if (isReadOnly) {
-        e.preventDefault();
-        return;
-      }
-      
-      // Prevent backspace/delete if cursor is at the end and trying to delete domain
-      const cursorPosition = e.target.selectionStart;
-      const inputLength = e.target.value.length;
-      const domainStart = inputLength - domain.length;
-      
-      if (
-        (e.key === 'Backspace' || e.key === 'Delete') && 
-        cursorPosition > domainStart
-      ) {
-        e.preventDefault();
-        // Move cursor to before the domain
-        e.target.setSelectionRange(domainStart, domainStart);
-      }
-    };
-
-    const handleClick = (e) => {
-      if (isReadOnly) {
-        e.preventDefault();
-        return;
-      }
-      
-      const cursorPosition = e.target.selectionStart;
-      const inputLength = e.target.value.length;
-      const domainStart = inputLength - domain.length;
-      
-      // If user clicks in the domain area, move cursor to before domain
-      if (cursorPosition > domainStart) {
-        e.target.setSelectionRange(domainStart, domainStart);
-      }
-    };
-
+  // 🔹 Email display component (read-only)
+  const EmailDisplay = ({ email }) => {
     return (
-      <div className="relative">
-        <input
-          type="text"
-          value={username}
-          onChange={handleUsernameChange}
-          onKeyDown={handleKeyDown}
-          onClick={handleClick}
-          className={`w-full px-4 py-2 border rounded-lg lowercase pr-24 ${
-            isReadOnly ? 'bg-gray-50 cursor-not-allowed' : ''
-          }`}
-          placeholder="username"
-          disabled={disabled || isReadOnly}
-          readOnly={isReadOnly}
-          style={{ textTransform: 'lowercase' }}
-        />
-        <div className="absolute right-0 top-0 h-full flex items-center">
-          <div className="px-3 py-2 bg-gray-100 border border-l-0 rounded-r-lg text-gray-600">
-            @gmail.com
+      <div className="mt-2">
+        <div className="text-xs text-gray-500 mb-1">Auto-generated Email:</div>
+        <div className="flex items-center">
+          <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-600">
+            {email || "Enter office name to generate email"}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (email) {
+                navigator.clipboard.writeText(email);
+                alert("Email copied to clipboard!");
+              }
+            }}
+            className="ml-2 px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-lg transition"
+            title="Copy email"
+          >
+            Copy
+          </button>
         </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Email is auto-generated from office name. @gmail.com is fixed.
+        </p>
       </div>
     );
   };
-
-
 
   return (
     <div className="p-6 space-y-6">
@@ -667,6 +672,7 @@ const Offices = () => {
             onClick={() => {
               setAddData({ 
                 name: "", 
+                officialName: "",
                 email: "", 
                 role: "office",
                 purposes: [],
@@ -705,6 +711,9 @@ const Offices = () => {
               <div className="flex justify-between items-start mb-3">
                 <div className="flex-1">
                   <h4 className="font-semibold text-lg mb-1">{office.name}</h4>
+                  {office.officialName && (
+                    <p className="text-sm text-gray-600 mb-2">{office.officialName}</p>
+                  )}
                   <div className="flex items-center gap-2 mb-2">
                     {getRoleBadge(office.role)}
                     {office.password && (
@@ -793,7 +802,7 @@ const Offices = () => {
         </div>
       )}
 
-      {/* 🔹 ENHANCED ADD MODAL WITH NEW FIELDS */}
+      {/* 🔹 ADD MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-xl">
@@ -822,7 +831,7 @@ const Offices = () => {
               
               <div className="space-y-6">
                 {/* Basic Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="text-sm font-medium block mb-2">Office Name *</label>
                     <input
@@ -833,19 +842,20 @@ const Offices = () => {
                       disabled={addLoading}
                       style={{ textTransform: 'uppercase' }}
                     />
-                    
+                    <EmailDisplay email={addData.email} />
                   </div>
                   
                   <div>
-                    <label className="text-sm font-medium block mb-2">Email Address *</label>
-                    <EmailInput
-                      value={addData.email}
-                      onChange={handleAddEmailChange}
+                    <label className="text-sm font-medium block mb-2">Official Office Name *</label>
+                    <input
+                      value={addData.officialName}
+                      onChange={(e) => handleAddOfficialNameChange(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="Enter official office name (e.g., Office of the Registrar)"
                       disabled={addLoading}
-                      isReadOnly={false}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Email auto-generated from office name.
+                      Full official name of the office/department
                     </p>
                   </div>
                 </div>
@@ -989,7 +999,7 @@ const Offices = () => {
         </div>
       )}
 
-      {/* 🔹 ENHANCED EDIT MODAL */}
+      {/* 🔹 EDIT MODAL */}
       {editIndex !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-xl">
@@ -1018,31 +1028,30 @@ const Offices = () => {
               
               <div className="space-y-6">
                 {/* Basic Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="text-sm font-medium block mb-2">Office Name *</label>
                     <input
-                      value={editData.name}
+                      value={editData.name || ""}
                       onChange={(e) => handleEditNameChange(e.target.value)}
                       className="w-full px-4 py-2 border rounded-lg uppercase"
                       disabled={editLoading}
                       style={{ textTransform: 'uppercase' }}
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Changing office name will auto-update the email
-                    </p>
+                    <EmailDisplay email={editData.email} />
                   </div>
                   
                   <div>
-                    <label className="text-sm font-medium block mb-2">Email Address *</label>
-                    <EmailInput
-                      value={editData.email}
-                      onChange={handleEditEmailChange}
+                    <label className="text-sm font-medium block mb-2">Official Office Name *</label>
+                    <input
+                      value={editData.officialName || ""}
+                      onChange={(e) => handleEditOfficialNameChange(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="Enter official office name"
                       disabled={editLoading}
-                      isEdit={true}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Email auto-updates with office name. @gmail.com is fixed.
+                      Full official name of the office/department
                     </p>
                   </div>
                 </div>
@@ -1051,9 +1060,7 @@ const Offices = () => {
                 <div>
                   <label className="text-sm font-medium block mb-3">User Role *</label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${
-                      editData.role === "super" ? "border-[#7400EA] bg-purple-50" : "border-gray-200 hover:border-gray-300"
-                    }`}>
+                    <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${editData.role === "super" ? "border-[#7400EA] bg-purple-50" : "border-gray-200 hover:border-gray-300"}`}>
                       <input
                         type="radio"
                         checked={editData.role === "super"}
@@ -1066,9 +1073,7 @@ const Offices = () => {
                       </div>
                     </label>
                     
-                    <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${
-                      editData.role === "office" ? "border-[#7400EA] bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                    }`}>
+                    <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${editData.role === "office" ? "border-[#7400EA] bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
                       <input
                         type="radio"
                         checked={editData.role === "office"}
@@ -1176,7 +1181,7 @@ const Offices = () => {
         </div>
       )}
 
-      {/* 🔹 DELETE MODAL - COMPLETE VERSION */}
+      {/* 🔹 DELETE MODAL */}
       {deleteIndex !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
@@ -1280,7 +1285,7 @@ const Offices = () => {
                 </button>
               </div>
             </div>
-          </div>
+           </div>
         </div>
       )}
     </div>

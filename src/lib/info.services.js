@@ -79,7 +79,8 @@ export const fetchOffices = async () => {
     const offices = snapshot.docs.map((doc) => ({ 
       id: doc.id, 
       ...doc.data(),
-      // Ensure purposes and staffToVisit arrays exist
+      // Ensure all fields exist with default values
+      officialName: doc.data().officialName || "",
       purposes: doc.data().purposes || [],
       staffToVisit: doc.data().staffToVisit || []
     }));
@@ -105,7 +106,8 @@ export const getOfficeById = async (id) => {
       return { 
         id: officeSnap.id, 
         ...data,
-        // Ensure purposes and staffToVisit arrays exist
+        // Ensure all fields exist with default values
+        officialName: data.officialName || "",
         purposes: data.purposes || [],
         staffToVisit: data.staffToVisit || []
       };
@@ -134,7 +136,8 @@ export const getOfficeByEmail = async (email) => {
     return { 
       id: docSnap.id, 
       ...data,
-      // Ensure purposes and staffToVisit arrays exist
+      // Ensure all fields exist with default values
+      officialName: data.officialName || "",
       purposes: data.purposes || [],
       staffToVisit: data.staffToVisit || []
     };
@@ -150,6 +153,11 @@ export const getOfficeByEmail = async (email) => {
 const validateOfficeData = (office) => {
   // Ensure arrays are properly formatted
   const validatedOffice = { ...office };
+  
+  // Ensure officialName exists
+  if (!validatedOffice.officialName) {
+    validatedOffice.officialName = "";
+  }
   
   // Validate purposes array
   if (!validatedOffice.purposes || !Array.isArray(validatedOffice.purposes)) {
@@ -197,6 +205,7 @@ export const addOffice = async (office) => {
     
     const officeWithPassword = {
       name: validatedOffice.name,
+      officialName: validatedOffice.officialName, // NEW: Add officialName field
       email: validatedOffice.email,
       role: validatedOffice.role,
       password: defaultPassword,
@@ -211,7 +220,7 @@ export const addOffice = async (office) => {
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Created",
-      description: `New office "${office.name}" was created with ${office.purposes?.length || 0} purposes and ${office.staffToVisit?.length || 0} staff members`,
+      description: `New office "${office.name}" (${office.officialName || 'No official name'}) was created with ${office.purposes?.length || 0} purposes and ${office.staffToVisit?.length || 0} staff members`,
       office: office.name, // THIS MUST MATCH the office name exactly
       type: "office_created",
       userEmail: currentUser.email,
@@ -219,12 +228,14 @@ export const addOffice = async (office) => {
       userRole: currentUser.role,
       officeEmail: office.email,
       officeRole: office.role,
+      officialOfficeName: office.officialName || '', // NEW: Add to activity log
       purposesCount: office.purposes?.length || 0,
       staffCount: office.staffToVisit?.length || 0,
       action: "create"
     });
     
     console.log(`✅ Office "${office.name}" added successfully with activity log`);
+    console.log(`   - Official Name: ${office.officialName || 'Not provided'}`);
     console.log(`   - Purposes: ${office.purposes?.length || 0} items`);
     console.log(`   - Staff to visit: ${office.staffToVisit?.length || 0} items`);
     
@@ -260,6 +271,7 @@ export const updateOffice = async (office) => {
     
     const updateData = {
       name: validatedOffice.name,
+      officialName: validatedOffice.officialName, // NEW: Update officialName field
       email: validatedOffice.email,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
@@ -286,6 +298,9 @@ export const updateOffice = async (office) => {
     }
     if (office.name !== currentData.name) {
       changes.push(`name changed from "${currentData.name}" to "${office.name}"`);
+    }
+    if (office.officialName !== currentData.officialName) {
+      changes.push(`official name changed from "${currentData.officialName || 'none'}" to "${office.officialName || 'none'}"`);
     }
     if (office.email !== currentData.email) {
       changes.push(`email changed from "${currentData.email}" to "${office.email}"`);
@@ -321,12 +336,15 @@ export const updateOffice = async (office) => {
       userRole: currentUser.role,
       previousName: currentData.name,
       newName: office.name,
+      previousOfficialName: currentData.officialName || '', // NEW: Add to activity log
+      newOfficialName: office.officialName || '', // NEW: Add to activity log
       purposesCount: newPurposesCount,
       staffCount: newStaffCount,
       action: "update"
     });
     
     console.log(`✅ Office "${office.name}" updated successfully with activity log`);
+    console.log(`   - Official Name: ${office.officialName || 'Not provided'}`);
     console.log(`   - New purposes count: ${newPurposesCount}`);
     console.log(`   - New staff count: ${newStaffCount}`);
     
@@ -335,6 +353,7 @@ export const updateOffice = async (office) => {
       id: office.id, 
       ...updateData,
       // Ensure we return the arrays
+      officialName: validatedOffice.officialName,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit
     };
@@ -362,13 +381,14 @@ export const deleteOffice = async (id) => {
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Deleted",
-      description: `Office "${officeData.name}" was deleted from the system. Removed ${officeData.purposes?.length || 0} purposes and ${officeData.staffToVisit?.length || 0} staff records`,
+      description: `Office "${officeData.name}" (${officeData.officialName || 'No official name'}) was deleted from the system. Removed ${officeData.purposes?.length || 0} purposes and ${officeData.staffToVisit?.length || 0} staff records`,
       office: officeData.name, // THIS MUST MATCH the office name exactly
       type: "office_deleted",
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
       deletedOfficeName: officeData.name,
+      deletedOfficialName: officeData.officialName || '', // NEW: Add to activity log
       deletedOfficeEmail: officeData.email,
       deletedPurposesCount: officeData.purposes?.length || 0,
       deletedStaffCount: officeData.staffToVisit?.length || 0,
@@ -379,12 +399,14 @@ export const deleteOffice = async (id) => {
     await deleteDoc(officeRef);
     
     console.log(`✅ Office "${officeData.name}" deleted successfully with activity log`);
+    console.log(`   - Official Name: ${officeData.officialName || 'Not provided'}`);
     console.log(`   - Removed ${officeData.purposes?.length || 0} purposes`);
     console.log(`   - Removed ${officeData.staffToVisit?.length || 0} staff records`);
     return { 
       success: true, 
       id, 
       deletedOffice: officeData.name,
+      deletedOfficialName: officeData.officialName || '',
       deletedPurposesCount: officeData.purposes?.length || 0,
       deletedStaffCount: officeData.staffToVisit?.length || 0
     };
@@ -698,6 +720,50 @@ export const removeStaffFromOffice = async (officeId, staffId) => {
     return { success: true, staff: staffToRemove };
   } catch (error) {
     console.error("Error removing staff from office:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update office official name only
+ */
+export const updateOfficeOfficialName = async (officeId, officialName) => {
+  try {
+    const officeRef = doc(db, "offices", officeId);
+    const officeSnap = await getDoc(officeRef);
+    
+    if (!officeSnap.exists()) {
+      throw new Error(`Office with ID ${officeId} not found`);
+    }
+    
+    const currentData = officeSnap.data();
+    
+    const updateData = {
+      officialName: officialName || "",
+      updatedAt: serverTimestamp()
+    };
+    
+    await updateDoc(officeRef, updateData);
+    
+    // Create activity log
+    const currentUser = getCurrentUser();
+    await createActivityLog({
+      title: "Official Name Updated",
+      description: `Office "${currentData.name}" official name changed from "${currentData.officialName || 'none'}" to "${officialName || 'none'}"`,
+      office: currentData.name,
+      type: "office_updated",
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      userRole: currentUser.role,
+      previousOfficialName: currentData.officialName || '',
+      newOfficialName: officialName || '',
+      action: "update"
+    });
+    
+    console.log(`✅ Office "${currentData.name}" official name updated to: ${officialName || 'none'}`);
+    return { success: true, officialName };
+  } catch (error) {
+    console.error("Error updating office official name:", error);
     throw error;
   }
 };
