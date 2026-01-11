@@ -3,6 +3,8 @@ import FilterBar from "../components/FilterBar";
 import VisitorTable from "../components/VisitorTable";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
@@ -151,37 +153,205 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     });
   }, [visits, feedbacks]);
 
-  // Export to CSV function
-  const exportCSV = () => {
-    try {
-      let csvContent = 'ID,Name,Email,Phone,Office,Purpose,Date,Time In,Time Out,Status,Satisfaction Rating\n';
-      
-      filteredVisitors.forEach(v => {
-        const name = v.name.includes(',') ? `"${v.name}"` : v.name;
-        const purpose = v.purpose && v.purpose.includes(',') ? `"${v.purpose}"` : v.purpose || "";
-        const status = v.status === 'checked-out' ? 'Checked Out' : 'Checked In';
-        
-        csvContent += `${v.id},${name},${v.email},${v.phone},${v.office},${purpose},${v.date},${v.timeIn},${v.timeOut},${status},${v.satisfaction}/5\n`;
-      });
+  // Export to Excel function with images
+  const exportExcel = async () => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Visitors Log", {
+      pageSetup: { paperSize: 9, orientation: "landscape" },
+    });
 
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      
-      link.setAttribute('href', url);
-      const fileName = user.type === "OfficeAdmin" 
-        ? `${user.office}-visitors-${new Date().toISOString().split('T')[0]}.csv`
-        : `all-visitors-${new Date().toISOString().split('T')[0]}.csv`;
-      link.setAttribute('download', fileName);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error exporting to CSV:', error);
-      alert('Failed to export CSV. Please try again.');
-    }
-  };
+    // =========================
+    // COLUMN WIDTHS (A–F)
+    // =========================
+    worksheet.columns = [
+      { width: 20 }, // A - Date / Logo
+      { width: 14 }, // B - Time In
+      { width: 28 }, // C - Name
+      { width: 34 }, // D - Purpose
+      { width: 24 }, // E - Office
+      { width: 32 }, // F - Contact
+    ];
+
+    // =========================
+    // ROW HEIGHTS
+    // =========================
+    worksheet.getRow(1).height = 28;
+    worksheet.getRow(2).height = 30;
+    worksheet.getRow(3).height = 22;
+    worksheet.getRow(4).height = 22;
+    worksheet.getRow(5).height = 22;
+    worksheet.getRow(7).height = 28;
+    worksheet.getRow(9).height = 28;
+
+    // =========================
+    // MERGED CELLS (HEADER GRID)
+    // =========================
+    worksheet.mergeCells("A1:A5"); // BISU Logo
+    worksheet.mergeCells("B1:D1"); // Republic
+    worksheet.mergeCells("B2:D2"); // University
+    worksheet.mergeCells("B3:D3"); // Address
+    worksheet.mergeCells("B4:D4"); // Office
+    worksheet.mergeCells("B5:D5"); // Core values
+    worksheet.mergeCells("E1:E5"); // Bagong Pilipinas
+    worksheet.mergeCells("F1:F5"); // TUV ISO
+
+    worksheet.mergeCells("A7:F7"); // Title
+
+    // =========================
+    // HEADER TEXT
+    // =========================
+    worksheet.getCell("B1").value = "Republic of the Philippines";
+    worksheet.getCell("B1").font = { size: 11 };
+    worksheet.getCell("B1").alignment = { vertical: "middle", horizontal: "left" };
+
+    worksheet.getCell("B2").value = "BOHOL ISLAND STATE UNIVERSITY";
+    worksheet.getCell("B2").font = { size: 14, bold: true };
+    worksheet.getCell("B2").alignment = { vertical: "middle", horizontal: "left" };
+
+    worksheet.getCell("B3").value = "Magsija, Balilihan 6342, Bohol, Philippines";
+    worksheet.getCell("B3").font = { size: 11 };
+    worksheet.getCell("B3").alignment = { vertical: "middle", horizontal: "left" };
+
+    worksheet.getCell("B4").value = printOfficeName;
+    worksheet.getCell("B4").font = { size: 11 };
+    worksheet.getCell("B4").alignment = { vertical: "middle", horizontal: "left" };
+
+    worksheet.getCell("B5").value = "Balance | Integrity | Stewardship | Uprightness";
+    worksheet.getCell("B5").font = { size: 11, italic: true };
+    worksheet.getCell("B5").alignment = { vertical: "middle", horizontal: "left" };
+
+    // =========================
+    // TITLE
+    // =========================
+    worksheet.getCell("A7").value = "VISITORS' LOG SHEET";
+    worksheet.getCell("A7").font = { size: 13, bold: true };
+    worksheet.getCell("A7").alignment = { horizontal: "center", vertical: "middle" };
+
+    // =========================
+    // IMAGE HELPER
+    // =========================
+    const getBase64FromUrl = async (url) => {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    };
+
+    // =========================
+    // LOAD IMAGES
+    // =========================
+    const bisuBase64 = await getBase64FromUrl(bisuLogo);
+    const bagongBase64 = await getBase64FromUrl(bagongPilipinasLogo);
+    const tuvBase64 = await getBase64FromUrl(tuvISOLogo);
+
+    const bisuImageId = workbook.addImage({ base64: bisuBase64, extension: "png" });
+    const bagongImageId = workbook.addImage({ base64: bagongBase64, extension: "png" });
+    const tuvImageId = workbook.addImage({ base64: tuvBase64, extension: "png" });
+
+    // =========================
+    // PLACE IMAGES (MATCH MERGES)
+    // =========================
+    worksheet.addImage(bisuImageId, {
+      tl: { col: 0, row: 0 },
+      br: { col: 1, row: 5 },
+    });
+
+    worksheet.addImage(bagongImageId, {
+      tl: { col: 4, row: 0 },
+      br: { col: 5, row: 5 },
+    });
+
+    worksheet.addImage(tuvImageId, {
+      tl: { col: 5, row: 1 },
+      br: { col: 6, row: 5 },
+    });
+
+    // =========================
+    // TABLE HEADER
+    // =========================
+    const headerRow = worksheet.getRow(9);
+    headerRow.values = [
+      "Date (MM - DD - YY)",
+      "Time In",
+      "Name",
+      "Purpose",
+      "Office Visited",
+      "Contact Number / Email Address",
+    ];
+
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // =========================
+    // DATA ROWS (WITH MM - DD - YY FORMAT)
+    // =========================
+    filteredVisitors.forEach((v) => {
+      const dateObj = v.rawDate instanceof Date ? v.rawDate : new Date(v.rawDate);
+
+      const row = worksheet.addRow([
+        dateObj,              // A - Date
+        v.timeIn,             // B - Time In
+        v.name,               // C - Name
+        v.purpose,            // D - Purpose
+        v.office,             // E - Office
+        v.contactNumber,      // F - Contact
+      ]);
+
+      // =========================
+      // FORCE Excel to show MM - DD - YY
+      // =========================
+      row.getCell(1).numFmt = 'mm" - "dd" - "yy';
+
+      row.eachCell((cell) => {
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // =========================
+    // FOOTER
+    // =========================
+    worksheet.headerFooter.oddFooter = `&LGenerated: ${new Date().toLocaleString()}&RPage &P of &N`;
+
+    // =========================
+    // SAVE FILE
+    // =========================
+    const fileName =
+      user.type === "OfficeAdmin"
+        ? `${user.office}-visitors-${new Date().toISOString().split("T")[0]}.xlsx`
+        : `visitors-log-${new Date().toISOString().split("T")[0]}.xlsx`;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    saveAs(blob, fileName);
+  } catch (error) {
+    console.error("❌ Excel export failed:", error);
+    alert("Failed to export Excel file.");
+  }
+};
+
+
 
   // Export to PDF function
   const exportPDF = () => {
@@ -304,7 +474,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           setOfficeFilter={setOfficeFilter}
           dateFilter={dateFilter}
           setDateFilter={setDateFilter}
-          exportCSV={exportCSV}
+          exportExcel={exportExcel}
           exportPDF={exportPDF}
           uniqueOffices={uniqueOffices}
         />
@@ -327,9 +497,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
             return (
               <div key={pageIndex} className="page-break p-6">
                 {/* Header */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 flex items-center justify-center">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center">
+                    <div className="w-28 h-20 flex items-center justify-center">
                       <img 
                         src={bisuLogo} 
                         alt="BISU Logo" 
@@ -337,23 +507,23 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                       />
                     </div>
                     <div>
-                      <p className="text-[10px]">Republic of the Philippines</p>
-                      <h1 className="text-xs font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
-                      <p className="text-[10px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                      <p className="text-[10px]">{printOfficeName}</p>
-                      <p className="text-[10px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                      <p className="text-[14px]">Republic of the Philippines</p>
+                      <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
+                      <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                      <p className="text-[14px]">{printOfficeName}</p>
+                      <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
                     </div>
                   </div>
                   
                   <div className="flex gap-3">
-                    <div className="w-14 h-14 flex items-center justify-center">
+                    <div className="w-22 h-26 flex items-center justify-center">
                       <img 
                         src={bagongPilipinasLogo} 
                         alt="Bagong Pilipinas Logo" 
                         className="w-full h-full object-contain"
                       />
                     </div>
-                    <div className="w-14 h-14 flex items-center justify-center">
+                    <div className="w-42 h-26 flex items-center justify-center">
                       <img 
                         src={tuvISOLogo} 
                         alt="ISO 9001:2015 Certification" 
@@ -367,7 +537,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                 <h2 className="text-center text-base font-bold mb-3 uppercase">Visitors' Log Sheet</h2>
 
                 {/* Table */}
-                <table className="w-full border-collapse border-2 border-black">
+                <table className="w-full border-collapse border-1 border-black">
                   <thead>
                     <tr className="bg-white">
                       <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[15%]">
@@ -455,6 +625,19 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           @page {
             size: 13in 8.5in;
             margin: 0.5in;
+          }
+          
+          /* Hide browser default headers and footers */
+          @page {
+            margin: 0.5in;
+          }
+          
+          html {
+            margin: 0;
+          }
+          
+          body {
+            margin: 0;
           }
           
           .page-break {

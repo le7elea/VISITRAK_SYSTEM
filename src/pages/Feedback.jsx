@@ -3,14 +3,16 @@ import useFeedbackRatings from "../hooks/useFeedbackRatings";
 import FeedbackModal from "../components/FeedbackModal";
 import FilterBar from "../components/FilterBars";
 import FeedbackTable from "../components/FeedbackTable";
-
-
+import bisuLogo from "../assets/bisulogo.png";
+import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
+import tuvISOLogo from "../assets/tuvISO_logo.png";
 
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [date, setDate] = useState("");
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
+  const [offices, setOffices] = useState([]);
   
   // Use the custom hook to fetch feedbacks
   const { feedbacks, loading, error } = useFeedbackRatings();
@@ -21,6 +23,37 @@ const Feedback = ({ user }) => {
       setOffice(user.office);
     }
   }, [user]);
+
+  // Fetch offices from Firestore
+  useEffect(() => {
+    const fetchOffices = async () => {
+      try {
+        const { collection, onSnapshot } = await import("firebase/firestore");
+        const { db } = await import("../lib/firebase");
+        
+        const unsub = onSnapshot(collection(db, "offices"), (snapshot) => {
+          const data = snapshot.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: doc.id,
+              name: d.name || "",
+              officialName: d.officialName || "",
+            };
+          });
+          
+          setOffices(data);
+        }, (error) => {
+          console.error("Error fetching offices:", error);
+        });
+
+        return () => unsub();
+      } catch (error) {
+        console.error("Error setting up offices listener:", error);
+      }
+    };
+
+    fetchOffices();
+  }, []);
  
   // Get a safe date string from createdAt
   const getSafeDateString = (createdAt) => {
@@ -224,14 +257,10 @@ const Feedback = ({ user }) => {
 
   const exportPDF = () => {
     try {
-      if (filteredFeedbacks.length === 0) {
-        alert("No data to export!");
-        return;
-      }
-      alert(`Export PDF would generate a PDF with ${filteredFeedbacks.length} records.`);
-    } catch (err) {
-      console.error("Error exporting PDF:", err);
-      alert("Failed to export PDF. Please try again.");
+      window.print();
+    } catch (error) {
+      console.error('Error printing:', error);
+      alert('Failed to print. Please try again.');
     }
   };
 
@@ -255,6 +284,32 @@ const Feedback = ({ user }) => {
       alert("Failed to open feedback details. Please try again.");
     }
   };
+
+  // Render stars for satisfaction ratings
+  const renderStars = (rating) => {
+    const normalizedRating = Math.min(5, Math.max(0, Math.round(rating || 0)));
+    return (
+      <div className="flex">
+        {[...Array(5)].map((_, i) => (
+          <span key={i} className={i < normalizedRating ? "text-yellow-400" : "text-gray-300"}>
+            ★
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  // Get the official office name for print header
+  const printOfficeName = useMemo(() => {
+    if (user?.type === "OfficeAdmin" && user?.office) {
+      const officeData = offices.find(o => o.name === user.office);
+      return officeData?.officialName || user.office;
+    } else if (office && office !== "") {
+      const officeData = offices.find(o => o.name === office);
+      return officeData?.officialName || office;
+    }
+    return "Office of the College of Computing and Information Sciences";
+  }, [user, office, offices]);
 
   // Show loading state
   if (loading) {
@@ -305,52 +360,234 @@ const Feedback = ({ user }) => {
   }
 
   return (
-    <div className="min-h-screen dark:bg-[#1f1f1f]">
-      <div className="px-4 sm:px-8 pt-6 pb-6 space-y-6 flex flex-col">
-       
-        {/* 🔍 Filters */}
-        <FilterBar
-          search={search}
-          setSearch={setSearch}
-          date={date}
-          setDate={setDate}
-          office={office}
-          setOffice={setOffice}
-          exportCSV={exportCSV}
-          exportPDF={exportPDF}
-          officeOptions={officeOptions}
-          user={user}
-          totalCount={feedbacks.length}
-          filteredCount={filteredFeedbacks.length}
-        />
+    <>
+      {/* Screen View */}
+      <div className="print:hidden min-h-screen dark:bg-[#1f1f1f]">
+        <div className="px-4 sm:px-8 pt-6 pb-6 space-y-6 flex flex-col">
+         
+          {/* 🔍 Filters */}
+          <FilterBar
+            search={search}
+            setSearch={setSearch}
+            date={date}
+            setDate={setDate}
+            office={office}
+            setOffice={setOffice}
+            exportCSV={exportCSV}
+            exportPDF={exportPDF}
+            officeOptions={officeOptions}
+            user={user}
+            totalCount={feedbacks.length}
+            filteredCount={filteredFeedbacks.length}
+          />
 
-        {/* 📋 Feedback Table */}
-        {filteredFeedbacks.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-lg shadow">
-            {feedbacks.length === 0 
-              ? "No feedback data available yet." 
-              : "No feedback matches your filters."}
-          </div>
-        ) : (
-          <>
-            
-            <FeedbackTable
-              visitors={filteredFeedbacks}
-              onViewFull={handleViewFull}
-            />
-          </>
+          {/* 📋 Feedback Table */}
+          {filteredFeedbacks.length === 0 ? (
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-lg shadow">
+              {feedbacks.length === 0 
+                ? "No feedback data available yet." 
+                : "No feedback matches your filters."}
+            </div>
+          ) : (
+            <>
+              <FeedbackTable
+                visitors={filteredFeedbacks}
+                onViewFull={handleViewFull}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Modal Overlay */}
+        {selectedVisitor && (
+          <FeedbackModal
+            isOpen={!!selectedVisitor}
+            onClose={() => setSelectedVisitor(null)}
+            visitor={selectedVisitor}
+          />
         )}
       </div>
 
-      {/* Modal Overlay */}
-      {selectedVisitor && (
-        <FeedbackModal
-          isOpen={!!selectedVisitor}
-          onClose={() => setSelectedVisitor(null)}
-          visitor={selectedVisitor}
-        />
-      )}
-    </div>
+      {/* Print View Only - BISU Format */}
+      <div className="hidden print:block bg-white print-only-section">
+        {(() => {
+          const rowsPerPage = 15;
+          const totalPages = Math.ceil(filteredFeedbacks.length / rowsPerPage) || 1;
+          
+          return Array.from({ length: totalPages }).map((_, pageIndex) => {
+            const startIndex = pageIndex * rowsPerPage;
+            const pageFeedbacks = filteredFeedbacks.slice(startIndex, startIndex + rowsPerPage);
+            const emptyRowsNeeded = rowsPerPage - pageFeedbacks.length;
+            
+            return (
+              <div key={pageIndex} className="page-break p-6">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center">
+                    <div className="w-28 h-20 flex items-center justify-center">
+                      <img 
+                        src={bisuLogo} 
+                        alt="BISU Logo" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[14px]">Republic of the Philippines</p>
+                      <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
+                      <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                      <p className="text-[14px]">{printOfficeName}</p>
+                      <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <div className="w-22 h-26 flex items-center justify-center">
+                      <img 
+                        src={bagongPilipinasLogo} 
+                        alt="Bagong Pilipinas Logo" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="w-42 h-26 flex items-center justify-center">
+                      <img 
+                        src={tuvISOLogo} 
+                        alt="ISO 9001:2015 Certification" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Title and Stats */}
+                <div className="mb-3">
+                  <h2 className="text-center text-base font-bold uppercase">Feedback Report</h2>
+                  {/* <div className="text-center text-[11px] text-gray-600 mt-1">
+                    Generated on {new Date().toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </div>
+                  <div className="text-center text-[11px] mt-1">
+                    <span className="font-semibold">Total Feedback: {filteredFeedbacks.length}</span>
+                    <span className="mx-3">|</span>
+                    <span className="font-semibold">Average Rating: {stats.averageRating}</span>
+                  </div> */}
+                </div>
+
+                {/* Table */}
+                <table className="w-full border-collapse border-1 border-black">
+                  <thead>
+                    <tr className="bg-white">
+                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[15%]">
+                        Date
+                      </th>
+                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[20%]">
+                        Office
+                      </th>
+                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[55%]">
+                        Feedback / Comments
+                      </th>
+                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[10%]">
+                        Rating
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageFeedbacks.map((feedback) => (
+                      <tr key={feedback.id}>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">
+                          {feedback.date}
+                        </td>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">
+                          {feedback.office}
+                        </td>
+                        <td className="border-2 border-black p-1 text-[10px]">
+                          {feedback.comment}
+                        </td>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">
+                          {feedback.satisfaction.toFixed(1)} ★
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Add empty rows to complete rows per page */}
+                    {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
+                      <tr key={`empty-${i}`}>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
+                        <td className="border-2 border-black p-1 text-[10px]">&nbsp;</td>
+                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Footer */}
+                <div className="mt-3 text-center text-[10px] text-gray-600">
+                  Page {pageIndex + 1} of {totalPages}
+                </div>
+              </div>
+            );
+          });
+        })()}
+      </div>
+
+      {/* Print-specific styles */}
+      <style>{`
+        @media print {
+          /* Hide everything except the print view */
+          body * {
+            visibility: hidden;
+          }
+          
+          /* Only show the print section and its children */
+          .print-only-section,
+          .print-only-section * {
+            visibility: visible;
+          }
+          
+          /* Position print section at top of page */
+          .print-only-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          
+          @page {
+            size: 13in 8.5in;
+            margin: 0.5in;
+          }
+          
+          html {
+            margin: 0;
+          }
+          
+          body {
+            margin: 0;
+          }
+          
+          .page-break {
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+          
+          .page-break:last-child {
+            page-break-after: auto;
+          }
+          
+          body {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+          
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
+    </>
   );
 };
 

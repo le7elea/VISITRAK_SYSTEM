@@ -9,7 +9,7 @@ const FilterBar = ({
   setOfficeFilter,
   dateFilter,
   setDateFilter,
-  exportCSV,
+  exportExcel,
   exportPDF,
   uniqueOffices = [] // Add this prop
 }) => {
@@ -21,11 +21,11 @@ const FilterBar = ({
         </h3>
         <div className="flex gap-2">
           <button
-            onClick={exportCSV}
+            onClick={exportExcel}
             className="flex items-center gap-2 bg-[#7400EA] hover:bg-indigo-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
           >
             <Download className="w-4 h-4" />
-            Export CSV
+            Export Excel
           </button>
           <button
             onClick={exportPDF}
