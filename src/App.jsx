@@ -8,17 +8,23 @@ function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check localStorage only after initial render
+  // Check localStorage on initial load
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch (error) {
+        console.error("Error parsing user data:", error);
         localStorage.removeItem("user");
       }
     }
-    setIsLoading(false);
+    // Simulate loading delay for better UX
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleLogin = (userData) => {
@@ -34,9 +40,11 @@ function App() {
   // Show loading spinner while checking auth state
   if (isLoading) {
     return (
-      <div className="loading-spinner">
-        Loading...
-        {/* Add your spinner component here */}
+      <div className="loading-container">
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading application...</p>
+        </div>
       </div>
     );
   }
