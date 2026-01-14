@@ -8,10 +8,8 @@ function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load saved login on app start
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
-
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
@@ -19,10 +17,7 @@ function App() {
         localStorage.removeItem("user");
       }
     }
-
-    // Small delay for smooth loading
-    const timer = setTimeout(() => setIsLoading(false), 300);
-    return () => clearTimeout(timer);
+    setTimeout(() => setIsLoading(false), 300);
   }, []);
 
   const handleLogin = (userData) => {
@@ -38,10 +33,7 @@ function App() {
   if (isLoading) {
     return (
       <div className="loading-container">
-        <div className="loading-spinner">
-          <div className="spinner"></div>
-          <p>Loading application...</p>
-        </div>
+        <p>Loading…</p>
       </div>
     );
   }
@@ -50,10 +42,10 @@ function App() {
     <Router>
       <Routes>
 
-        {/* PUBLIC ROUTE */}
+        {/* PUBLIC */}
         <Route path="/" element={<Login onLogin={handleLogin} />} />
 
-        {/* PROTECTED ROUTE */}
+        {/* PROTECTED */}
         <Route
           path="/dashboard"
           element={
@@ -65,7 +57,7 @@ function App() {
           }
         />
 
-        {/* CATCH ALL */}
+        {/* FALLBACK */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

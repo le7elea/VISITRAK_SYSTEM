@@ -194,7 +194,7 @@ const Login = ({ onLogin }) => {
       }
 
       // Navigate to profile
-      navigate("/profile");
+      navigate("/dashboard");
 
     } catch (error) {
       console.error("❌ Login error:", error);
