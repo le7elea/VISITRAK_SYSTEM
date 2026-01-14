@@ -5,34 +5,45 @@ import Dashboard from "./pages/Dashboard";
 import "./App.css";
 
 function App() {
-  // Load user from localStorage on app start
-  const [user, setUser] = useState(() => {
-    return JSON.parse(localStorage.getItem("user")) || null;
-  });
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Update localStorage whenever user changes
+  // Check localStorage only after initial render
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("user");
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (error) {
+        localStorage.removeItem("user");
+      }
     }
-  }, [user]);
+    setIsLoading(false);
+  }, []);
 
   const handleLogin = (userData) => {
     setUser(userData);
-    // localStorage is updated automatically via useEffect
+    localStorage.setItem("user", JSON.stringify(userData));
   };
 
   const handleLogout = () => {
     setUser(null);
-    // localStorage is cleared via useEffect
+    localStorage.removeItem("user");
   };
+
+  // Show loading spinner while checking auth state
+  if (isLoading) {
+    return (
+      <div className="loading-spinner">
+        Loading...
+        {/* Add your spinner component here */}
+      </div>
+    );
+  }
 
   return (
     <Router>
       <Routes>
-        {/* Login Page */}
         <Route
           path="/"
           element={
@@ -44,7 +55,6 @@ function App() {
           }
         />
 
-        {/* Dashboard Page */}
         <Route
           path="/dashboard"
           element={
@@ -55,6 +65,8 @@ function App() {
             )
           }
         />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
