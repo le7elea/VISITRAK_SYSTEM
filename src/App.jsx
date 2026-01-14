@@ -8,22 +8,20 @@ function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check localStorage on initial load
+  // Load saved login on app start
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
+
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error("Error parsing user data:", error);
+      } catch {
         localStorage.removeItem("user");
       }
     }
-    // Simulate loading delay for better UX
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
-    
+
+    // Small delay for smooth loading
+    const timer = setTimeout(() => setIsLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
@@ -37,7 +35,6 @@ function App() {
     localStorage.removeItem("user");
   };
 
-  // Show loading spinner while checking auth state
   if (isLoading) {
     return (
       <div className="loading-container">
@@ -52,17 +49,11 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route
-          path="/"
-          element={
-            user ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <Login onLogin={handleLogin} />
-            )
-          }
-        />
 
+        {/* PUBLIC ROUTE */}
+        <Route path="/" element={<Login onLogin={handleLogin} />} />
+
+        {/* PROTECTED ROUTE */}
         <Route
           path="/dashboard"
           element={
@@ -74,7 +65,9 @@ function App() {
           }
         />
 
+        {/* CATCH ALL */}
         <Route path="*" element={<Navigate to="/" replace />} />
+
       </Routes>
     </Router>
   );

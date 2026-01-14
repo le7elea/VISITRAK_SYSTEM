@@ -116,23 +116,23 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
   }, []);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 transition-all duration-300 hover:shadow-xl hover:border-[#7400EA]/20 group flex flex-col">
+    <div className="bg-white rounded-2xl border border-gray-200 p-6 transition-all duration-300 hover:shadow-xl hover:border-[#7400EA]/20 group flex flex-col dark:bg-gray-800 dark:border-purple-700">
       {/* Card Header with Role Badge */}
       <div className="flex justify-between items-start mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#7400EA]/20 to-[#5B2D8B]/20 rounded-lg flex items-center justify-center">
-              <span className="text-lg font-bold text-[#7400EA]">
+            <div className="w-10 h-10 bg-gradient-to-br from-[#7400EA]/20 to-[#5B2D8B]/20 rounded-lg flex items-center justify-center dark:bg-white ">
+              <span className="text-lg font-bold text-[#7400EA] ">
                 {office.name?.charAt(0).toUpperCase() || "O"}
               </span>
             </div>
             {getRoleBadge(office.role)}
           </div>
-          <h4 className="text-xl font-bold text-gray-800 group-hover:text-[#7400EA] transition-colors">
+          <h4 className="text-xl font-bold text-gray-800 group-hover:text-[#7400EA] transition-colors dark:text-gray-100">
             {office.name}
           </h4>
           {office.officialName && (
-            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+            <p className="text-sm text-gray-600 mt-1 line-clamp-2 dark:text-gray-500">
               {office.officialName}
             </p>
           )}
@@ -158,7 +158,7 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
       </div>
       
       {/* Office Info Stats - Minimal Grid */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6 dark:text-white">
         <StatItem 
           icon={Mail} 
           label="Email" 
@@ -1016,11 +1016,11 @@ const Offices = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="rounded-xl p-6 bg-white text-black border border-[#5B2D8B]">
+      <div className="rounded-xl p-6 bg-white text-black border border-[#5B2D8B] dark:border-purple-600 dark:bg-gray-800 dark:text-gray-200">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div>
             <h3 className="text-2xl font-bold mb-2">Office Accounts</h3>
-            <p className="text-black/80">
+            <p className="text-black/80 dark:text-gray-400">
               {loading ? "Loading..." : `${offices.length} office${offices.length !== 1 ? 's' : ''} registered`}
             </p>
           </div>
