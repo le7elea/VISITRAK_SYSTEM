@@ -32,7 +32,7 @@ const FilterBar = ({
             className="flex items-center gap-2 bg-[#7400EA] hover:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
           >
             <Download className="w-4 h-4" />
-            Export PDF
+            PRINT PDF
           </button>
         </div>
       </div>
