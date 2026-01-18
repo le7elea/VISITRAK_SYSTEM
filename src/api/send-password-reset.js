@@ -26,12 +26,18 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // API Handler
 // =============================
 export default async function handler(req, res) {
+  // ✅ IMPORTANT: Allow CORS preflight
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method Not Allowed" });
   }
 
   try {
     const { email } = req.body;
+
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
