@@ -84,7 +84,7 @@ const ForgotPassword = () => {
 
       // 2️⃣ Call Firebase Cloud Function (SendGrid)
       const response = await fetch(
-        "https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/sendPasswordResetEmail",
+        "/api/send-password-reset", 
         {
           method: "POST",
           headers: {
