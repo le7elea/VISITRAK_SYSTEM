@@ -21,7 +21,7 @@ const Modal = ({ show, title, message, onClose }) => {
           {title}
         </h3>
 
-        <p className="text-sm text-gray-500 text-center mb-6">
+        <p className="text-sm text-gray-500 text-center mb-6 whitespace-pre-line">
           {message}
         </p>
 
@@ -69,7 +69,7 @@ const ForgotPassword = () => {
       setModal({
         show: true,
         title: "Invalid Email",
-        message: "Please enter a valid email address.",
+        message: "Please enter a valid email address (e.g., example@domain.com).",
       });
       return;
     }
@@ -79,8 +79,11 @@ const ForgotPassword = () => {
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
+      console.log("Starting password reset for:", normalizedEmail);
+
       // 1️⃣ Check if email exists in offices
       const exists = await checkEmailExists(normalizedEmail);
+      console.log("Email exists in database:", exists);
 
       if (!exists) {
         setModal({
@@ -93,14 +96,14 @@ const ForgotPassword = () => {
         return;
       }
 
-      // 2️⃣ Determine API URL based on environment
-      // For Vercel deployment, use relative path for same origin
-      const API_URL = "/api/send-password-reset";
+      // 2️⃣ Call API - Using absolute URL for Vercel deployment
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const API_URL = isLocalhost 
+        ? 'http://localhost:3000/api/send-password-reset'
+        : 'https://visitrak-system.vercel.app/api/send-password-reset';
 
       console.log("Sending request to:", API_URL);
-      console.log("Email:", normalizedEmail);
 
-      // 3️⃣ Call Vercel API route
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -110,26 +113,29 @@ const ForgotPassword = () => {
       });
 
       console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
 
-      // Try to parse response as JSON
       let responseData;
+      const responseText = await response.text();
+      console.log("Response text:", responseText);
+
       try {
-        responseData = await response.json();
+        responseData = responseText ? JSON.parse(responseText) : {};
       } catch (jsonError) {
-        console.error("Failed to parse JSON:", jsonError);
-        throw new Error(`Server returned invalid response (Status: ${response.status})`);
+        console.error("JSON parse error:", jsonError);
+        responseData = {};
       }
 
       if (!response.ok) {
-        throw new Error(responseData.message || `Request failed with status ${response.status}`);
+        const errorMsg = responseData.message || responseData.error || `HTTP Error ${response.status}`;
+        throw new Error(errorMsg);
       }
 
-      // 4️⃣ Success modal
+      // 3️⃣ Success modal
       setModal({
         show: true,
-        title: "Email Sent ✓",
-        message:
-          "A password reset link has been sent to your email. Please check your inbox (and spam folder). The link will expire in 15 minutes.",
+        title: "✓ Email Sent Successfully",
+        message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder) for the reset link.\nThe link will expire in 15 minutes.`,
       });
 
       // Clear email field on success
@@ -140,24 +146,36 @@ const ForgotPassword = () => {
       console.error("Forgot password error:", error);
       
       let errorMessage = "Something went wrong. Please try again later.";
+      let errorTitle = "Error";
       
-      if (error.message.includes("Failed to fetch")) {
-        errorMessage = "Cannot connect to the server. Please check your internet connection.";
+      if (error.message.includes("405")) {
+        errorTitle = "Method Not Allowed";
+        errorMessage = "The server is not accepting POST requests. Please contact the administrator.";
+      } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        errorTitle = "Connection Error";
+        errorMessage = "Cannot connect to the server. Please check:\n• Your internet connection\n• If the server is running\n• Try again in a few moments";
       } else if (error.message.includes("404")) {
-        errorMessage = "API endpoint not found. Please contact support.";
-      } else if (error.message.includes("Email not registered")) {
-        errorMessage = "This email is not registered in the system.";
-      } else if (error.message.includes("NetworkError")) {
-        errorMessage = "Network error. Please check your connection.";
+        errorTitle = "Service Not Found";
+        errorMessage = "The password reset service is currently unavailable. Please try again later.";
+      } else if (error.message.includes("Email not registered") || error.message.includes("not found")) {
+        errorTitle = "Email Not Found";
+        errorMessage = "This email is not registered in our system. Please check the email address or contact your administrator.";
+      } else if (error.message.includes("500") || error.message.includes("Internal Server")) {
+        errorTitle = "Server Error";
+        errorMessage = "An internal server error occurred. Our team has been notified. Please try again in a few minutes.";
       }
       
       setModal({
         show: true,
-        title: "Error",
-        message: `${errorMessage} \n\n(Error: ${error.message})`,
+        title: errorTitle,
+        message: `${errorMessage}\n\nError details: ${error.message}`,
       });
       setLoading(false);
     }
+  };
+
+  const handleBackToLogin = () => {
+    navigate("/login");
   };
 
   return (
@@ -184,62 +202,89 @@ const ForgotPassword = () => {
 
         {/* Form */}
         <div className="w-full md:w-1/2 px-6 sm:px-10 py-10 flex flex-col">
-          <div>
-            <h2 className="text-4xl font-bold text-gray-900 mt-12">
-              Forgot
-            </h2>
-            <h2 className="text-4xl font-bold text-gray-900 mb-3">
-              Your Password?
-            </h2>
-
-            <p className="text-gray-500 text-sm mb-10">
-              Enter your email address and we'll send you a link to reset your password.
-            </p>
-
-            <div className="relative mb-6">
-              <label className="absolute -top-2.5 left-4 bg-white px-2 text-xs font-medium text-purple-700">
-                Email Address
-              </label>
-
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                placeholder="Enter your registered email"
-                className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none disabled:opacity-50"
-              />
+          <div className="flex-1">
+            <div className="mb-2">
+              <h2 className="text-4xl font-bold text-gray-900">
+                Forgot Your
+              </h2>
+              <h2 className="text-4xl font-bold text-gray-900 mb-3">
+                Password?
+              </h2>
             </div>
 
-            <button
-              onClick={handleResetPassword}
-              disabled={loading}
-              className="w-full h-14 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold flex items-center justify-center disabled:opacity-50 transition duration-200"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Sending...
-                </>
-              ) : (
-                "RESET PASSWORD"
-              )}
-            </button>
+            <p className="text-gray-500 text-sm mb-10">
+              Enter your registered email address below and we'll send you a secure link to reset your password.
+            </p>
 
-            <button
-              onClick={() => navigate("/login")}
-              disabled={loading}
-              className="mt-4 text-sm text-gray-400 hover:text-purple-600 hover:underline w-full text-center disabled:opacity-50"
-            >
-              ← Back to login
-            </button>
+            <form onSubmit={handleResetPassword} className="space-y-6">
+              <div className="relative">
+                <label 
+                  htmlFor="email"
+                  className="absolute -top-2.5 left-4 bg-white px-2 text-xs font-medium text-purple-700 z-10"
+                >
+                  Email Address *
+                </label>
+                
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  placeholder="Enter your registered email address"
+                  className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 transition-all duration-200"
+                  required
+                />
+                
+                <div className="mt-1 text-xs text-gray-400">
+                  Enter the email you used to register with VisiTrak
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full h-14 bg-gradient-to-r from-[#5B3886] to-[#8B5AA8] hover:from-[#4A2D6B] hover:to-[#7A4998] text-white rounded-lg font-semibold flex items-center justify-center disabled:opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                {loading ? (
+                  <div className="flex items-center space-x-3">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Sending Reset Link...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>SEND RESET LINK</span>
+                  </div>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <button
+                onClick={handleBackToLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center space-x-2 text-gray-500 hover:text-purple-600 hover:underline transition-colors duration-200 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                <span>Back to Login</span>
+              </button>
+            </div>
           </div>
 
-          <div className="mt-auto pt-4 border-t text-xs text-gray-400 text-center">
-            © 2025 LMT. All rights reserved.
+          {/* Footer */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="text-xs text-gray-400 text-center space-y-1">
+              <p>Need help? Contact your system administrator</p>
+              <p>© 2025 VisiTrak System. BISU - MASID. All rights reserved.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -251,9 +296,9 @@ const ForgotPassword = () => {
         message={modal.message}
         onClose={() => {
           setModal({ ...modal, show: false });
-          // If it was a success modal, navigate back to login
-          if (modal.title === "Email Sent ✓") {
-            setTimeout(() => navigate("/login"), 300);
+          // If it was a success modal, navigate back to login after a delay
+          if (modal.title.includes("✓ Email Sent Successfully")) {
+            setTimeout(() => navigate("/login"), 500);
           }
         }}
       />
