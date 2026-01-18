@@ -1,7 +1,7 @@
 // pages/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/logo02.png";
@@ -60,10 +60,9 @@ const Login = ({ onLogin }) => {
     }
   };
 
+  // Navigate to forgot password page
   const handleForgotPassword = () => {
-    const enteredEmail = prompt("🔑 Enter your registered email:");
-    if (enteredEmail)
-      alert(`📧 A password reset link has been sent to: ${enteredEmail}`);
+    navigate("/forgot-password");
   };
 
   const handleLoginClick = async (e) => {

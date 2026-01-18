@@ -3,6 +3,9 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check } from "lucide-react";
 import { fetchOffices, addOffice, updateOffice, deleteOffice } from "../lib/info.services";
 
+const isValidEmail = (email) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 // ==================== MEMOIZED COMPONENTS ====================
 
 const EmailDisplay = memo(({ email }) => {
@@ -223,32 +226,14 @@ const AddOfficeModal = memo(({
 
   const toUppercase = (text) => text ? text.toUpperCase() : "";
   
-  const generateEmailFromName = (name) => {
-    if (!name.trim()) return "";
-    
-    let emailPart = name.toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, '.')
-      .replace(/\.+/g, '.')
-      .replace(/^\.+|\.+$/g, '');
-    
-    if (!emailPart) {
-      emailPart = "office";
-    }
-    
-    return emailPart + "@gmail.com";
-  };
 
   const handleNameChange = (value) => {
-    const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value);
-    
-    onDataChange({
-      ...data,
-      name: uppercaseName,
-      email: generatedEmail
-    });
-  };
+  onDataChange({
+    ...data,
+    name: toUppercase(value)
+  });
+};
+
 
   const addPurposeToList = () => {
     if (newPurpose.trim() === "") return;
@@ -371,7 +356,7 @@ const AddOfficeModal = memo(({
               <div className="space-y-6">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-3">
-                    Office Name <span className="text-red-500">*</span>
+                    Office Name (e,g: SDS, Registrar, etc.)
                   </label>
                   <div className="relative">
                     <input
@@ -382,11 +367,25 @@ const AddOfficeModal = memo(({
                       disabled={loading}
                       style={{ textTransform: 'uppercase' }}
                     />
-                    <div className="absolute right-3 top-3">
-                      <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">UPPERCASE</span>
-                    </div>
+                    
                   </div>
-                  <EmailDisplay email={data.email} />
+                  <div className="mt-4">
+  <label className="text-sm font-medium text-gray-700 block mb-2">
+    Office Email <span className="text-red-500">*</span>
+  </label>
+
+  <input
+    type="email"
+    value={data.email}
+    onChange={(e) =>
+      onDataChange({ ...data, email: e.target.value.toLowerCase() })
+    }
+    className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+    placeholder="office@example.com"
+    disabled={loading}
+  />
+</div>
+
                 </div>
                 
                 <div>
@@ -662,20 +661,19 @@ const Offices = () => {
   // 🔹 Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
   
+  // 🔹 ADD THE MISSING FUNCTION
   const generateEmailFromName = useCallback((name) => {
-    if (!name.trim()) return "";
+    if (!name || !name.trim()) return "";
     
-    let emailPart = name.toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, '.')
-      .replace(/\.+/g, '.')
-      .replace(/^\.+|\.+$/g, '');
-    
-    if (!emailPart) {
-      emailPart = "office";
-    }
-    
-    return emailPart + "@gmail.com";
+    // Convert name to lowercase, remove spaces and special characters
+    const emailPart = name
+      .toLowerCase()
+      .replace(/\s+/g, '.')  // Replace spaces with dots
+      .replace(/[^a-z0-9.]/g, '')  // Remove non-alphanumeric except dots
+      .replace(/\.+/g, '.')  // Replace multiple dots with single dot
+      .replace(/^\.|\.$/g, ''); // Remove leading/trailing dots
+      
+    return emailPart ? `${emailPart}@gmail.com` : "";
   }, []);
 
   // 🔹 Load offices from Firestore
@@ -703,6 +701,28 @@ const Offices = () => {
     }
   }, [deleteIndex]);
 
+  // 🔹 Handle add office name change - FIXED
+  const handleAddNameChange = useCallback((value) => {
+    const uppercaseName = toUppercase(value);
+    const generatedEmail = generateEmailFromName(value); // Use original value, not uppercase
+    
+    setAddData(prev => ({
+      ...prev,
+      name: uppercaseName,
+      email: generatedEmail
+    }));
+  }, [toUppercase, generateEmailFromName]);
+
+  // 🔹 Handle add purpose input
+  const handleAddPurposeInput = useCallback((value) => {
+    setNewPurpose(toUppercase(value));
+  }, [toUppercase]);
+
+  // 🔹 Handle add staff input
+  const handleAddStaffInput = useCallback((value) => {
+    setNewStaff(toUppercase(value));
+  }, [toUppercase]);
+
   // 🔹 OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
     if (!addData.name.trim()) {
@@ -712,6 +732,11 @@ const Offices = () => {
     
     if (!addData.officialName.trim()) {
       setAddError("Official office name is required");
+      return;
+    }
+
+    if (!isValidEmail(addData.email)) {
+      setAddError("Invalid email address");
       return;
     }
     
@@ -810,10 +835,10 @@ const Offices = () => {
     }
   }, [offices]);
 
-  // 🔹 Handle edit office name change
+  // 🔹 Handle edit office name change - FIXED
   const handleEditNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value);
+    const generatedEmail = generateEmailFromName(value); // Use original value, not uppercase
     
     setEditData(prev => ({
       ...prev,
@@ -882,6 +907,11 @@ const Offices = () => {
     
     if (!editData.name.trim()) {
       setEditError("Office name is required");
+      return;
+    }
+
+    if (!isValidEmail(editData.email)) {
+      setEditError("Invalid email address");
       return;
     }
     
@@ -991,28 +1021,6 @@ const Offices = () => {
     }
   }, [deleteIndex, deleteConfirmed, offices]);
 
-  // 🔹 Handle add office name change
-  const handleAddNameChange = useCallback((value) => {
-    const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value);
-    
-    setAddData(prev => ({
-      ...prev,
-      name: uppercaseName,
-      email: generatedEmail
-    }));
-  }, [toUppercase, generateEmailFromName]);
-
-  // 🔹 Handle add purpose input
-  const handleAddPurposeInput = useCallback((value) => {
-    setNewPurpose(toUppercase(value));
-  }, [toUppercase]);
-
-  // 🔹 Handle add staff input
-  const handleAddStaffInput = useCallback((value) => {
-    setNewStaff(toUppercase(value));
-  }, [toUppercase]);
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -1088,9 +1096,9 @@ const Offices = () => {
         data={addData}
         onDataChange={setAddData}
         newPurpose={newPurpose}
-        onNewPurposeChange={setNewPurpose}
+        onNewPurposeChange={handleAddPurposeInput}
         newStaff={newStaff}
-        onNewStaffChange={setNewStaff}
+        onNewStaffChange={handleAddStaffInput}
         loading={addLoading}
       />
 
@@ -1142,7 +1150,7 @@ const Offices = () => {
                   <div className="space-y-6">
                     <div>
                       <label className="text-sm font-medium text-gray-700 block mb-3">
-                        Office Name <span className="text-red-500">*</span>
+                        Office Name (e,g: SDS, Registrar, etc.)
                       </label>
                       <div className="relative">
                         <input
@@ -1156,7 +1164,22 @@ const Offices = () => {
                           <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">UPPERCASE</span>
                         </div>
                       </div>
-                      <EmailDisplay email={editData.email} />
+                      <div className="mt-4">
+                        <label className="text-sm font-medium text-gray-700 block mb-2">
+                          Office Email <span className="text-red-500">*</span>
+                        </label>
+
+                        <input
+                          type="email"
+                          value={editData.email}
+                          onChange={(e) =>
+                            setEditData(prev => ({ ...prev, email: e.target.value.toLowerCase() }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                          disabled={editLoading}
+                        />
+                      </div>
+
                     </div>
                     
                     <div>

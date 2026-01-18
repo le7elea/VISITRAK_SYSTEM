@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "@sendgrid/mail": "^8.1.6",
     "@tailwindcss/vite": "^4.1.16",
     "chart.js": "^4.5.1",
     "clsx": "^2.1.1",

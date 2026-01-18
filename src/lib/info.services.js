@@ -16,6 +16,7 @@ import {
 // 🔹 Reference to the collections
 const officesCollection = collection(db, "offices");
 const activityLogsCollection = collection(db, "activityLogs");
+const passwordResetTokensCollection = collection(db, "passwordResetTokens");
 
 /**
  * Create an activity log
@@ -143,6 +144,135 @@ export const getOfficeByEmail = async (email) => {
     };
   } catch (error) {
     console.error("Error getting office by email:", error);
+    throw error;
+  }
+};
+
+/* =============================
+   PASSWORD RESET TOKEN FUNCTIONS
+============================= */
+/**
+ * Validate password reset token
+ */
+export const validatePasswordResetToken = async (token) => {
+  try {
+    const q = query(
+      passwordResetTokensCollection,
+      where("token", "==", token),
+      where("used", "==", false)
+    );
+
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      console.log("❌ Token not found or already used");
+      return null;
+    }
+
+    const docSnap = snap.docs[0];
+    const data = docSnap.data();
+
+    // Check if token is expired
+    if (data.expiresAt && data.expiresAt.toDate() < new Date()) {
+      console.log("❌ Token expired");
+      return null;
+    }
+
+    console.log("✅ Valid token found for email:", data.email);
+    return { id: docSnap.id, ...data };
+  } catch (error) {
+    console.error("Error validating password reset token:", error);
+    throw error;
+  }
+};
+
+/**
+ * Mark password reset token as used
+ */
+export const markPasswordResetTokenUsed = async (tokenId) => {
+  try {
+    await updateDoc(doc(db, "passwordResetTokens", tokenId), {
+      used: true,
+      usedAt: serverTimestamp(),
+    });
+    console.log("✅ Token marked as used:", tokenId);
+    return true;
+  } catch (error) {
+    console.error("Error marking token as used:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update office password by email
+ */
+export const updateOfficePasswordByEmail = async (email, newPassword) => {
+  try {
+    const q = query(officesCollection, where("email", "==", email));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      throw new Error("Office not found");
+    }
+
+    await updateDoc(doc(db, "offices", snap.docs[0].id), {
+      password: newPassword,
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log("✅ Password updated for email:", email);
+    return true;
+  } catch (error) {
+    console.error("Error updating password:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create password reset activity log
+ */
+export const createPasswordResetActivityLog = async (email) => {
+  try {
+    const logData = {
+      title: "Password Reset",
+      description: `Password reset completed for ${email}`,
+      office: email.split('@')[0] || "Unknown Office",
+      type: "password_reset",
+      userEmail: email,
+      userName: "System",
+      userRole: "system",
+      timestamp: serverTimestamp(),
+      action: "reset"
+    };
+    
+    await addDoc(activityLogsCollection, logData);
+    console.log("✅ Password reset activity log created for:", email);
+    return true;
+  } catch (error) {
+    console.error("❌ Error creating password reset activity log:", error);
+    return false;
+  }
+};
+
+/**
+ * Check if email already exists (for validation)
+ */
+export const checkEmailExists = async (email, excludeId = null) => {
+  try {
+    const q = query(officesCollection, where("email", "==", email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return false;
+    }
+    
+    // If excludeId is provided, check if it's the same office
+    if (excludeId) {
+      const offices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return offices.some(office => office.id !== excludeId);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error checking email:", error);
     throw error;
   }
 };
@@ -435,31 +565,6 @@ export const deleteOfficeWithLog = async (id) => {
  */
 export const addOfficeWithLog = async (office) => {
   return addOffice(office);
-};
-
-/**
- * Check if email already exists (for validation)
- */
-export const checkEmailExists = async (email, excludeId = null) => {
-  try {
-    const q = query(officesCollection, where("email", "==", email));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      return false;
-    }
-    
-    // If excludeId is provided, check if it's the same office
-    if (excludeId) {
-      const offices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return offices.some(office => office.id !== excludeId);
-    }
-    
-    return true;
-  } catch (error) {
-    console.error("Error checking email:", error);
-    throw error;
-  }
 };
 
 /**

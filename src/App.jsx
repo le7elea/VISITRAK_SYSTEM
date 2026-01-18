@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import "./App.css";
 
@@ -41,11 +42,12 @@ function App() {
   return (
     <Router>
       <Routes>
-
-        {/* PUBLIC */}
+        {/* PUBLIC ROUTES */}
         <Route path="/" element={<Login onLogin={handleLogin} />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* PROTECTED */}
+        {/* PROTECTED ROUTES */}
         <Route
           path="/dashboard"
           element={
@@ -59,7 +61,6 @@ function App() {
 
         {/* FALLBACK */}
         <Route path="*" element={<Navigate to="/" replace />} />
-
       </Routes>
     </Router>
   );
