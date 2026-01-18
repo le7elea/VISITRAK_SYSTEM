@@ -63,6 +63,17 @@ const ForgotPassword = () => {
       return;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setModal({
+        show: true,
+        title: "Invalid Email",
+        message: "Please enter a valid email address.",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -82,38 +93,68 @@ const ForgotPassword = () => {
         return;
       }
 
-      // 2️⃣ Call Firebase Cloud Function (SendGrid)
-      const response = await fetch(
-        "/api/send-password-reset", 
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email: normalizedEmail }),
-        }
-      );
+      // 2️⃣ Determine API URL based on environment
+      // For Vercel deployment, use relative path for same origin
+      const API_URL = "/api/send-password-reset";
 
-      if (!response.ok) {
-        throw new Error("Failed to send reset email");
-      }
+      console.log("Sending request to:", API_URL);
+      console.log("Email:", normalizedEmail);
 
-      // 3️⃣ Success modal
-      setModal({
-        show: true,
-        title: "Email Sent",
-        message:
-          "A password reset link has been sent to your email. Please check your inbox.",
+      // 3️⃣ Call Vercel API route
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
+      console.log("Response status:", response.status);
+
+      // Try to parse response as JSON
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        console.error("Failed to parse JSON:", jsonError);
+        throw new Error(`Server returned invalid response (Status: ${response.status})`);
+      }
+
+      if (!response.ok) {
+        throw new Error(responseData.message || `Request failed with status ${response.status}`);
+      }
+
+      // 4️⃣ Success modal
+      setModal({
+        show: true,
+        title: "Email Sent ✓",
+        message:
+          "A password reset link has been sent to your email. Please check your inbox (and spam folder). The link will expire in 15 minutes.",
+      });
+
+      // Clear email field on success
+      setEmail("");
       setLoading(false);
 
     } catch (error) {
       console.error("Forgot password error:", error);
+      
+      let errorMessage = "Something went wrong. Please try again later.";
+      
+      if (error.message.includes("Failed to fetch")) {
+        errorMessage = "Cannot connect to the server. Please check your internet connection.";
+      } else if (error.message.includes("404")) {
+        errorMessage = "API endpoint not found. Please contact support.";
+      } else if (error.message.includes("Email not registered")) {
+        errorMessage = "This email is not registered in the system.";
+      } else if (error.message.includes("NetworkError")) {
+        errorMessage = "Network error. Please check your connection.";
+      }
+      
       setModal({
         show: true,
         title: "Error",
-        message: "Something went wrong. Please try again later.",
+        message: `${errorMessage} \n\n(Error: ${error.message})`,
       });
       setLoading(false);
     }
@@ -152,7 +193,7 @@ const ForgotPassword = () => {
             </h2>
 
             <p className="text-gray-500 text-sm mb-10">
-              Enter your email address and we’ll send you a link to reset your password.
+              Enter your email address and we'll send you a link to reset your password.
             </p>
 
             <div className="relative mb-6">
@@ -165,6 +206,7 @@ const ForgotPassword = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
+                placeholder="Enter your registered email"
                 className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none disabled:opacity-50"
               />
             </div>
@@ -172,14 +214,25 @@ const ForgotPassword = () => {
             <button
               onClick={handleResetPassword}
               disabled={loading}
-              className="w-full h-14 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold flex items-center justify-center disabled:opacity-50"
+              className="w-full h-14 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold flex items-center justify-center disabled:opacity-50 transition duration-200"
             >
-              {loading ? "Sending..." : "RESET PASSWORD"}
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Sending...
+                </>
+              ) : (
+                "RESET PASSWORD"
+              )}
             </button>
 
             <button
               onClick={() => navigate("/login")}
-              className="mt-4 text-sm text-gray-400 hover:underline w-full"
+              disabled={loading}
+              className="mt-4 text-sm text-gray-400 hover:text-purple-600 hover:underline w-full text-center disabled:opacity-50"
             >
               ← Back to login
             </button>
@@ -196,7 +249,13 @@ const ForgotPassword = () => {
         show={modal.show}
         title={modal.title}
         message={modal.message}
-        onClose={() => setModal({ ...modal, show: false })}
+        onClose={() => {
+          setModal({ ...modal, show: false });
+          // If it was a success modal, navigate back to login
+          if (modal.title === "Email Sent ✓") {
+            setTimeout(() => navigate("/login"), 300);
+          }
+        }}
       />
     </div>
   );
