@@ -1,4 +1,3 @@
-// pages/ForgotPassword.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailExists } from "../lib/info.services";
@@ -63,7 +62,6 @@ const ForgotPassword = () => {
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setModal({
@@ -78,7 +76,6 @@ const ForgotPassword = () => {
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
-
       console.log("Starting password reset for:", normalizedEmail);
 
       // 1️⃣ Check if email exists in offices
@@ -89,20 +86,16 @@ const ForgotPassword = () => {
         setModal({
           show: true,
           title: "Email Not Found",
-          message:
-            "This email is not registered in the VisiTrak system. Please check and try again.",
+          message: "This email is not registered in the VisiTrak system.",
         });
         setLoading(false);
         return;
       }
 
-      // 2️⃣ Call API - Using absolute URL for Vercel deployment
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const API_URL = isLocalhost 
-        ? 'http://localhost:3000/api/send-password-reset'
-        : 'https://visitrak-system.vercel.app/api/send-password-reset';
-
-      console.log("Sending request to:", API_URL);
+      // 2️⃣ Call Vercel Serverless Function
+      // For Vercel deployment, use relative path
+      const API_URL = "/api/send-password-reset";
+      console.log("Calling Vercel Function:", API_URL);
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -113,21 +106,17 @@ const ForgotPassword = () => {
       });
 
       console.log("Response status:", response.status);
-      console.log("Response headers:", response.headers);
 
       let responseData;
-      const responseText = await response.text();
-      console.log("Response text:", responseText);
-
       try {
-        responseData = responseText ? JSON.parse(responseText) : {};
+        responseData = await response.json();
       } catch (jsonError) {
         console.error("JSON parse error:", jsonError);
-        responseData = {};
+        throw new Error(`Invalid response from server (Status: ${response.status})`);
       }
 
       if (!response.ok) {
-        const errorMsg = responseData.message || responseData.error || `HTTP Error ${response.status}`;
+        const errorMsg = responseData.message || responseData.error || `Request failed with status ${response.status}`;
         throw new Error(errorMsg);
       }
 
@@ -135,10 +124,9 @@ const ForgotPassword = () => {
       setModal({
         show: true,
         title: "✓ Email Sent Successfully",
-        message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder) for the reset link.\nThe link will expire in 15 minutes.`,
+        message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder).\nThe link will expire in 15 minutes.`,
       });
 
-      // Clear email field on success
       setEmail("");
       setLoading(false);
 
@@ -148,34 +136,27 @@ const ForgotPassword = () => {
       let errorMessage = "Something went wrong. Please try again later.";
       let errorTitle = "Error";
       
-      if (error.message.includes("405")) {
-        errorTitle = "Method Not Allowed";
-        errorMessage = "The server is not accepting POST requests. Please contact the administrator.";
-      } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+      if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
         errorTitle = "Connection Error";
-        errorMessage = "Cannot connect to the server. Please check:\n• Your internet connection\n• If the server is running\n• Try again in a few moments";
+        errorMessage = `Cannot connect to the server.\n\nMake sure:\n1. The API is deployed on Vercel\n2. Environment variables are set\n3. You have internet connection`;
+      } else if (error.message.includes("405")) {
+        errorTitle = "Method Not Allowed";
+        errorMessage = "API endpoint is not accepting POST requests.\n\nPlease check if the Vercel function is properly deployed.";
       } else if (error.message.includes("404")) {
-        errorTitle = "Service Not Found";
-        errorMessage = "The password reset service is currently unavailable. Please try again later.";
-      } else if (error.message.includes("Email not registered") || error.message.includes("not found")) {
+        errorTitle = "API Not Found";
+        errorMessage = "API endpoint not found.\n\nPlease ensure the file is at /api/send-password-reset.js in your project root.";
+      } else if (error.message.includes("Email not registered")) {
         errorTitle = "Email Not Found";
-        errorMessage = "This email is not registered in our system. Please check the email address or contact your administrator.";
-      } else if (error.message.includes("500") || error.message.includes("Internal Server")) {
-        errorTitle = "Server Error";
-        errorMessage = "An internal server error occurred. Our team has been notified. Please try again in a few minutes.";
+        errorMessage = "This email is not registered in our system.";
       }
       
       setModal({
         show: true,
         title: errorTitle,
-        message: `${errorMessage}\n\nError details: ${error.message}`,
+        message: `${errorMessage}\n\nError: ${error.message}`,
       });
       setLoading(false);
     }
-  };
-
-  const handleBackToLogin = () => {
-    navigate("/login");
   };
 
   return (
@@ -235,10 +216,6 @@ const ForgotPassword = () => {
                   className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 transition-all duration-200"
                   required
                 />
-                
-                <div className="mt-1 text-xs text-gray-400">
-                  Enter the email you used to register with VisiTrak
-                </div>
               </div>
 
               <button
@@ -255,19 +232,14 @@ const ForgotPassword = () => {
                     <span>Sending Reset Link...</span>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                    </svg>
-                    <span>SEND RESET LINK</span>
-                  </div>
+                  "SEND RESET LINK"
                 )}
               </button>
             </form>
 
             <div className="mt-8 pt-6 border-t border-gray-100">
               <button
-                onClick={handleBackToLogin}
+                onClick={() => navigate("/login")}
                 disabled={loading}
                 className="w-full flex items-center justify-center space-x-2 text-gray-500 hover:text-purple-600 hover:underline transition-colors duration-200 disabled:opacity-50"
               >
@@ -277,12 +249,18 @@ const ForgotPassword = () => {
                 <span>Back to Login</span>
               </button>
             </div>
+
+            {/* Debug info - remove in production */}
+            <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-xs text-gray-600">
+                <strong>Debug Info:</strong> API endpoint: <code>/api/send-password-reset</code>
+              </p>
+            </div>
           </div>
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="text-xs text-gray-400 text-center space-y-1">
-              <p>Need help? Contact your system administrator</p>
               <p>© 2025 VisiTrak System. BISU - MASID. All rights reserved.</p>
             </div>
           </div>
@@ -296,8 +274,7 @@ const ForgotPassword = () => {
         message={modal.message}
         onClose={() => {
           setModal({ ...modal, show: false });
-          // If it was a success modal, navigate back to login after a delay
-          if (modal.title.includes("✓ Email Sent Successfully")) {
+          if (modal.title.includes("Email Sent Successfully")) {
             setTimeout(() => navigate("/login"), 500);
           }
         }}
