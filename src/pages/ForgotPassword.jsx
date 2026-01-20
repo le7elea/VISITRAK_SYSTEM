@@ -1,3 +1,4 @@
+// pages/ForgotPassword.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailExists } from "../lib/info.services";
@@ -76,11 +77,9 @@ const ForgotPassword = () => {
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      console.log("Starting password reset for:", normalizedEmail);
 
       // 1️⃣ Check if email exists in offices
       const exists = await checkEmailExists(normalizedEmail);
-      console.log("Email exists in database:", exists);
 
       if (!exists) {
         setModal({
@@ -93,9 +92,7 @@ const ForgotPassword = () => {
       }
 
       // 2️⃣ Call Vercel Serverless Function
-      // For Vercel deployment, use relative path
       const API_URL = "/api/send-password-reset";
-      console.log("Calling Vercel Function:", API_URL);
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -105,55 +102,87 @@ const ForgotPassword = () => {
         body: JSON.stringify({ email: normalizedEmail }),
       });
 
-      console.log("Response status:", response.status);
+      // Get response text first (more reliable than .json())
+      const responseText = await response.text();
+      let responseData = {};
 
-      let responseData;
-      try {
-        responseData = await response.json();
-      } catch (jsonError) {
-        console.error("JSON parse error:", jsonError);
-        throw new Error(`Invalid response from server (Status: ${response.status})`);
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error("JSON parse error:", jsonError);
+        }
       }
 
       if (!response.ok) {
-        const errorMsg = responseData.message || responseData.error || `Request failed with status ${response.status}`;
+        const errorMsg = responseData.message || 
+                         responseData.error || 
+                         `Request failed (Status: ${response.status})`;
         throw new Error(errorMsg);
       }
 
-      // 3️⃣ Success modal
-      setModal({
-        show: true,
-        title: "✓ Email Sent Successfully",
-        message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder).\nThe link will expire in 15 minutes.`,
-      });
+      // 3️⃣ Handle different response modes
+      if (responseData.mode === 'simulation') {
+        // Simulation mode (firebase-admin not installed or not working)
+        setModal({
+          show: true,
+          title: "⚠️ Development Mode",
+          message: `Password reset simulation complete.\n\nEmail: ${normalizedEmail}\n\nNote: Check Firebase Admin configuration.`,
+        });
+      } else if (responseData.mode === 'token_only') {
+        // Token generated but email not sent (SendGrid not configured)
+        setModal({
+          show: true,
+          title: "Token Generated",
+          message: `Reset token created.\n\nConfigure SendGrid to enable email sending.`,
+        });
+      } else {
+        // ✅ SUCCESS - Email actually sent (production mode)
+        setModal({
+          show: true,
+          title: "✓ Email Sent Successfully",
+          message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder).\nThe link will expire in 15 minutes.`,
+        });
+        
+        // Clear form only on success
+        setEmail("");
+      }
 
-      setEmail("");
       setLoading(false);
 
     } catch (error) {
       console.error("Forgot password error:", error);
       
+      // User-friendly error messages
       let errorMessage = "Something went wrong. Please try again later.";
       let errorTitle = "Error";
       
       if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
         errorTitle = "Connection Error";
-        errorMessage = `Cannot connect to the server.\n\nMake sure:\n1. The API is deployed on Vercel\n2. Environment variables are set\n3. You have internet connection`;
+        errorMessage = "Cannot connect to the server. Please check your internet connection.";
       } else if (error.message.includes("405")) {
-        errorTitle = "Method Not Allowed";
-        errorMessage = "API endpoint is not accepting POST requests.\n\nPlease check if the Vercel function is properly deployed.";
+        errorTitle = "Service Error";
+        errorMessage = "Password reset service is temporarily unavailable.";
       } else if (error.message.includes("404")) {
-        errorTitle = "API Not Found";
-        errorMessage = "API endpoint not found.\n\nPlease ensure the file is at /api/send-password-reset.js in your project root.";
-      } else if (error.message.includes("Email not registered")) {
+        errorTitle = "Service Unavailable";
+        errorMessage = "Password reset service is not available at the moment.";
+      } else if (error.message.includes("Email not found") || 
+                 error.message.includes("not registered") || 
+                 error.message.includes("EMAIL_NOT_FOUND")) {
         errorTitle = "Email Not Found";
         errorMessage = "This email is not registered in our system.";
+      } else if (error.message.includes("500") || error.message.includes("Internal Server")) {
+        errorTitle = "Server Error";
+        errorMessage = "An internal server error occurred. Please try again later.";
+      } else if (error.message.includes("Firebase Admin initialization")) {
+        errorTitle = "Configuration Error";
+        errorMessage = "Authentication service not configured properly.";
       }
       
       setModal({
         show: true,
         title: errorTitle,
-        message: `${errorMessage}\n\nError: ${error.message}`,
+        message: errorMessage,
       });
       setLoading(false);
     }
@@ -212,8 +241,8 @@ const ForgotPassword = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  placeholder="Enter your registered email address"
-                  className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 transition-all duration-200"
+                  placeholder={loading ? "Processing..." : "Enter your registered email address"}
+                  className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   required
                 />
               </div>
@@ -225,14 +254,46 @@ const ForgotPassword = () => {
               >
                 {loading ? (
                   <div className="flex items-center space-x-3">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg 
+                      className="animate-spin h-5 w-5 text-white" 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      fill="none" 
+                      viewBox="0 0 24 24"
+                    >
+                      <circle 
+                        className="opacity-25" 
+                        cx="12" 
+                        cy="12" 
+                        r="10" 
+                        stroke="currentColor" 
+                        strokeWidth="4"
+                      />
+                      <path 
+                        className="opacity-75" 
+                        fill="currentColor" 
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
                     </svg>
                     <span>Sending Reset Link...</span>
                   </div>
                 ) : (
-                  "SEND RESET LINK"
+                  <div className="flex items-center justify-center space-x-2">
+                    <svg 
+                      className="w-5 h-5" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24" 
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth="2" 
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <span>SEND RESET LINK</span>
+                  </div>
                 )}
               </button>
             </form>
@@ -243,24 +304,29 @@ const ForgotPassword = () => {
                 disabled={loading}
                 className="w-full flex items-center justify-center space-x-2 text-gray-500 hover:text-purple-600 hover:underline transition-colors duration-200 disabled:opacity-50"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                <svg 
+                  className="w-4 h-4" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24" 
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth="2" 
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
                 </svg>
                 <span>Back to Login</span>
               </button>
-            </div>
-
-            {/* Debug info - remove in production */}
-            <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-              <p className="text-xs text-gray-600">
-                <strong>Debug Info:</strong> API endpoint: <code>/api/send-password-reset</code>
-              </p>
             </div>
           </div>
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="text-xs text-gray-400 text-center space-y-1">
+              <p>Need help? Contact your system administrator</p>
               <p>© 2025 VisiTrak System. BISU - MASID. All rights reserved.</p>
             </div>
           </div>
@@ -274,8 +340,9 @@ const ForgotPassword = () => {
         message={modal.message}
         onClose={() => {
           setModal({ ...modal, show: false });
+          // If success modal, navigate back to login after delay
           if (modal.title.includes("Email Sent Successfully")) {
-            setTimeout(() => navigate("/login"), 500);
+            setTimeout(() => navigate("/login"), 300);
           }
         }}
       />
