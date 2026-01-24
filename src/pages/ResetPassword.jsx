@@ -9,7 +9,7 @@ import {
   createPasswordResetActivityLog,
 } from "../lib/info.services";
 
-// 👉 replace with your actual logos
+import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import vtLogo from "../assets/bisulogo01.png";
 
@@ -25,9 +25,11 @@ const Modal = ({ show, title, message, onClose }) => {
         <h3 className="text-xl font-bold text-gray-800 text-center mb-2">
           {title}
         </h3>
+
         <p className="text-sm text-gray-500 text-center mb-6 whitespace-pre-line">
           {message}
         </p>
+
         <button
           onClick={onClose}
           className="w-full h-11 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold transition"
@@ -98,7 +100,8 @@ const ResetPassword = () => {
 
         setResetData(result);
         setValidating(false);
-      } catch {
+      } catch (error) {
+        console.error(error);
         setModal({
           show: true,
           title: "Error",
@@ -133,7 +136,7 @@ const ResetPassword = () => {
         show: true,
         title: "Weak Password",
         message:
-          "Password must be at least 10 characters, include 1 uppercase letter, and 1 number or special character.",
+          "Password must be at least 10 characters, contain 1 uppercase letter, and 1 number or special character.",
       });
       return;
     }
@@ -149,6 +152,7 @@ const ResetPassword = () => {
 
     try {
       setSubmitting(true);
+
       await updateOfficePasswordByEmail(resetData.email, newPassword);
       await markPasswordResetTokenUsed(resetData.id);
       await createPasswordResetActivityLog(resetData.email);
@@ -159,8 +163,10 @@ const ResetPassword = () => {
         message: "Your password has been reset successfully.",
         redirect: "/login",
       });
+
       setSubmitting(false);
-    } catch {
+    } catch (error) {
+      console.error(error);
       setModal({
         show: true,
         title: "Error",
@@ -170,6 +176,9 @@ const ResetPassword = () => {
     }
   };
 
+  /* =============================
+     Loading
+  ============================= */
   if (validating) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
@@ -179,18 +188,25 @@ const ResetPassword = () => {
   }
 
   /* =============================
-     UI (DESIGN MATCH)
+     UI
   ============================= */
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-between overflow-hidden">
-      {/* Top */}
+    <div
+      className="min-h-screen flex flex-col items-center justify-between bg-cover bg-center overflow-hidden"
+      style={{ backgroundImage: `url(${bgImage})` }}
+    >
+      {/* CONTENT */}
       <div className="w-full max-w-md px-6 pt-12 text-center">
+        {/* Logos */}
         <div className="flex justify-center gap-3 mb-6">
           <img src={bisuLogo} alt="BISU" className="w-10 h-10" />
           <img src={vtLogo} alt="VT" className="w-10 h-10" />
         </div>
 
-        <h1 className="text-2xl font-bold mb-2">Create new password</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          Create new password
+        </h1>
+
         <p className="text-sm text-gray-500 mb-8">
           Please enter your new password below for your Office Admin account.
         </p>
@@ -224,7 +240,9 @@ const ResetPassword = () => {
 
         {/* Confirm */}
         <div className="text-left mb-8">
-          <label className="text-sm font-medium">Confirm new Password</label>
+          <label className="text-sm font-medium">
+            Confirm new Password
+          </label>
           <div className="relative mt-1">
             <input
               type={showConfirm ? "text" : "password"}
@@ -245,7 +263,7 @@ const ResetPassword = () => {
         <button
           onClick={handleResetPassword}
           disabled={submitting}
-          className="w-full h-12 bg-[#5B3886] text-white rounded-lg font-semibold hover:bg-purple-800 transition"
+          className="w-full h-12 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold transition"
         >
           {submitting ? "Updating..." : "Create Password"}
         </button>
@@ -255,9 +273,10 @@ const ResetPassword = () => {
         </p>
       </div>
 
-      {/* Bottom wave */}
+      {/* Bottom Wave */}
       <div className="w-full h-40 bg-[#5B3886] rounded-t-[100%]" />
 
+      {/* Modal */}
       <Modal
         show={modal.show}
         title={modal.title}
