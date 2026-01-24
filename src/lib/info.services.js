@@ -1,4 +1,4 @@
-// lib/info.services.js
+// lib/info.services.js - COMPLETE FIXED VERSION
 import { db } from "./firebase";
 import {
   collection,
@@ -149,90 +149,150 @@ export const getOfficeByEmail = async (email) => {
 };
 
 /* =============================
-   PASSWORD RESET TOKEN FUNCTIONS - UPDATED & FIXED
+   PASSWORD RESET TOKEN FUNCTIONS - COMPLETELY FIXED
 ============================= */
 /**
- * Validate password reset token with email verification
+ * Validate password reset token with email verification - FIXED VERSION
  */
 export const validatePasswordResetToken = async (token, email = null) => {
   try {
     console.log("🔍 [validatePasswordResetToken] called with:", { 
-      token: token?.substring(0, 12) + '...',
-      email: email || 'not provided'
+      token: token?.substring(0, 20) + (token?.length > 20 ? '...' : ''),
+      email: email || 'not provided',
+      tokenLength: token?.length
     });
 
-    if (!token) {
+    if (!token || token.trim() === '') {
       console.error("❌ Token is required");
       return null;
     }
 
-    // Decode URL-encoded token if needed
-    const decodedToken = decodeURIComponent(token);
-    console.log("🔑 Decoded token:", decodedToken.substring(0, 12) + '...');
-
-    // Query for the token
-    const q = query(
-      passwordResetTokensCollection,
-      where("token", "==", decodedToken)
-    );
-
-    const snap = await getDocs(q);
+    // IMPORTANT: Token should be passed as-is (already decoded by browser/router)
+    const cleanToken = token.trim();
     
-    console.log("📊 Firestore query results:", snap.size, "documents found");
-    
-    if (snap.empty) {
-      console.log("❌ Token not found in database");
-      return null;
-    }
-
-    const docSnap = snap.docs[0];
-    const data = docSnap.data();
-    const docId = docSnap.id;
-    
-    console.log("📄 Token document found:", {
-      id: docId,
-      storedEmail: data.email,
-      storedToken: data.token?.substring(0, 12) + '...',
-      used: data.used,
-      expiresAt: data.expiresAt?.toDate()?.toISOString()
-    });
-
-    // Verify token matches exactly
-    if (data.token !== decodedToken) {
-      console.log("❌ Token mismatch");
-      return null;
-    }
-
-    // Verify email if provided
+    // Clean the email if provided
+    let cleanEmail = null;
     if (email) {
-      const decodedEmail = decodeURIComponent(email).toLowerCase();
-      if (data.email !== decodedEmail) {
-        console.log(`❌ Email mismatch: expected ${decodedEmail}, got ${data.email}`);
+      try {
+        cleanEmail = decodeURIComponent(email).trim().toLowerCase();
+      } catch (e) {
+        cleanEmail = email.trim().toLowerCase();
+      }
+      console.log("📧 Clean email for verification:", cleanEmail);
+    }
+
+    console.log("🔑 Querying with token (first 20 chars):", cleanToken.substring(0, 20) + '...');
+
+    let tokenDoc = null;
+    let tokenData = null;
+    let tokenId = null;
+    
+    try {
+      // Approach 1: Query by token only (most reliable)
+      const q = query(
+        passwordResetTokensCollection,
+        where("token", "==", cleanToken)
+      );
+
+      const querySnapshot = await getDocs(q);
+      
+      console.log("📊 Firestore query results:", querySnapshot.size, "documents found");
+      
+      if (!querySnapshot.empty) {
+        tokenDoc = querySnapshot.docs[0];
+        tokenData = tokenDoc.data();
+        tokenId = tokenDoc.id;
+      } else {
+        console.log("❌ No documents found with exact token match");
+        
+        // Try to find by scanning all tokens (fallback for debugging)
+        console.log("🔍 Scanning all tokens for matches...");
+        const allTokensSnapshot = await getDocs(passwordResetTokensCollection);
+        const allTokens = allTokensSnapshot.docs;
+        
+        console.log(`📋 Found ${allTokens.length} total tokens in database`);
+        
+        // Look for token manually (exact match, trimmed)
+        for (const doc of allTokens) {
+          const data = doc.data();
+          const storedToken = data.token?.trim();
+          
+          if (storedToken === cleanToken) {
+            console.log("✅ Found token manually!");
+            tokenDoc = doc;
+            tokenData = data;
+            tokenId = doc.id;
+            break;
+          }
+        }
+        
+        if (!tokenDoc) {
+          console.log("❌ Token not found in database after manual search");
+          return null;
+        }
+      }
+      
+    } catch (firestoreError) {
+      console.error("❌ Firestore query error:", firestoreError);
+      
+      // Try direct document fetch as fallback
+      console.log("🔄 Trying alternative approach...");
+      
+      // Get all tokens and filter manually
+      const allTokensSnapshot = await getDocs(passwordResetTokensCollection);
+      for (const doc of allTokensSnapshot.docs) {
+        const data = doc.data();
+        if (data.token === cleanToken) {
+          tokenDoc = doc;
+          tokenData = data;
+          tokenId = doc.id;
+          break;
+        }
+      }
+      
+      if (!tokenDoc) {
+        console.log("❌ Token not found after fallback search");
         return null;
       }
-      console.log("✅ Email verified:", data.email);
+    }
+
+    console.log("📄 Token document found:", {
+      id: tokenId,
+      storedEmail: tokenData.email,
+      storedToken: tokenData.token?.substring(0, 20) + '...',
+      used: tokenData.used,
+      expiresAt: tokenData.expiresAt?.toDate()?.toISOString()
+    });
+
+    // Verify email if provided
+    if (cleanEmail) {
+      const storedEmail = tokenData.email?.toLowerCase();
+      if (storedEmail !== cleanEmail) {
+        console.log(`❌ Email mismatch: expected ${cleanEmail}, got ${storedEmail}`);
+        return null;
+      }
+      console.log("✅ Email verified successfully");
     }
 
     // Check if token is already used
-    if (data.used === true) {
+    if (tokenData.used === true) {
       console.log("❌ Token already used");
       return null;
     }
 
     // Check if token has expired
-    if (!data.expiresAt) {
+    if (!tokenData.expiresAt) {
       console.log("❌ Token has no expiration date");
       return null;
     }
 
-    const expiresAt = data.expiresAt.toDate();
+    const expiresAt = tokenData.expiresAt.toDate();
     const now = new Date();
     
     console.log("⏰ Time check:", {
       now: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
-      isExpired: now > expiresAt,
-      differenceMs: expiresAt.getTime() - now.getTime()
+      isExpired: now > expiresAt
     });
 
     if (now > expiresAt) {
@@ -240,10 +300,10 @@ export const validatePasswordResetToken = async (token, email = null) => {
       return null;
     }
 
-    console.log("✅ Token is VALID");
+    console.log("✅ Token is VALID and ACTIVE");
     return { 
-      id: docId, 
-      ...data,
+      id: tokenId, 
+      ...tokenData,
       expiresAt: expiresAt // Return as Date object for convenience
     };
   } catch (error) {
@@ -260,7 +320,23 @@ export const markPasswordResetTokenUsed = async (tokenId) => {
   try {
     console.log("🔐 Marking token as used:", tokenId);
     
-    await updateDoc(doc(db, "passwordResetTokens", tokenId), {
+    const tokenRef = doc(db, "passwordResetTokens", tokenId);
+    
+    // First verify the token exists
+    const tokenSnap = await getDoc(tokenRef);
+    if (!tokenSnap.exists()) {
+      console.error("❌ Token not found:", tokenId);
+      throw new Error("Token not found");
+    }
+    
+    const tokenData = tokenSnap.data();
+    console.log("📄 Token before marking as used:", {
+      id: tokenId,
+      email: tokenData.email,
+      used: tokenData.used
+    });
+    
+    await updateDoc(tokenRef, {
       used: true,
       usedAt: serverTimestamp(),
     });
@@ -1006,6 +1082,79 @@ export const getAllPasswordResetTokens = async () => {
     return tokens;
   } catch (error) {
     console.error("Error fetching password reset tokens:", error);
+    throw error;
+  }
+};
+
+/**
+ * Debug function to check all tokens in database
+ */
+export const debugAllPasswordTokens = async () => {
+  try {
+    const snapshot = await getDocs(passwordResetTokensCollection);
+    console.log("🔍 DEBUG: All password reset tokens in database:");
+    
+    const tokens = [];
+    snapshot.docs.forEach((doc, index) => {
+      const data = doc.data();
+      const expiresAt = data.expiresAt?.toDate();
+      const isExpired = expiresAt ? new Date() > expiresAt : true;
+      
+      tokens.push({
+        id: doc.id,
+        ...data,
+        expiresAt: expiresAt,
+        isExpired: isExpired,
+        createdAt: data.createdAt?.toDate() || null,
+        usedAt: data.usedAt?.toDate() || null
+      });
+      
+      console.log(`  ${index + 1}. ID: ${doc.id}`);
+      console.log(`     Token: ${data.token?.substring(0, 30)}... (${data.token?.length || 0} chars)`);
+      console.log(`     Email: ${data.email}`);
+      console.log(`     Used: ${data.used}`);
+      console.log(`     Expires: ${expiresAt?.toISOString()}`);
+      console.log(`     Expired: ${isExpired ? 'YES' : 'NO'}`);
+      console.log(`     Created: ${data.createdAt?.toDate()?.toISOString()}`);
+      console.log(`     Used At: ${data.usedAt?.toDate()?.toISOString()}`);
+      console.log(`     ---`);
+    });
+    
+    console.log(`📊 Summary: ${tokens.length} total tokens, ${tokens.filter(t => !t.used && !t.isExpired).length} valid unused tokens`);
+    
+    return tokens;
+  } catch (error) {
+    console.error("Debug error:", error);
+    return [];
+  }
+};
+
+/**
+ * Clean up expired tokens (admin/maintenance function)
+ */
+export const cleanupExpiredTokens = async () => {
+  try {
+    const tokens = await getAllPasswordResetTokens();
+    const expiredTokens = tokens.filter(token => {
+      const isExpired = token.expiresAt ? new Date() > token.expiresAt : true;
+      return token.used || isExpired;
+    });
+    
+    console.log(`🧹 Found ${expiredTokens.length} expired/used tokens to clean up`);
+    
+    for (const token of expiredTokens) {
+      try {
+        await deleteDoc(doc(db, "passwordResetTokens", token.id));
+        console.log(`   Deleted token: ${token.id}`);
+      } catch (error) {
+        console.error(`   Failed to delete token ${token.id}:`, error.message);
+      }
+    }
+    
+    console.log(`✅ Cleanup completed. Deleted ${expiredTokens.length} tokens.`);
+    return { deletedCount: expiredTokens.length };
+  } catch (error) {
+    console.error("Error cleaning up tokens:", error);
     throw error;
   }
 };

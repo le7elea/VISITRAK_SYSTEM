@@ -146,38 +146,36 @@ export default async function handler(req, res) {
           officialName: officialName
         });
         
-        // Generate secure reset token with URL-safe encoding
+        // Generate secure reset token - use hex for simpler URL encoding
         const crypto = await import('crypto');
-        const rawToken = crypto.randomBytes(32).toString('base64');
-        token = rawToken
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
+        token = crypto.randomBytes(32).toString('hex'); // Simple hex string
         
         expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
         
-        console.log('🔐 Generated reset token (first 12 chars):', token.substring(0, 12) + '...');
+        console.log('🔐 Generated reset token:', token.substring(0, 20) + '...');
         console.log('⏳ Token expires at:', expiresAt.toISOString());
         
         // Save token to Firestore with ALL required fields
         console.log('💾 Saving token to Firestore...');
         const tokenData = {
           email: normalizedEmail,
-          token,
+          token: token, // Store plain token
           officeId: officeId,
           officeName: officeName,
           officialName: officialName,
           expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-          used: false, // ✅ CRITICAL: Set used to false initially
+          used: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           requestTime: new Date().toISOString(),
           ipAddress: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown'
         };
         
-        await db.collection('passwordResetTokens').add(tokenData);
+        const tokenRef = await db.collection('passwordResetTokens').add(tokenData);
+        const tokenId = tokenRef.id;
         
         tokenSaved = true;
-        console.log('✅ Token saved successfully with data:', {
+        console.log('✅ Token saved successfully:', {
+          tokenId,
           email: normalizedEmail,
           officeName,
           used: false,
@@ -213,11 +211,7 @@ export default async function handler(req, res) {
         officeName = 'Office';
         officialName = '';
         const crypto = await import('crypto');
-        const rawToken = crypto.randomBytes(32).toString('base64');
-        token = rawToken
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
+        token = crypto.randomBytes(32).toString('hex');
         expiresAt = new Date(Date.now() + 15 * 60 * 1000);
         tokenSaved = false;
       }
@@ -228,23 +222,19 @@ export default async function handler(req, res) {
       officeName = 'Office';
       officialName = '';
       const crypto = await import('crypto');
-      const rawToken = crypto.randomBytes(32).toString('base64');
-      token = rawToken
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+      token = crypto.randomBytes(32).toString('hex');
       expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       tokenSaved = false;
     }
     
-    // Generate reset link with email parameter
+    // Generate reset link - IMPORTANT: Use encodeURIComponent for email only
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://visitrak-system.vercel.app';
-    const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(normalizedEmail)}`;
+    const resetLink = `${appUrl}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
     
     console.log('🔗 Reset link generated:', {
-      tokenPreview: token.substring(0, 12) + '...',
+      token: token.substring(0, 20) + '...',
       email: normalizedEmail,
-      resetLink: resetLink.substring(0, 100) + '...'
+      resetLink: resetLink
     });
     
     // ========== Check SendGrid Configuration ==========
@@ -267,10 +257,9 @@ export default async function handler(req, res) {
         office: officeName,
         officialName: officialName,
         resetLink: resetLink,
-        tokenPreview: token.substring(0, 20) + '...',
+        token: token, // Include full token for testing
         expiresAt: expiresAt.toISOString(),
         tokenSaved: tokenSaved,
-        token: token, // Include token for testing
         warning: 'Email not sent - configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL',
         nextSteps: [
           'Add SENDGRID_API_KEY to Vercel environment variables',
@@ -284,7 +273,7 @@ export default async function handler(req, res) {
     console.log('📤 Preparing to send email...');
     console.log(`   To: ${normalizedEmail}`);
     console.log(`   From: ${process.env.SENDGRID_FROM_EMAIL}`);
-    console.log(`   Reset Link: ${resetLink}`);
+    console.log(`   Reset Link: ${resetLink.substring(0, 80)}...`);
     
     const emailMessage = {
       to: normalizedEmail,

@@ -41,7 +41,7 @@ const Modal = ({ show, title, message, onClose }) => {
 };
 
 /* =============================
-   Reset Password Page - COMPLETE FIXED VERSION
+   Reset Password Page - FIXED VERSION
 ============================= */
 const ResetPassword = () => {
   const [params] = useSearchParams();
@@ -73,15 +73,17 @@ const ResetPassword = () => {
   useEffect(() => {
     const validateToken = async () => {
       console.log("🔗 URL Parameters:", { 
-        token: token?.substring(0, 12) + '...', 
-        email 
+        token: token?.substring(0, 20) + (token?.length > 20 ? '...' : ''),
+        email: email?.substring(0, 30) + (email?.length > 30 ? '...' : ''),
+        tokenLength: token?.length,
+        emailLength: email?.length
       });
 
       if (!token) {
         setModal({
           show: true,
           title: "Invalid Link",
-          message: "Reset token is missing.",
+          message: "Reset token is missing from the URL.",
           redirect: "/login",
         });
         setValidating(false);
@@ -100,17 +102,25 @@ const ResetPassword = () => {
       }
 
       try {
-        // Decode URL-encoded values
-        const decodedToken = decodeURIComponent(token);
-        const decodedEmail = decodeURIComponent(email).toLowerCase();
+        // IMPORTANT: Token should be passed as-is, react-router already decoded it
+        const cleanToken = token;
         
-        console.log("🔍 Decoded parameters:", { 
-          token: decodedToken.substring(0, 12) + '...',
-          email: decodedEmail 
+        // Decode email (it might be URL-encoded)
+        let cleanEmail = email;
+        try {
+          cleanEmail = decodeURIComponent(email).trim().toLowerCase();
+        } catch (e) {
+          cleanEmail = email.trim().toLowerCase();
+        }
+        
+        console.log("🔍 Validating with:", { 
+          token: cleanToken.substring(0, 20) + '...',
+          email: cleanEmail 
         });
 
         // Validate token with email
-        const result = await validatePasswordResetToken(decodedToken, decodedEmail);
+        console.log("🔄 Calling validatePasswordResetToken...");
+        const result = await validatePasswordResetToken(cleanToken, cleanEmail);
 
         if (!result) {
           setModal({
@@ -124,9 +134,11 @@ const ResetPassword = () => {
         }
 
         console.log("✅ Token validated successfully:", {
+          id: result.id,
           email: result.email,
           officeName: result.officeName,
-          expiresAt: result.expiresAt?.toISOString()
+          expiresAt: result.expiresAt?.toISOString(),
+          used: result.used
         });
 
         setResetData(result);
@@ -136,7 +148,7 @@ const ResetPassword = () => {
         setModal({
           show: true,
           title: "Error",
-          message: "Failed to validate reset link. Please try again.",
+          message: "Failed to validate reset link. Please try again or request a new link.",
           redirect: "/login",
         });
         setValidating(false);
@@ -232,7 +244,10 @@ const ResetPassword = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5B3886] mx-auto mb-4"></div>
           <p className="text-gray-600">Validating reset link...</p>
-          <p className="text-sm text-gray-500 mt-2">Please wait</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Token: {token ? `${token.substring(0, 10)}...` : 'none'}<br/>
+            Email: {email ? email.substring(0, 20) + (email.length > 20 ? '...' : '') : 'none'}
+          </p>
         </div>
       </div>
     );
@@ -272,6 +287,11 @@ const ResetPassword = () => {
             {resetData.officeName && (
               <p className="text-sm text-gray-600">
                 <span className="font-medium">Office:</span> {resetData.officeName}
+              </p>
+            )}
+            {resetData.officialName && (
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Official:</span> {resetData.officialName}
               </p>
             )}
           </div>
