@@ -454,79 +454,249 @@ export default async function handler(req, res) {
       },
       subject: 'Reset Your VisiTrak Password',
       html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Password Reset - VisiTrak</title>
-        </head>
-        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                  <!-- Header -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #5B3886, #8B5AA8); padding: 30px; text-align: center;">
-                      <h1 style="color: white; margin: 0; font-size: 24px;">🔒 VisiTrak Password Reset</h1>
-                    </td>
-                  </tr>
-                  
-                  <!-- Content -->
-                  <tr>
-                    <td style="padding: 30px;">
-                      <p style="font-size: 16px; color: #333; margin: 0 0 20px 0;"><strong>Hello,</strong></p>
-                      <p style="font-size: 14px; color: #666; line-height: 1.6; margin: 0 0 20px 0;">
-                        You recently requested to reset your password for your VisiTrak account.
-                      </p>
-                      
-                      
-                      
-                      <p style="font-size: 14px; color: #666; line-height: 1.6; margin: 20px 0;">
-                        Click the button below to reset your password:
-                      </p>
-                      
-                      <!-- Button -->
-                      <div style="text-align: center; margin: 30px 0;">
-                        <a href="${resetLink}" style="background-color: #5B3886; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px;">
-                          🔑 Reset Password
-                        </a>
-                      </div>
-                      
-                      <!-- Warning Box -->
-                      <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                        <p style="margin: 0 0 8px 0; font-size: 14px; color: #856404;"><strong>⚠️ Important:</strong></p>
-                        <p style="margin: 4px 0; font-size: 13px; color: #856404;">• This link will expire in <strong>15 minutes</strong></p>
-                        <p style="margin: 4px 0; font-size: 13px; color: #856404;">• If you didn't request this, please ignore this email</p>
-                        <p style="margin: 4px 0; font-size: 13px; color: #856404;">• For security, this link can only be used once</p>
-                      </div>
-                      
-                      <!-- Footer -->
-                      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-                        <p style="font-size: 12px; color: #999; margin: 0 0 10px 0;">
-                          If the button doesn't work, copy and paste this link into your browser:
-                        </p>
-                        <p style="font-size: 11px; color: #666; background-color: #f8f9fa; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace;">
-                          ${resetLink}
-                        </p>
-                        <p style="font-size: 11px; color: #999; margin: 20px 0 0 0; text-align: center;">
-                          © 2025 VisiTrak System - BISU MASID. All rights reserved.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Reset - VisiTrak</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f7f7f7;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #5B3886, #8B5AA8);
+            padding: 30px 20px;
+            text-align: center;
+        }
+        
+        .logo {
+            width: 80px;
+            height: auto;
+            margin-bottom: 15px;
+        }
+        
+        .logo-text {
+            font-size: 32px;
+            font-weight: 700;
+            color: white;
+            letter-spacing: -0.5px;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        
+        .user-name {
+            color: #5B3886;
+            font-weight: 700;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 25px;
+        }
+        
+        .highlight-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #5B3886;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .highlight-text {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .login-button {
+            display: block;
+            width: 100%;
+            background: linear-gradient(135deg, #5B3886, #8B5AA8);
+            color: white;
+            text-align: center;
+            padding: 18px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 18px;
+            border-radius: 50px;
+            margin: 30px 0;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(91, 56, 134, 0.2);
+        }
+        
+        .link-note {
+            font-size: 14px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .warning-box {
+            background-color: #fff8e6;
+            border: 1px solid #ffd54f;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        
+        .warning-title {
+            color: #ff9800;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .warning-text {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .footer {
+            background-color: #f8f9fa;
+            padding: 25px 30px;
+            text-align: center;
+            border-top: 1px solid #eee;
+        }
+        
+        .footer-text {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .brand-name {
+            font-weight: 600;
+            color: #5B3886;
+        }
+        
+        .token-info {
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            margin-top: 15px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-family: monospace;
+        }
+        
+        @media (max-width: 480px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .greeting {
+                font-size: 22px;
+            }
+            
+            .login-button {
+                padding: 16px;
+                font-size: 16px;
+            }
+            
+            .header {
+                padding: 25px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <!-- VisiTrak Logo -->
+            <div class="logo">
+                <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="width: 80px; height: 80px;">
+                    <circle cx="60" cy="60" r="56" fill="#5B3886"/>
+                    <path fill="white" d="M60 30c-16.54 0-30 13.46-30 30s13.46 30 30 30 30-13.46 30-30-13.46-30-30-30zm0 10c11.05 0 20 8.95 20 20s-8.95 20-20 20-20-8.95-20-20 8.95-20 20-20z"/>
+                    <path fill="white" d="M60 45c-8.28 0-15 6.72-15 15s6.72 15 15 15 15-6.72 15-15-6.72-15-15-15zm0 5c5.52 0 10 4.48 10 10s-4.48 10-10 10-10-4.48-10-10 4.48-10 10-10z"/>
+                    <circle cx="60" cy="60" r="8" fill="#8B5AA8"/>
+                </svg>
+            </div>
+            <div class="logo-text">VisiTrak</div>
+        </div>
+        
+        <div class="content">
+            <h1 class="greeting">Hi <span class="user-name">${officeName || normalizedEmail.split('@')[0]}</span>,</h1>
+            
+            <p class="message">
+                You recently requested to reset your password for your VisiTrak account. To complete the reset process, click the button below. This link is valid for 15 minutes.
+            </p>
+            
+            <div class="highlight-box">
+                <p class="highlight-text">
+                    <strong>Important:</strong> For your security, this link will expire in 15 minutes. If you don't use it within that time, you'll need to request a new reset link.
+                </p>
+            </div>
+            
+            <a href="${resetLink}" class="login-button">
+                🔑 RESET YOUR PASSWORD
+            </a>
+            
+            <p class="link-note">
+                This link confirms your email address associated with your VisiTrak account.
+            </p>
+            
+            <div class="warning-box">
+                <div class="warning-title">Not you?</div>
+                <p class="warning-text">
+                    If you didn't request a password reset, don't worry. Your email address may have been entered by mistake. You can safely ignore or delete this email, and continue using your existing password to log in.
+                </p>
+            </div>
+            
+            <div class="token-info">
+                ${process.env.NODE_ENV === 'development' ? resetLink : 'Reset link valid for 15 minutes'}
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p class="footer-text">Thank you for using VisiTrak,</p>
+            <p class="footer-text"><span class="brand-name">The VisiTrak Team</span></p>
+            <p class="footer-text" style="margin-top: 15px; font-size: 12px;">
+                This is an automated message, please do not reply to this email.
+            </p>
+            <p class="footer-text" style="font-size: 11px; color: #aaa; margin-top: 10px;">
+                © ${new Date().getFullYear()} VisiTrak System - BISU MASID
+            </p>
+        </div>
+    </div>
+</body>
+</html>
       `,
       text: `
 VisiTrak Password Reset
 
-Hello,
+Hello ${officeName || normalizedEmail.split('@')[0]},
 
 You recently requested to reset your password for your VisiTrak account.
 
@@ -539,7 +709,8 @@ IMPORTANT:
 • For security, this link can only be used once
 
 ---
-© 2025 VisiTrak System - BISU MASID
+© ${new Date().getFullYear()} VisiTrak System - BISU MASID
+This is an automated message, please do not reply.
       `.trim()
     };
     
