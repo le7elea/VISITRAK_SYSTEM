@@ -1,4 +1,3 @@
-// /api/send-password-reset.js
 import sgMail from '@sendgrid/mail';
 
 // Configure SendGrid at module level
@@ -84,6 +83,9 @@ export default async function handler(req, res) {
     let token = null;
     let expiresAt = null;
     let tokenSaved = false;
+    let officeId = null;
+    let officeName = null;
+    let officialName = null;
     
     // ========== Firebase Admin: Validate Email & Save Token ==========
     if (hasFirebaseAdmin) {
@@ -133,39 +135,54 @@ export default async function handler(req, res) {
         // Get office data
         const officeDoc = officesSnapshot.docs[0];
         officeData = officeDoc.data();
+        officeId = officeDoc.id;
+        officeName = officeData.name || 'Unknown Office';
+        officialName = officeData.officialName || '';
         
         console.log('✅ Email found:', {
-          officeId: officeDoc.id,
+          officeId,
           email: officeData.email,
-          name: officeData.name || 'N/A',
-          officialName: officeData.officialName || 'N/A'
+          name: officeName,
+          officialName: officialName
         });
         
-        // Generate secure reset token
+        // Generate secure reset token with URL-safe encoding
         const crypto = await import('crypto');
-        token = crypto.randomBytes(32).toString('hex');
+        const rawToken = crypto.randomBytes(32).toString('base64');
+        token = rawToken
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+        
         expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
         
         console.log('🔐 Generated reset token (first 12 chars):', token.substring(0, 12) + '...');
         console.log('⏳ Token expires at:', expiresAt.toISOString());
         
-        // Save token to Firestore
+        // Save token to Firestore with ALL required fields
         console.log('💾 Saving token to Firestore...');
-        await db.collection('passwordResetTokens').add({
+        const tokenData = {
           email: normalizedEmail,
           token,
-          officeId: officeDoc.id,
-          officeName: officeData.name || 'Unknown Office',
-          officialName: officeData.officialName || '',
+          officeId: officeId,
+          officeName: officeName,
+          officialName: officialName,
           expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-          used: false,
+          used: false, // ✅ CRITICAL: Set used to false initially
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           requestTime: new Date().toISOString(),
           ipAddress: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown'
-        });
+        };
+        
+        await db.collection('passwordResetTokens').add(tokenData);
         
         tokenSaved = true;
-        console.log('✅ Token saved successfully');
+        console.log('✅ Token saved successfully with data:', {
+          email: normalizedEmail,
+          officeName,
+          used: false,
+          expiresAt: expiresAt.toISOString()
+        });
         
       } catch (firebaseError) {
         console.error('❌ Firebase error:', firebaseError.message);
@@ -193,8 +210,14 @@ export default async function handler(req, res) {
         // For other Firebase errors, fall back to simple mode
         console.log('⚠️ Falling back to simple mode (no token persistence)');
         officeData = { name: 'Office', email: normalizedEmail };
+        officeName = 'Office';
+        officialName = '';
         const crypto = await import('crypto');
-        token = crypto.randomBytes(32).toString('hex');
+        const rawToken = crypto.randomBytes(32).toString('base64');
+        token = rawToken
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
         expiresAt = new Date(Date.now() + 15 * 60 * 1000);
         tokenSaved = false;
       }
@@ -202,17 +225,27 @@ export default async function handler(req, res) {
       // No Firebase Admin - simple token generation
       console.log('⚠️ Firebase Admin not configured - using simple mode');
       officeData = { name: 'Office', email: normalizedEmail };
+      officeName = 'Office';
+      officialName = '';
       const crypto = await import('crypto');
-      token = crypto.randomBytes(32).toString('hex');
+      const rawToken = crypto.randomBytes(32).toString('base64');
+      token = rawToken
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
       expiresAt = new Date(Date.now() + 15 * 60 * 1000);
       tokenSaved = false;
     }
     
-    // Generate reset link
+    // Generate reset link with email parameter
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://visitrak-system.vercel.app';
-    const resetLink = `${appUrl}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
+    const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(normalizedEmail)}`;
     
-    console.log('🔗 Reset link generated');
+    console.log('🔗 Reset link generated:', {
+      tokenPreview: token.substring(0, 12) + '...',
+      email: normalizedEmail,
+      resetLink: resetLink.substring(0, 100) + '...'
+    });
     
     // ========== Check SendGrid Configuration ==========
     if (!SENDGRID_CONFIGURED) {
@@ -231,12 +264,13 @@ export default async function handler(req, res) {
         message: 'Password reset token generated (development mode)',
         mode: 'development',
         email: normalizedEmail,
-        office: officeData.name || 'Unknown Office',
-        officialName: officeData.officialName || '',
+        office: officeName,
+        officialName: officialName,
         resetLink: resetLink,
         tokenPreview: token.substring(0, 20) + '...',
         expiresAt: expiresAt.toISOString(),
         tokenSaved: tokenSaved,
+        token: token, // Include token for testing
         warning: 'Email not sent - configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL',
         nextSteps: [
           'Add SENDGRID_API_KEY to Vercel environment variables',
@@ -250,6 +284,7 @@ export default async function handler(req, res) {
     console.log('📤 Preparing to send email...');
     console.log(`   To: ${normalizedEmail}`);
     console.log(`   From: ${process.env.SENDGRID_FROM_EMAIL}`);
+    console.log(`   Reset Link: ${resetLink}`);
     
     const emailMessage = {
       to: normalizedEmail,
@@ -290,8 +325,8 @@ export default async function handler(req, res) {
                       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #5B3886; margin: 20px 0;">
                         <p style="margin: 0 0 8px 0; font-size: 14px; color: #333;"><strong>Account Details:</strong></p>
                         <p style="margin: 4px 0; font-size: 13px; color: #666;">📧 Email: ${normalizedEmail}</p>
-                        <p style="margin: 4px 0; font-size: 13px; color: #666;">🏢 Office: ${officeData.name || 'VisiTrak System'}</p>
-                        ${officeData.officialName ? `<p style="margin: 4px 0; font-size: 13px; color: #666;">👤 Official Name: ${officeData.officialName}</p>` : ''}
+                        <p style="margin: 4px 0; font-size: 13px; color: #666;">🏢 Office: ${officeName}</p>
+                        ${officialName ? `<p style="margin: 4px 0; font-size: 13px; color: #666;">👤 Official Name: ${officialName}</p>` : ''}
                       </div>
                       
                       <p style="font-size: 14px; color: #666; line-height: 1.6; margin: 20px 0;">
@@ -310,6 +345,7 @@ export default async function handler(req, res) {
                         <p style="margin: 0 0 8px 0; font-size: 14px; color: #856404;"><strong>⚠️ Important:</strong></p>
                         <p style="margin: 4px 0; font-size: 13px; color: #856404;">• This link will expire in <strong>15 minutes</strong></p>
                         <p style="margin: 4px 0; font-size: 13px; color: #856404;">• If you didn't request this, please ignore this email</p>
+                        <p style="margin: 4px 0; font-size: 13px; color: #856404;">• For security, this link can only be used once</p>
                       </div>
                       
                       <!-- Footer -->
@@ -342,8 +378,8 @@ You recently requested to reset your password for your VisiTrak account.
 
 Account Details:
 - Email: ${normalizedEmail}
-- Office: ${officeData.name || 'VisiTrak System'}
-${officeData.officialName ? `- Official Name: ${officeData.officialName}` : ''}
+- Office: ${officeName}
+${officialName ? `- Official Name: ${officialName}` : ''}
 
 Reset your password by clicking this link:
 ${resetLink}
@@ -351,6 +387,7 @@ ${resetLink}
 IMPORTANT:
 • This link will expire in 15 minutes
 • If you didn't request this, please ignore this email
+• For security, this link can only be used once
 
 ---
 © 2025 VisiTrak System - BISU MASID
@@ -375,8 +412,8 @@ IMPORTANT:
           success: true,
           message: 'Password reset email sent successfully',
           email: normalizedEmail,
-          office: officeData.name || 'Unknown Office',
-          officialName: officeData.officialName || '',
+          office: officeName,
+          officialName: officialName,
           expiresAt: expiresAt.toISOString(),
           messageId: messageId,
           tokenSaved: tokenSaved,

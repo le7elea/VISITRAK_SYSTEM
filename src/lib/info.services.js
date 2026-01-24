@@ -149,38 +149,106 @@ export const getOfficeByEmail = async (email) => {
 };
 
 /* =============================
-   PASSWORD RESET TOKEN FUNCTIONS
+   PASSWORD RESET TOKEN FUNCTIONS - UPDATED & FIXED
 ============================= */
 /**
- * Validate password reset token
+ * Validate password reset token with email verification
  */
-export const validatePasswordResetToken = async (token) => {
+export const validatePasswordResetToken = async (token, email = null) => {
   try {
+    console.log("🔍 [validatePasswordResetToken] called with:", { 
+      token: token?.substring(0, 12) + '...',
+      email: email || 'not provided'
+    });
+
+    if (!token) {
+      console.error("❌ Token is required");
+      return null;
+    }
+
+    // Decode URL-encoded token if needed
+    const decodedToken = decodeURIComponent(token);
+    console.log("🔑 Decoded token:", decodedToken.substring(0, 12) + '...');
+
+    // Query for the token
     const q = query(
       passwordResetTokensCollection,
-      where("token", "==", token),
-      where("used", "==", false)
+      where("token", "==", decodedToken)
     );
 
     const snap = await getDocs(q);
+    
+    console.log("📊 Firestore query results:", snap.size, "documents found");
+    
     if (snap.empty) {
-      console.log("❌ Token not found or already used");
+      console.log("❌ Token not found in database");
       return null;
     }
 
     const docSnap = snap.docs[0];
     const data = docSnap.data();
+    const docId = docSnap.id;
+    
+    console.log("📄 Token document found:", {
+      id: docId,
+      storedEmail: data.email,
+      storedToken: data.token?.substring(0, 12) + '...',
+      used: data.used,
+      expiresAt: data.expiresAt?.toDate()?.toISOString()
+    });
 
-    // Check if token is expired
-    if (data.expiresAt && data.expiresAt.toDate() < new Date()) {
+    // Verify token matches exactly
+    if (data.token !== decodedToken) {
+      console.log("❌ Token mismatch");
+      return null;
+    }
+
+    // Verify email if provided
+    if (email) {
+      const decodedEmail = decodeURIComponent(email).toLowerCase();
+      if (data.email !== decodedEmail) {
+        console.log(`❌ Email mismatch: expected ${decodedEmail}, got ${data.email}`);
+        return null;
+      }
+      console.log("✅ Email verified:", data.email);
+    }
+
+    // Check if token is already used
+    if (data.used === true) {
+      console.log("❌ Token already used");
+      return null;
+    }
+
+    // Check if token has expired
+    if (!data.expiresAt) {
+      console.log("❌ Token has no expiration date");
+      return null;
+    }
+
+    const expiresAt = data.expiresAt.toDate();
+    const now = new Date();
+    
+    console.log("⏰ Time check:", {
+      now: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      isExpired: now > expiresAt,
+      differenceMs: expiresAt.getTime() - now.getTime()
+    });
+
+    if (now > expiresAt) {
       console.log("❌ Token expired");
       return null;
     }
 
-    console.log("✅ Valid token found for email:", data.email);
-    return { id: docSnap.id, ...data };
+    console.log("✅ Token is VALID");
+    return { 
+      id: docId, 
+      ...data,
+      expiresAt: expiresAt // Return as Date object for convenience
+    };
   } catch (error) {
-    console.error("Error validating password reset token:", error);
+    console.error("❌ Error validating password reset token:", error);
+    console.error("Stack:", error.stack);
     throw error;
   }
 };
@@ -190,14 +258,17 @@ export const validatePasswordResetToken = async (token) => {
  */
 export const markPasswordResetTokenUsed = async (tokenId) => {
   try {
+    console.log("🔐 Marking token as used:", tokenId);
+    
     await updateDoc(doc(db, "passwordResetTokens", tokenId), {
       used: true,
       usedAt: serverTimestamp(),
     });
+    
     console.log("✅ Token marked as used:", tokenId);
     return true;
   } catch (error) {
-    console.error("Error marking token as used:", error);
+    console.error("❌ Error marking token as used:", error);
     throw error;
   }
 };
@@ -207,21 +278,35 @@ export const markPasswordResetTokenUsed = async (tokenId) => {
  */
 export const updateOfficePasswordByEmail = async (email, newPassword) => {
   try {
+    console.log("🔑 Updating password for email:", email);
+    
     const q = query(officesCollection, where("email", "==", email));
     const snap = await getDocs(q);
+    
     if (snap.empty) {
+      console.error("❌ Office not found with email:", email);
       throw new Error("Office not found");
     }
 
-    await updateDoc(doc(db, "offices", snap.docs[0].id), {
+    const officeDoc = snap.docs[0];
+    const officeId = officeDoc.id;
+    const officeData = officeDoc.data();
+    
+    console.log("🏢 Found office:", {
+      id: officeId,
+      name: officeData.name,
+      email: officeData.email
+    });
+
+    await updateDoc(doc(db, "offices", officeId), {
       password: newPassword,
       updatedAt: serverTimestamp(),
     });
 
-    console.log("✅ Password updated for email:", email);
+    console.log("✅ Password updated successfully for email:", email);
     return true;
   } catch (error) {
-    console.error("Error updating password:", error);
+    console.error("❌ Error updating password:", error);
     throw error;
   }
 };
@@ -231,6 +316,8 @@ export const updateOfficePasswordByEmail = async (email, newPassword) => {
  */
 export const createPasswordResetActivityLog = async (email) => {
   try {
+    console.log("📝 Creating password reset activity log for:", email);
+    
     const logData = {
       title: "Password Reset",
       description: `Password reset completed for ${email}`,
@@ -869,6 +956,56 @@ export const updateOfficeOfficialName = async (officeId, officialName) => {
     return { success: true, officialName };
   } catch (error) {
     console.error("Error updating office official name:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create password reset request activity log
+ */
+export const createPasswordResetRequestLog = async (email) => {
+  try {
+    console.log("📝 Creating password reset request log for:", email);
+    
+    const logData = {
+      title: "Password Reset Request",
+      description: `Password reset requested for ${email}`,
+      office: email.split('@')[0] || "Unknown Office",
+      type: "password_reset_request",
+      userEmail: email,
+      userName: "User",
+      userRole: "user",
+      timestamp: serverTimestamp(),
+      action: "request"
+    };
+    
+    await addDoc(activityLogsCollection, logData);
+    console.log("✅ Password reset request log created for:", email);
+    return true;
+  } catch (error) {
+    console.error("❌ Error creating password reset request log:", error);
+    return false;
+  }
+};
+
+/**
+ * Get all password reset tokens (admin function)
+ */
+export const getAllPasswordResetTokens = async () => {
+  try {
+    const snapshot = await getDocs(passwordResetTokensCollection);
+    const tokens = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      expiresAt: doc.data().expiresAt?.toDate() || null,
+      createdAt: doc.data().createdAt?.toDate() || null,
+      usedAt: doc.data().usedAt?.toDate() || null
+    }));
+    
+    console.log(`✅ Fetched ${tokens.length} password reset tokens`);
+    return tokens;
+  } catch (error) {
+    console.error("Error fetching password reset tokens:", error);
     throw error;
   }
 };
