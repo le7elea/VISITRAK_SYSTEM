@@ -273,8 +273,6 @@ const ResetPassword = () => {
         </p>
       </div>
 
-      {/* Bottom Wave */}
-      <div className="w-full h-40 bg-[#5B3886] rounded-t-[100%]" />
 
       {/* Modal */}
       <Modal
