@@ -481,13 +481,7 @@ export default async function handler(req, res) {
                         You recently requested to reset your password for your VisiTrak account.
                       </p>
                       
-                      <!-- Office Info Box -->
-                      // <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #5B3886; margin: 20px 0;">
-                      //   <p style="margin: 0 0 8px 0; font-size: 14px; color: #333;"><strong>Account Details:</strong></p>
-                      //   <p style="margin: 4px 0; font-size: 13px; color: #666;">📧 Email: ${normalizedEmail}</p>
-                      //   <p style="margin: 4px 0; font-size: 13px; color: #666;">🏢 Office: ${officeName}</p>
-                      //   ${officialName ? `<p style="margin: 4px 0; font-size: 13px; color: #666;">👤 Official Name: ${officialName}</p>` : ''}
-                      // </div>
+                      
                       
                       <p style="font-size: 14px; color: #666; line-height: 1.6; margin: 20px 0;">
                         Click the button below to reset your password:
@@ -535,11 +529,6 @@ VisiTrak Password Reset
 Hello,
 
 You recently requested to reset your password for your VisiTrak account.
-
-// Account Details:
-// - Email: ${normalizedEmail}
-// - Office: ${officeName}
-// ${officialName ? `- Official Name: ${officialName}` : ''}
 
 Reset your password by clicking this link:
 ${resetLink}
