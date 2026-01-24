@@ -111,41 +111,51 @@ const ForgotPassword = () => {
           responseData = JSON.parse(responseText);
         } catch (jsonError) {
           console.error("JSON parse error:", jsonError);
+          console.error("Response text:", responseText);
         }
       }
 
       if (!response.ok) {
+        // Handle specific API errors
+        if (responseData.error === 'SENDGRID_API_KEY_MISSING') {
+          throw new Error("Email service not configured. Please contact system administrator.");
+        } else if (responseData.error === 'SENDGRID_FROM_EMAIL_MISSING') {
+          throw new Error("Email sender not configured. Please contact system administrator.");
+        } else if (responseData.error === 'EMAIL_SEND_FAILED') {
+          throw new Error("Failed to send email. Please try again or contact support.");
+        } else if (responseData.error === 'EMAIL_NOT_FOUND') {
+          throw new Error("This email is not registered in the system.");
+        }
+        
         const errorMsg = responseData.message || 
                          responseData.error || 
                          `Request failed (Status: ${response.status})`;
         throw new Error(errorMsg);
       }
 
-      // 3️⃣ Handle different response modes
-      if (responseData.mode === 'simulation') {
-        // Simulation mode (firebase-admin not installed or not working)
-        setModal({
-          show: true,
-          title: "⚠️ Development Mode",
-          message: `Password reset simulation complete.\n\nEmail: ${normalizedEmail}\n\nNote: Check Firebase Admin configuration.`,
-        });
-      } else if (responseData.mode === 'token_only') {
-        // Token generated but email not sent (SendGrid not configured)
-        setModal({
-          show: true,
-          title: "Token Generated",
-          message: `Reset token created.\n\nConfigure SendGrid to enable email sending.`,
-        });
+      // 3️⃣ Handle success response
+      if (responseData.success) {
+        // Check if it's development mode (no actual email sent)
+        if (responseData.mode === 'development') {
+          setModal({
+            show: true,
+            title: "⚠️ Development Mode",
+            message: `Password reset token generated.\n\nEmail: ${normalizedEmail}\n\nNote: Email sending is not configured. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL to environment variables.\n\nToken: ${responseData.token?.substring(0, 20)}...`,
+          });
+        } else {
+          // ✅ SUCCESS - Email actually sent
+          setModal({
+            show: true,
+            title: "✓ Email Sent Successfully",
+            message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder).\nThe link will expire in 15 minutes.`,
+          });
+          
+          // Clear form only on success
+          setEmail("");
+        }
       } else {
-        // ✅ SUCCESS - Email actually sent (production mode)
-        setModal({
-          show: true,
-          title: "✓ Email Sent Successfully",
-          message: `Password reset link has been sent to:\n${normalizedEmail}\n\nPlease check your inbox (and spam folder).\nThe link will expire in 15 minutes.`,
-        });
-        
-        // Clear form only on success
-        setEmail("");
+        // Unexpected response format
+        throw new Error("Unexpected response from server. Please try again.");
       }
 
       setLoading(false);
@@ -160,6 +170,13 @@ const ForgotPassword = () => {
       if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
         errorTitle = "Connection Error";
         errorMessage = "Cannot connect to the server. Please check your internet connection.";
+      } else if (error.message.includes("Email service not configured") || 
+                 error.message.includes("Email sender not configured")) {
+        errorTitle = "Configuration Error";
+        errorMessage = error.message;
+      } else if (error.message.includes("Failed to send email")) {
+        errorTitle = "Email Service Error";
+        errorMessage = "Unable to send reset email. Please try again in a few minutes or contact support.";
       } else if (error.message.includes("405")) {
         errorTitle = "Service Error";
         errorMessage = "Password reset service is temporarily unavailable.";
@@ -177,6 +194,9 @@ const ForgotPassword = () => {
       } else if (error.message.includes("Firebase Admin initialization")) {
         errorTitle = "Configuration Error";
         errorMessage = "Authentication service not configured properly.";
+      } else if (error.message) {
+        // Use the actual error message if it's user-friendly
+        errorMessage = error.message;
       }
       
       setModal({
