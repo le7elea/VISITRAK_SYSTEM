@@ -277,25 +277,6 @@ const ResetPassword = () => {
           Please enter your new password below for your Office Admin account.
         </p>
 
-        {/* Account Information */}
-        {resetData && (
-          <div className="mb-6 p-4 bg-white/80 backdrop-blur-sm rounded-lg border border-purple-100 shadow-sm">
-            <p className="text-sm font-medium text-gray-700 mb-1">Account Details:</p>
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Email:</span> {resetData.email}
-            </p>
-            {resetData.officeName && (
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Office:</span> {resetData.officeName}
-              </p>
-            )}
-            {resetData.officialName && (
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Official:</span> {resetData.officialName}
-              </p>
-            )}
-          </div>
-        )}
 
         {/* New Password */}
         <div className="text-left mb-4">
