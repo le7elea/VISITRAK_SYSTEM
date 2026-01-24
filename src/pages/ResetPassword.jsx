@@ -11,7 +11,7 @@ import {
 
 // 👉 replace with your actual logos
 import bisuLogo from "../assets/bisulogo.png";
-import vtLogo from "../assets/vtlogo.png";
+import vtLogo from "../assets/bisulogo01.png";
 
 /* =============================
    Modal Component
