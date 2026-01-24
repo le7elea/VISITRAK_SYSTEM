@@ -9,10 +9,6 @@ import {
   createPasswordResetActivityLog,
 } from "../lib/info.services";
 
-// 👉 replace with your actual logos
-import bisuLogo from "../assets/bisulogo.png";
-import vtLogo from "../assets/vtlogo.png";
-
 /* =============================
    Modal Component
 ============================= */
@@ -25,9 +21,11 @@ const Modal = ({ show, title, message, onClose }) => {
         <h3 className="text-xl font-bold text-gray-800 text-center mb-2">
           {title}
         </h3>
+
         <p className="text-sm text-gray-500 text-center mb-6 whitespace-pre-line">
           {message}
         </p>
+
         <button
           onClick={onClose}
           className="w-full h-11 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold transition"
@@ -45,8 +43,10 @@ const Modal = ({ show, title, message, onClose }) => {
 const ResetPassword = () => {
   const [params] = useSearchParams();
   const token = params.get("token");
+
   const navigate = useNavigate();
 
+  // States
   const [validating, setValidating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -66,7 +66,7 @@ const ResetPassword = () => {
   });
 
   /* =============================
-     Validate Token
+     Validate Token on Load
   ============================= */
   useEffect(() => {
     const validateToken = async () => {
@@ -83,6 +83,7 @@ const ResetPassword = () => {
 
       try {
         const result = await validatePasswordResetToken(token);
+        console.log("Reset token result:", result);
 
         if (!result) {
           setModal({
@@ -98,7 +99,8 @@ const ResetPassword = () => {
 
         setResetData(result);
         setValidating(false);
-      } catch {
+      } catch (error) {
+        console.error("Token validation error:", error);
         setModal({
           show: true,
           title: "Error",
@@ -125,7 +127,7 @@ const ResetPassword = () => {
     rules.length && rules.uppercase && rules.special;
 
   /* =============================
-     Submit
+     Handle Password Reset
   ============================= */
   const handleResetPassword = async () => {
     if (!passwordValid) {
@@ -133,7 +135,7 @@ const ResetPassword = () => {
         show: true,
         title: "Weak Password",
         message:
-          "Password must be at least 10 characters, include 1 uppercase letter, and 1 number or special character.",
+          "Password must be at least 10 characters long, contain 1 uppercase letter, and 1 number or special character.",
       });
       return;
     }
@@ -149,6 +151,7 @@ const ResetPassword = () => {
 
     try {
       setSubmitting(true);
+
       await updateOfficePasswordByEmail(resetData.email, newPassword);
       await markPasswordResetTokenUsed(resetData.id);
       await createPasswordResetActivityLog(resetData.email);
@@ -159,17 +162,22 @@ const ResetPassword = () => {
         message: "Your password has been reset successfully.",
         redirect: "/login",
       });
+
       setSubmitting(false);
-    } catch {
+    } catch (error) {
+      console.error(error);
       setModal({
         show: true,
         title: "Error",
-        message: "Failed to reset password.",
+        message: "Failed to reset password. Please try again.",
       });
       setSubmitting(false);
     }
   };
 
+  /* =============================
+     Loading Screen
+  ============================= */
   if (validating) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
@@ -179,31 +187,30 @@ const ResetPassword = () => {
   }
 
   /* =============================
-     UI (DESIGN MATCH)
+     UI
   ============================= */
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-between overflow-hidden">
-      {/* Top */}
-      <div className="w-full max-w-md px-6 pt-12 text-center">
-        <div className="flex justify-center gap-3 mb-6">
-          <img src={bisuLogo} alt="BISU" className="w-10 h-10" />
-          <img src={vtLogo} alt="VT" className="w-10 h-10" />
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-purple-50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Create New Password
+        </h2>
 
-        <h1 className="text-2xl font-bold mb-2">Create new password</h1>
-        <p className="text-sm text-gray-500 mb-8">
-          Please enter your new password below for your Office Admin account.
+        <p className="text-sm text-gray-500 mb-6">
+          Please enter your new password below.
         </p>
 
         {/* New Password */}
-        <div className="text-left mb-4">
-          <label className="text-sm font-medium">New Password</label>
+        <div className="mb-4">
+          <label className="text-sm font-medium text-purple-700">
+            New Password
+          </label>
           <div className="relative mt-1">
             <input
               type={showNew ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full h-11 px-4 pr-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full h-12 px-4 pr-10 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
             />
             <button
               type="button"
@@ -215,22 +222,30 @@ const ResetPassword = () => {
           </div>
         </div>
 
-        {/* Rules */}
-        <div className="text-xs text-gray-600 mb-6 space-y-1 text-left">
-          <p>• 10 characters</p>
-          <p>• 1 uppercase</p>
-          <p>• 1 number or special character (example: # ? ! &)</p>
+        {/* Password Rules */}
+        <div className="text-xs mb-4 space-y-1">
+          <p className={rules.length ? "text-green-600" : "text-gray-500"}>
+            • At least 10 characters
+          </p>
+          <p className={rules.uppercase ? "text-green-600" : "text-gray-500"}>
+            • 1 uppercase letter
+          </p>
+          <p className={rules.special ? "text-green-600" : "text-gray-500"}>
+            • 1 number or special character
+          </p>
         </div>
 
-        {/* Confirm */}
-        <div className="text-left mb-8">
-          <label className="text-sm font-medium">Confirm new Password</label>
+        {/* Confirm Password */}
+        <div className="mb-6">
+          <label className="text-sm font-medium text-purple-700">
+            Confirm Password
+          </label>
           <div className="relative mt-1">
             <input
               type={showConfirm ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full h-11 px-4 pr-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full h-12 px-4 pr-10 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
             />
             <button
               type="button"
@@ -245,19 +260,13 @@ const ResetPassword = () => {
         <button
           onClick={handleResetPassword}
           disabled={submitting}
-          className="w-full h-12 bg-[#5B3886] text-white rounded-lg font-semibold hover:bg-purple-800 transition"
+          className="w-full h-12 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold transition disabled:opacity-50"
         >
-          {submitting ? "Updating..." : "Create Password"}
+          {submitting ? "Updating..." : "CREATE PASSWORD"}
         </button>
-
-        <p className="text-xs text-gray-400 mt-6">
-          © 2025 LMT. All rights reserved.
-        </p>
       </div>
 
-      {/* Bottom wave */}
-      <div className="w-full h-40 bg-[#5B3886] rounded-t-[100%]" />
-
+      {/* Modal */}
       <Modal
         show={modal.show}
         title={modal.title}
