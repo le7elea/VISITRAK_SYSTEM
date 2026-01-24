@@ -34,6 +34,9 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000); // Every 5 minutes
 
+// Dynamic import for info.services - will only be used if needed
+let addTokenToMemoryStore = null;
+
 export default async function handler(req, res) {
   // Set CORS headers for all requests
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -351,6 +354,46 @@ export default async function handler(req, res) {
         expiresAt: expiresAt.toISOString(),
         memoryStoreSize: MEMORY_TOKEN_STORE.size
       });
+      
+      // ========== IMPORTANT: REGISTER WITH INFO.SERVICES.JS MEMORY STORE ==========
+      try {
+        // Dynamically import info.services module
+        if (!addTokenToMemoryStore) {
+          const infoServices = await import('../lib/info.services.js');
+          addTokenToMemoryStore = infoServices.addTokenToMemoryStore;
+        }
+        
+        if (addTokenToMemoryStore) {
+          // Register the token with info.services.js memory store
+          const infoServicesTokenId = addTokenToMemoryStore({
+            token: token,
+            email: normalizedEmail,
+            officeId: officeId,
+            officeName: officeName,
+            officialName: officialName,
+            expiresAt: expiresAt
+          });
+          
+          if (infoServicesTokenId) {
+            console.log("✅ Token registered with info.services memory store:", infoServicesTokenId);
+            
+            // Update tokenId to use the one from info.services for consistency
+            tokenId = infoServicesTokenId;
+            
+            // Update our local memory store entry with the correct ID
+            const updatedEntry = MEMORY_TOKEN_STORE.get(token);
+            if (updatedEntry) {
+              updatedEntry.id = tokenId;
+              MEMORY_TOKEN_STORE.set(token, updatedEntry);
+            }
+          }
+        } else {
+          console.log("⚠️ addTokenToMemoryStore function not available in info.services");
+        }
+      } catch (infoServicesError) {
+        console.error("❌ Error registering token with info.services:", infoServicesError.message);
+        console.log("ℹ️ Token is still stored in local memory store, but validation might fail");
+      }
     }
     
     // Generate reset link
@@ -365,7 +408,8 @@ export default async function handler(req, res) {
       email: normalizedEmail,
       resetLink: resetLink.substring(0, 100) + (resetLink.length > 100 ? '...' : ''),
       storage: usingMemoryStore ? 'memory' : 'firestore',
-      firestoreError: firestoreError
+      firestoreError: firestoreError,
+      tokenId: tokenId
     });
     
     // ========== CHECK SENDGRID CONFIGURATION ==========

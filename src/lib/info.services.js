@@ -1,4 +1,4 @@
-// lib/info.services.js - COMPLETE FIXED VERSION
+// lib/info.services.js - COMPLETE FIXED VERSION WITH MEMORY STORE
 import { db } from "./firebase";
 import {
   collection,
@@ -17,6 +17,26 @@ import {
 const officesCollection = collection(db, "offices");
 const activityLogsCollection = collection(db, "activityLogs");
 const passwordResetTokensCollection = collection(db, "passwordResetTokens");
+
+// 🔹 MEMORY STORE for when Firestore quota is exceeded
+const MEMORY_TOKEN_STORE = new Map();
+
+// 🔹 Clean up expired memory tokens every 5 minutes
+setInterval(() => {
+  const now = new Date();
+  let cleaned = 0;
+  
+  for (const [token, data] of MEMORY_TOKEN_STORE.entries()) {
+    if (data.expiresAt && new Date(data.expiresAt) < now) {
+      MEMORY_TOKEN_STORE.delete(token);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned ${cleaned} expired tokens from memory store`);
+  }
+}, 5 * 60 * 1000);
 
 /**
  * Create an activity log
@@ -149,10 +169,56 @@ export const getOfficeByEmail = async (email) => {
 };
 
 /* =============================
-   PASSWORD RESET TOKEN FUNCTIONS - COMPLETELY FIXED
+   PASSWORD RESET FUNCTIONS - WITH MEMORY STORE SUPPORT
 ============================= */
+
 /**
- * Validate password reset token with email verification - FIXED VERSION
+ * ADD TOKEN TO MEMORY STORE (Called from send-password-reset.js)
+ */
+export const addTokenToMemoryStore = (tokenData) => {
+  try {
+    const { token, email, officeName, officialName, expiresAt, officeId } = tokenData;
+    
+    if (!token || !email) {
+      console.error("❌ Cannot add token to memory store: missing token or email");
+      return false;
+    }
+    
+    const cleanToken = token.trim();
+    const cleanEmail = email.toLowerCase().trim();
+    
+    const memoryTokenData = {
+      id: `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      email: cleanEmail,
+      token: cleanToken,
+      officeId: officeId || null,
+      officeName: officeName || 'Office',
+      officialName: officialName || '',
+      expiresAt: expiresAt || new Date(Date.now() + 15 * 60 * 1000),
+      used: false,
+      createdAt: new Date().toISOString(),
+      storedIn: 'memory'
+    };
+    
+    MEMORY_TOKEN_STORE.set(cleanToken, memoryTokenData);
+    
+    console.log("✅ Token added to memory store:", {
+      tokenId: memoryTokenData.id,
+      token: cleanToken.substring(0, 20) + '...',
+      email: cleanEmail,
+      expiresAt: memoryTokenData.expiresAt.toISOString(),
+      memoryStoreSize: MEMORY_TOKEN_STORE.size
+    });
+    
+    return memoryTokenData.id;
+  } catch (error) {
+    console.error("❌ Error adding token to memory store:", error);
+    return false;
+  }
+};
+
+/**
+ * Validate password reset token with email verification - WITH MEMORY STORE SUPPORT
  */
 export const validatePasswordResetToken = async (token, email = null) => {
   try {
@@ -167,10 +233,8 @@ export const validatePasswordResetToken = async (token, email = null) => {
       return null;
     }
 
-    // IMPORTANT: Token should be passed as-is (already decoded by browser/router)
     const cleanToken = token.trim();
     
-    // Clean the email if provided
     let cleanEmail = null;
     if (email) {
       try {
@@ -183,85 +247,73 @@ export const validatePasswordResetToken = async (token, email = null) => {
 
     console.log("🔑 Querying with token (first 20 chars):", cleanToken.substring(0, 20) + '...');
 
-    let tokenDoc = null;
     let tokenData = null;
     let tokenId = null;
-    
-    try {
-      // Approach 1: Query by token only (most reliable)
-      const q = query(
-        passwordResetTokensCollection,
-        where("token", "==", cleanToken)
-      );
+    let foundIn = null;
 
-      const querySnapshot = await getDocs(q);
-      
-      console.log("📊 Firestore query results:", querySnapshot.size, "documents found");
-      
-      if (!querySnapshot.empty) {
-        tokenDoc = querySnapshot.docs[0];
-        tokenData = tokenDoc.data();
-        tokenId = tokenDoc.id;
-      } else {
-        console.log("❌ No documents found with exact token match");
+    // ========== STEP 1: CHECK MEMORY STORE FIRST (No Firestore quota usage) ==========
+    console.log("1️⃣ Checking memory store first...");
+    if (MEMORY_TOKEN_STORE.has(cleanToken)) {
+      tokenData = MEMORY_TOKEN_STORE.get(cleanToken);
+      tokenId = tokenData.id;
+      foundIn = 'memory';
+      console.log("   ✅ Found token in memory store");
+    } else {
+      console.log("   ❌ Token not found in memory store");
+    }
+
+    // ========== STEP 2: CHECK FIRESTORE (if memory store doesn't have it) ==========
+    if (!tokenData) {
+      console.log("2️⃣ Checking Firestore...");
+      try {
+        // Query for the token
+        const q = query(
+          passwordResetTokensCollection,
+          where("token", "==", cleanToken)
+        );
+
+        const querySnapshot = await getDocs(q);
         
-        // Try to find by scanning all tokens (fallback for debugging)
-        console.log("🔍 Scanning all tokens for matches...");
-        const allTokensSnapshot = await getDocs(passwordResetTokensCollection);
-        const allTokens = allTokensSnapshot.docs;
+        console.log("   📊 Firestore query results:", querySnapshot.size, "documents found");
         
-        console.log(`📋 Found ${allTokens.length} total tokens in database`);
-        
-        // Look for token manually (exact match, trimmed)
-        for (const doc of allTokens) {
-          const data = doc.data();
-          const storedToken = data.token?.trim();
+        if (!querySnapshot.empty) {
+          const docSnap = querySnapshot.docs[0];
+          tokenData = docSnap.data();
+          tokenId = docSnap.id;
+          foundIn = 'firestore';
+          console.log("   ✅ Found token in Firestore");
           
-          if (storedToken === cleanToken) {
-            console.log("✅ Found token manually!");
-            tokenDoc = doc;
-            tokenData = data;
-            tokenId = doc.id;
-            break;
-          }
+          // Cache in memory for future lookups (reduces Firestore reads)
+          MEMORY_TOKEN_STORE.set(cleanToken, {
+            id: tokenId,
+            ...tokenData,
+            storedIn: 'firestore_cached'
+          });
+          console.log("   📦 Cached Firestore token in memory");
+        } else {
+          console.log("   ❌ Token not found in Firestore");
         }
-        
-        if (!tokenDoc) {
-          console.log("❌ Token not found in database after manual search");
-          return null;
-        }
+      } catch (firestoreError) {
+        console.error("   ❌ Firestore query error (quota likely exceeded):", firestoreError.message);
+        console.log("   ℹ️ Continuing with memory store only...");
       }
-      
-    } catch (firestoreError) {
-      console.error("❌ Firestore query error:", firestoreError);
-      
-      // Try direct document fetch as fallback
-      console.log("🔄 Trying alternative approach...");
-      
-      // Get all tokens and filter manually
-      const allTokensSnapshot = await getDocs(passwordResetTokensCollection);
-      for (const doc of allTokensSnapshot.docs) {
-        const data = doc.data();
-        if (data.token === cleanToken) {
-          tokenDoc = doc;
-          tokenData = data;
-          tokenId = doc.id;
-          break;
-        }
-      }
-      
-      if (!tokenDoc) {
-        console.log("❌ Token not found after fallback search");
-        return null;
-      }
+    }
+
+    // ========== STEP 3: TOKEN NOT FOUND ANYWHERE ==========
+    if (!tokenData) {
+      console.log("❌ Token not found in any storage");
+      console.log("   Memory store size:", MEMORY_TOKEN_STORE.size);
+      console.log("   Available memory tokens:", Array.from(MEMORY_TOKEN_STORE.keys()).map(k => k.substring(0, 10) + '...'));
+      return null;
     }
 
     console.log("📄 Token document found:", {
       id: tokenId,
-      storedEmail: tokenData.email,
-      storedToken: tokenData.token?.substring(0, 20) + '...',
+      storedIn: foundIn,
+      email: tokenData.email,
+      tokenPreview: tokenData.token?.substring(0, 20) + '...',
       used: tokenData.used,
-      expiresAt: tokenData.expiresAt?.toDate()?.toISOString()
+      expiresAt: tokenData.expiresAt?.toDate ? tokenData.expiresAt.toDate()?.toISOString() : tokenData.expiresAt?.toISOString()
     });
 
     // Verify email if provided
@@ -281,12 +333,21 @@ export const validatePasswordResetToken = async (token, email = null) => {
     }
 
     // Check if token has expired
-    if (!tokenData.expiresAt) {
-      console.log("❌ Token has no expiration date");
+    let expiresAt;
+    if (tokenData.expiresAt && typeof tokenData.expiresAt.toDate === 'function') {
+      expiresAt = tokenData.expiresAt.toDate();
+    } else if (tokenData.expiresAt instanceof Date) {
+      expiresAt = tokenData.expiresAt;
+    } else if (tokenData.expiresAt && typeof tokenData.expiresAt === 'string') {
+      expiresAt = new Date(tokenData.expiresAt);
+    } else if (tokenData.expiresAt && tokenData.expiresAt._seconds) {
+      // Handle Firestore Timestamp
+      expiresAt = new Date(tokenData.expiresAt._seconds * 1000);
+    } else {
+      console.log("❌ Token has no valid expiration date");
       return null;
     }
 
-    const expiresAt = tokenData.expiresAt.toDate();
     const now = new Date();
     
     console.log("⏰ Time check:", {
@@ -300,11 +361,12 @@ export const validatePasswordResetToken = async (token, email = null) => {
       return null;
     }
 
-    console.log("✅ Token is VALID and ACTIVE");
+    console.log(`✅ Token is VALID and ACTIVE (found in: ${foundIn})`);
     return { 
-      id: tokenId, 
+      id: tokenId,
+      foundIn: foundIn,
       ...tokenData,
-      expiresAt: expiresAt // Return as Date object for convenience
+      expiresAt: expiresAt
     };
   } catch (error) {
     console.error("❌ Error validating password reset token:", error);
@@ -314,35 +376,76 @@ export const validatePasswordResetToken = async (token, email = null) => {
 };
 
 /**
- * Mark password reset token as used
+ * Mark password reset token as used - WITH MEMORY STORE SUPPORT
  */
 export const markPasswordResetTokenUsed = async (tokenId) => {
   try {
     console.log("🔐 Marking token as used:", tokenId);
     
-    const tokenRef = doc(db, "passwordResetTokens", tokenId);
-    
-    // First verify the token exists
-    const tokenSnap = await getDoc(tokenRef);
-    if (!tokenSnap.exists()) {
-      console.error("❌ Token not found:", tokenId);
-      throw new Error("Token not found");
+    // Check if it's a memory token
+    if (tokenId.startsWith('memory_')) {
+      // Find token in memory store by ID
+      for (const [token, data] of MEMORY_TOKEN_STORE.entries()) {
+        if (data.id === tokenId) {
+          data.used = true;
+          data.usedAt = new Date().toISOString();
+          MEMORY_TOKEN_STORE.set(token, data);
+          console.log("✅ Memory token marked as used:", tokenId);
+          return true;
+        }
+      }
+      console.error("❌ Memory token not found:", tokenId);
+      return false;
+    } else {
+      // Firestore token
+      try {
+        const tokenRef = doc(db, "passwordResetTokens", tokenId);
+        
+        // Verify the token exists
+        const tokenSnap = await getDoc(tokenRef);
+        if (!tokenSnap.exists()) {
+          console.error("❌ Firestore token not found:", tokenId);
+          // Try to find in memory store as fallback
+          for (const [token, data] of MEMORY_TOKEN_STORE.entries()) {
+            if (data.firestoreId === tokenId) {
+              data.used = true;
+              data.usedAt = new Date().toISOString();
+              MEMORY_TOKEN_STORE.set(token, data);
+              console.log("✅ Found and marked in memory store as fallback:", tokenId);
+              return true;
+            }
+          }
+          return false;
+        }
+        
+        await updateDoc(tokenRef, {
+          used: true,
+          usedAt: serverTimestamp(),
+        });
+        
+        console.log("✅ Firestore token marked as used:", tokenId);
+        return true;
+      } catch (firestoreError) {
+        console.error("❌ Firestore error marking token as used (quota likely):", firestoreError.message);
+        
+        // Even if Firestore fails, try to mark in memory store as fallback
+        console.log("🔄 Attempting to mark in memory store as fallback...");
+        
+        // Try to find the token in memory store
+        for (const [token, data] of MEMORY_TOKEN_STORE.entries()) {
+          if (data.firestoreId === tokenId || data.id === tokenId) {
+            data.used = true;
+            data.usedAt = new Date().toISOString();
+            MEMORY_TOKEN_STORE.set(token, data);
+            console.log("✅ Fallback: Marked token in memory store:", tokenId);
+            return true;
+          }
+        }
+        
+        console.error("❌ Could not mark token as used in any store");
+        return false;
+      }
     }
-    
-    const tokenData = tokenSnap.data();
-    console.log("📄 Token before marking as used:", {
-      id: tokenId,
-      email: tokenData.email,
-      used: tokenData.used
-    });
-    
-    await updateDoc(tokenRef, {
-      used: true,
-      usedAt: serverTimestamp(),
-    });
-    
-    console.log("✅ Token marked as used:", tokenId);
-    return true;
   } catch (error) {
     console.error("❌ Error marking token as used:", error);
     throw error;
@@ -1157,4 +1260,40 @@ export const cleanupExpiredTokens = async () => {
     console.error("Error cleaning up tokens:", error);
     throw error;
   }
+};
+
+/**
+ * Debug memory store
+ */
+export const debugMemoryStore = () => {
+  console.log("🧠 Memory Store Debug:");
+  console.log(`   Size: ${MEMORY_TOKEN_STORE.size}`);
+  
+  const tokens = Array.from(MEMORY_TOKEN_STORE.entries()).map(([token, data]) => ({
+    token: token.substring(0, 20) + '...',
+    id: data.id,
+    email: data.email,
+    used: data.used,
+    expiresAt: data.expiresAt?.toISOString?.() || data.expiresAt,
+    storedIn: data.storedIn
+  }));
+  
+  tokens.forEach((token, index) => {
+    console.log(`   ${index + 1}. ${token.token} - ${token.email} - Used: ${token.used} - Stored in: ${token.storedIn}`);
+  });
+  
+  return {
+    size: MEMORY_TOKEN_STORE.size,
+    tokens: tokens
+  };
+};
+
+/**
+ * Clear all memory tokens (for testing/reset)
+ */
+export const clearMemoryStore = () => {
+  const size = MEMORY_TOKEN_STORE.size;
+  MEMORY_TOKEN_STORE.clear();
+  console.log(`🧹 Cleared ${size} tokens from memory store`);
+  return { cleared: size };
 };
