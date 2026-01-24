@@ -1,3 +1,4 @@
+// pages/ResetPassword.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -16,12 +17,12 @@ const Modal = ({ show, title, message, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-[90%] max-w-md p-6 shadow-[0_25px_60px_rgba(91,56,134,0.45)] animate-scaleIn">
+      <div className="bg-white rounded-2xl w-[90%] max-w-md p-6 shadow-[0_25px_60px_rgba(91,56,134,0.45)]">
         <h3 className="text-xl font-bold text-gray-800 text-center mb-2">
           {title}
         </h3>
 
-        <p className="text-sm text-gray-500 text-center mb-6">
+        <p className="text-sm text-gray-500 text-center mb-6 whitespace-pre-line">
           {message}
         </p>
 
@@ -43,9 +44,18 @@ const ResetPassword = () => {
   const [params] = useSearchParams();
   const token = params.get("token");
 
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // States
+  const [validating, setValidating] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const [resetData, setResetData] = useState(null);
 
   const [modal, setModal] = useState({
@@ -54,8 +64,6 @@ const ResetPassword = () => {
     message: "",
     redirect: null,
   });
-
-  const navigate = useNavigate();
 
   /* =============================
      Validate Token on Load
@@ -69,36 +77,37 @@ const ResetPassword = () => {
           message: "Reset token is missing.",
           redirect: "/login",
         });
-        setLoading(false);
+        setValidating(false);
         return;
       }
 
       try {
         const result = await validatePasswordResetToken(token);
+        console.log("Reset token result:", result);
 
         if (!result) {
           setModal({
             show: true,
             title: "Invalid or Expired Link",
             message:
-              "This password reset link is invalid or has already expired.",
+              "This password reset link is invalid, expired, or already used.",
             redirect: "/login",
           });
-          setLoading(false);
+          setValidating(false);
           return;
         }
 
         setResetData(result);
-        setLoading(false);
+        setValidating(false);
       } catch (error) {
-        console.error(error);
+        console.error("Token validation error:", error);
         setModal({
           show: true,
           title: "Error",
-          message: "Something went wrong while validating the reset link.",
+          message: "Failed to validate reset link.",
           redirect: "/login",
         });
-        setLoading(false);
+        setValidating(false);
       }
     };
 
@@ -106,14 +115,27 @@ const ResetPassword = () => {
   }, [token]);
 
   /* =============================
+     Password Rules
+  ============================= */
+  const rules = {
+    length: newPassword.length >= 10,
+    uppercase: /[A-Z]/.test(newPassword),
+    special: /[0-9!@#$%^&*]/.test(newPassword),
+  };
+
+  const passwordValid =
+    rules.length && rules.uppercase && rules.special;
+
+  /* =============================
      Handle Password Reset
   ============================= */
   const handleResetPassword = async () => {
-    if (newPassword.length < 6) {
+    if (!passwordValid) {
       setModal({
         show: true,
         title: "Weak Password",
-        message: "Password must be at least 6 characters long.",
+        message:
+          "Password must be at least 10 characters long, contain 1 uppercase letter, and 1 number or special character.",
       });
       return;
     }
@@ -128,15 +150,10 @@ const ResetPassword = () => {
     }
 
     try {
-      setLoading(true);
+      setSubmitting(true);
 
-      // 1️⃣ Update office password
       await updateOfficePasswordByEmail(resetData.email, newPassword);
-
-      // 2️⃣ Mark token as used
       await markPasswordResetTokenUsed(resetData.id);
-
-      // 3️⃣ Activity log (optional but recommended)
       await createPasswordResetActivityLog(resetData.email);
 
       setModal({
@@ -146,7 +163,7 @@ const ResetPassword = () => {
         redirect: "/login",
       });
 
-      setLoading(false);
+      setSubmitting(false);
     } catch (error) {
       console.error(error);
       setModal({
@@ -154,11 +171,14 @@ const ResetPassword = () => {
         title: "Error",
         message: "Failed to reset password. Please try again.",
       });
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  if (loading) {
+  /* =============================
+     Loading Screen
+  ============================= */
+  if (validating) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
         Validating reset link...
@@ -166,47 +186,83 @@ const ResetPassword = () => {
     );
   }
 
+  /* =============================
+     UI
+  ============================= */
   return (
     <div className="min-h-screen flex items-center justify-center bg-purple-50 px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Reset Password
+          Create New Password
         </h2>
 
         <p className="text-sm text-gray-500 mb-6">
-          Enter your new password below.
+          Please enter your new password below.
         </p>
 
+        {/* New Password */}
         <div className="mb-4">
           <label className="text-sm font-medium text-purple-700">
             New Password
           </label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full h-12 px-4 mt-1 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
-          />
+          <div className="relative mt-1">
+            <input
+              type={showNew ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full h-12 px-4 pr-10 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(!showNew)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            >
+              👁
+            </button>
+          </div>
         </div>
 
+        {/* Password Rules */}
+        <div className="text-xs mb-4 space-y-1">
+          <p className={rules.length ? "text-green-600" : "text-gray-500"}>
+            • At least 10 characters
+          </p>
+          <p className={rules.uppercase ? "text-green-600" : "text-gray-500"}>
+            • 1 uppercase letter
+          </p>
+          <p className={rules.special ? "text-green-600" : "text-gray-500"}>
+            • 1 number or special character
+          </p>
+        </div>
+
+        {/* Confirm Password */}
         <div className="mb-6">
           <label className="text-sm font-medium text-purple-700">
             Confirm Password
           </label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full h-12 px-4 mt-1 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
-          />
+          <div className="relative mt-1">
+            <input
+              type={showConfirm ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full h-12 px-4 pr-10 rounded-lg border border-purple-300 focus:ring-4 focus:ring-purple-200 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm(!showConfirm)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            >
+              👁
+            </button>
+          </div>
         </div>
 
         <button
           onClick={handleResetPassword}
-          disabled={loading}
+          disabled={submitting}
           className="w-full h-12 bg-[#5B3886] hover:bg-purple-800 text-white rounded-lg font-semibold transition disabled:opacity-50"
         >
-          {loading ? "Updating..." : "UPDATE PASSWORD"}
+          {submitting ? "Updating..." : "CREATE PASSWORD"}
         </button>
       </div>
 
