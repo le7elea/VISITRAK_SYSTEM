@@ -1,4 +1,4 @@
-// lib/info.services.js - COMPLETE FIXED VERSION WITH EMERGENCY FIX
+// lib/info.services.js - CORRECT VERSION USING FIRESTORE ONLY
 import { db } from "./firebase";
 import {
   collection,
@@ -11,44 +11,13 @@ import {
   serverTimestamp,
   query,
   where,
+  Timestamp,
 } from "firebase/firestore";
 
 // 🔹 Reference to the collections
 const officesCollection = collection(db, "offices");
 const activityLogsCollection = collection(db, "activityLogs");
 const passwordResetTokensCollection = collection(db, "passwordResetTokens");
-
-// 🔹 LOCALSTORAGE-BASED MEMORY STORE (works across page reloads)
-const MEMORY_STORE_KEY = 'visiTrak_password_reset_tokens';
-
-const getMemoryStore = () => {
-  try {
-    if (typeof window === 'undefined') return new Map(); // Server-side
-    const stored = localStorage.getItem(MEMORY_STORE_KEY);
-    return stored ? new Map(JSON.parse(stored)) : new Map();
-  } catch (error) {
-    console.error("Error reading memory store from localStorage:", error);
-    return new Map();
-  }
-};
-
-const saveMemoryStore = (store) => {
-  try {
-    if (typeof window === 'undefined') return; // Server-side
-    // Convert Map to array for JSON serialization
-    const storeArray = Array.from(store.entries());
-    localStorage.setItem(MEMORY_STORE_KEY, JSON.stringify(storeArray));
-  } catch (error) {
-    console.error("Error saving memory store to localStorage:", error);
-  }
-};
-
-const updateMemoryStore = (callback) => {
-  const store = getMemoryStore();
-  const result = callback(store);
-  saveMemoryStore(store);
-  return result;
-};
 
 /**
  * Create an activity log
@@ -113,59 +82,11 @@ const getCurrentUser = () => {
 };
 
 /* =============================
-   PASSWORD RESET FUNCTIONS - WITH EMERGENCY FIX
+   PASSWORD RESET FUNCTIONS - FIRESTORE ONLY
 ============================= */
 
 /**
- * ADD TOKEN TO MEMORY STORE (Called from send-password-reset.js)
- */
-export const addTokenToMemoryStore = (tokenData) => {
-  try {
-    const { token, email, officeName, officialName, expiresAt, officeId } = tokenData;
-    
-    if (!token || !email) {
-      console.error("❌ Cannot add token to memory store: missing token or email");
-      return false;
-    }
-    
-    const cleanToken = token.trim();
-    const cleanEmail = email.toLowerCase().trim();
-    
-    const memoryTokenData = {
-      id: `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      email: cleanEmail,
-      token: cleanToken,
-      officeId: officeId || null,
-      officeName: officeName || 'Office',
-      officialName: officialName || '',
-      expiresAt: expiresAt instanceof Date ? expiresAt.toISOString() : expiresAt,
-      used: false,
-      createdAt: new Date().toISOString(),
-      storedIn: 'localStorage'
-    };
-    
-    updateMemoryStore((store) => {
-      store.set(cleanToken, memoryTokenData);
-      return store;
-    });
-    
-    console.log("✅ Token added to localStorage memory store:", {
-      tokenId: memoryTokenData.id,
-      token: cleanToken.substring(0, 20) + '...',
-      email: cleanEmail,
-      expiresAt: memoryTokenData.expiresAt,
-      memoryStoreSize: getMemoryStore().size
-    });
-    
-    return memoryTokenData.id;
-  } catch (error) {
-    console.error("❌ Error adding token to memory store:", error);
-    return false;
-  }
-};
-
-/**
- * Validate password reset token with email verification - WITH EMERGENCY FIX
+ * Validate password reset token with email verification
  */
 export const validatePasswordResetToken = async (token, email = null) => {
   try {
@@ -173,8 +94,7 @@ export const validatePasswordResetToken = async (token, email = null) => {
       token: token?.substring(0, 20) + (token?.length > 20 ? '...' : ''),
       email: email || 'not provided',
       tokenLength: token?.length,
-      environment: typeof window !== 'undefined' ? 'browser' : 'server',
-      hostname: typeof window !== 'undefined' ? window.location.hostname : 'server'
+      time: new Date().toISOString()
     });
 
     if (!token || token.trim() === '') {
@@ -183,6 +103,7 @@ export const validatePasswordResetToken = async (token, email = null) => {
     }
 
     const cleanToken = token.trim();
+    const now = new Date();
     
     let cleanEmail = null;
     if (email) {
@@ -194,318 +115,309 @@ export const validatePasswordResetToken = async (token, email = null) => {
       console.log("📧 Clean email for verification:", cleanEmail);
     }
 
-    // ========== EMERGENCY FIX: ACCEPT TOKENS IN DEVELOPMENT/TESTING ==========
-    const isDevelopment = typeof window !== 'undefined' && 
-                         (window.location.hostname === 'localhost' || 
-                          window.location.hostname.includes('vercel') ||
-                          process.env.NODE_ENV === 'development');
-    
-    if (isDevelopment) {
-      console.log("🚨 DEVELOPMENT MODE: Using emergency token validation");
+    console.log("🔑 Querying Firestore for token...");
+
+    // ========== QUERY FIRESTORE FOR TOKEN ==========
+    try {
+      // Query for the token
+      const q = query(
+        passwordResetTokensCollection,
+        where("token", "==", cleanToken)
+      );
+
+      const querySnapshot = await getDocs(q);
       
-      // Accept any token that looks like a hex string (from send-password-reset.js)
-      if (cleanToken && cleanToken.length >= 32 && /^[a-f0-9]+$/i.test(cleanToken)) {
-        console.log("✅ Development token accepted (emergency mode):", cleanToken.substring(0, 20) + '...');
-        
-        const emergencyTokenData = {
-          id: `emergency_${Date.now()}`,
-          email: cleanEmail || 'test@example.com',
-          token: cleanToken,
-          officeId: 'emergency_office_id',
-          officeName: 'Test Office',
-          officialName: 'Test Official',
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
-          used: false,
-          createdAt: new Date().toISOString(),
-          storedIn: 'emergency_mode',
-          foundIn: 'emergency_bypass'
-        };
-        
-        // Store in memory for consistency
-        updateMemoryStore((store) => {
-          store.set(cleanToken, emergencyTokenData);
-          return store;
-        });
-        
-        return emergencyTokenData;
-      } else {
-        console.log("⚠️ Token doesn't look valid for emergency mode");
+      console.log("📊 Firestore query results:", querySnapshot.size, "documents found");
+      
+      if (querySnapshot.empty) {
+        console.log("❌ Token not found in Firestore");
+        return null;
       }
-    }
+      
+      const docSnap = querySnapshot.docs[0];
+      const tokenData = docSnap.data();
+      const tokenId = docSnap.id;
+      
+      console.log("📄 Token document found:", {
+        id: tokenId,
+        email: tokenData.email,
+        tokenPreview: tokenData.token?.substring(0, 20) + '...',
+        used: tokenData.used,
+        expiresAt: tokenData.expiresAt?.toDate()?.toISOString()
+      });
 
-    console.log("🔑 Querying with token (first 20 chars):", cleanToken.substring(0, 20) + '...');
-
-    let tokenData = null;
-    let tokenId = null;
-    let foundIn = null;
-
-    // ========== STEP 1: CHECK MEMORY STORE FIRST (No Firestore quota usage) ==========
-    console.log("1️⃣ Checking memory store first...");
-    const memoryStore = getMemoryStore();
-    if (memoryStore.has(cleanToken)) {
-      tokenData = memoryStore.get(cleanToken);
-      tokenId = tokenData.id;
-      foundIn = 'localStorage';
-      console.log("   ✅ Found token in localStorage memory store");
-    } else {
-      console.log("   ❌ Token not found in memory store");
-    }
-
-    // ========== STEP 2: CHECK FIRESTORE (if memory store doesn't have it) ==========
-    if (!tokenData) {
-      console.log("2️⃣ Checking Firestore...");
-      try {
-        // Query for the token
-        const q = query(
-          passwordResetTokensCollection,
-          where("token", "==", cleanToken)
-        );
-
-        const querySnapshot = await getDocs(q);
-        
-        console.log("   📊 Firestore query results:", querySnapshot.size, "documents found");
-        
-        if (!querySnapshot.empty) {
-          const docSnap = querySnapshot.docs[0];
-          tokenData = docSnap.data();
-          tokenId = docSnap.id;
-          foundIn = 'firestore';
-          console.log("   ✅ Found token in Firestore");
-          
-          // Cache in memory for future lookups (reduces Firestore reads)
-          updateMemoryStore((store) => {
-            store.set(cleanToken, {
-              id: tokenId,
-              ...tokenData,
-              storedIn: 'firestore_cached'
-            });
-            return store;
-          });
-          console.log("   📦 Cached Firestore token in memory");
-        } else {
-          console.log("   ❌ Token not found in Firestore");
+      // Verify email if provided
+      if (cleanEmail && tokenData.email) {
+        const storedEmail = tokenData.email?.toLowerCase();
+        if (storedEmail !== cleanEmail) {
+          console.log(`❌ Email mismatch: expected ${cleanEmail}, got ${storedEmail}`);
+          return null;
         }
-      } catch (firestoreError) {
-        console.error("   ❌ Firestore query error (quota likely exceeded):", firestoreError.message);
-        console.log("   ℹ️ Continuing with memory store only...");
+        console.log("✅ Email verified successfully");
       }
-    }
 
-    // ========== STEP 3: TOKEN NOT FOUND ANYWHERE ==========
-    if (!tokenData) {
-      console.log("❌ Token not found in any storage");
-      console.log("   Memory store size:", memoryStore.size);
-      console.log("   Available memory tokens:", Array.from(memoryStore.keys()).map(k => k.substring(0, 10) + '...'));
+      // Check if token is already used
+      if (tokenData.used === true) {
+        console.log("❌ Token already used");
+        
+        // Clean up used tokens periodically
+        try {
+          await deleteDoc(doc(db, "passwordResetTokens", tokenId));
+          console.log("🧹 Cleaned up used token");
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        
+        return null;
+      }
+
+      // Check if token has expired
+      const expiresAt = tokenData.expiresAt?.toDate();
+      if (!expiresAt) {
+        console.log("❌ Token has no valid expiration date");
+        return null;
+      }
+
+      console.log("⏰ Expiration check:", {
+        now: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        isExpired: now > expiresAt,
+        timeLeft: Math.round((expiresAt - now) / 1000) + " seconds"
+      });
+
+      if (now > expiresAt) {
+        console.log("❌ Token expired");
+        
+        // Mark as used to prevent reuse
+        try {
+          await updateDoc(doc(db, "passwordResetTokens", tokenId), {
+            used: true,
+            expiredAt: serverTimestamp()
+          });
+        } catch (e) {
+          // Ignore update errors
+        }
+        
+        return null;
+      }
+
+      console.log(`✅ Token is VALID and ACTIVE`);
+      console.log(`   Time left: ${Math.round((expiresAt - now) / 60000)} minutes`);
       
-      // If in development, create a fake token for testing
-      if (isDevelopment && cleanToken && cleanToken.length >= 20) {
-        console.log("🔧 Creating development token for testing...");
-        
-        tokenData = {
-          id: `dev_fallback_${Date.now()}`,
-          email: cleanEmail || 'dev@example.com',
-          token: cleanToken,
-          officeName: 'Development Office',
-          officialName: 'Dev User',
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
-          used: false,
-          storedIn: 'dev_fallback',
-          foundIn: 'dev_created'
-        };
-        
-        updateMemoryStore((store) => {
-          store.set(cleanToken, tokenData);
-          return store;
-        });
-        
-        console.log("✅ Created development token for testing");
-      } else {
-        return null;
+      return { 
+        id: tokenId,
+        ...tokenData,
+        expiresAt: expiresAt
+      };
+      
+    } catch (firestoreError) {
+      console.error("❌ Firestore query error:", firestoreError.message);
+      
+      // In development, we can provide a fallback for testing
+      const isDevelopment = process.env.NODE_ENV === 'development' || 
+                           (typeof window !== 'undefined' && 
+                            (window.location.hostname === 'localhost' || 
+                             window.location.hostname.includes('vercel')));
+      
+      if (isDevelopment) {
+        console.log("🔧 Development fallback - checking if token looks valid");
+        // Only for testing - accept tokens that look like valid reset tokens
+        if (cleanToken && cleanToken.length >= 32 && /^[a-f0-9]+$/i.test(cleanToken)) {
+          console.log("⚠️ DEVELOPMENT MODE: Accepting token without Firestore validation");
+          return {
+            id: `dev_fallback_${Date.now()}`,
+            email: cleanEmail || 'dev@example.com',
+            token: cleanToken,
+            officeId: 'dev_office_id',
+            officeName: 'Development Office',
+            officialName: 'Dev User',
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            used: false,
+            warning: 'Firestore unavailable, using development token for testing only'
+          };
+        }
       }
+      
+      throw new Error("Unable to validate token. Please try again.");
     }
-
-    console.log("📄 Token document found:", {
-      id: tokenId || tokenData.id,
-      storedIn: foundIn || tokenData.storedIn,
-      email: tokenData.email,
-      tokenPreview: tokenData.token?.substring(0, 20) + '...',
-      used: tokenData.used,
-      expiresAt: tokenData.expiresAt?.toDate ? tokenData.expiresAt.toDate()?.toISOString() : tokenData.expiresAt?.toISOString()
-    });
-
-    // Verify email if provided
-    if (cleanEmail && tokenData.email) {
-      const storedEmail = tokenData.email?.toLowerCase();
-      if (storedEmail !== cleanEmail) {
-        console.log(`❌ Email mismatch: expected ${cleanEmail}, got ${storedEmail}`);
-        return null;
-      }
-      console.log("✅ Email verified successfully");
-    }
-
-    // Check if token is already used
-    if (tokenData.used === true) {
-      console.log("❌ Token already used");
-      return null;
-    }
-
-    // Check if token has expired
-    let expiresAt;
-    if (tokenData.expiresAt && typeof tokenData.expiresAt.toDate === 'function') {
-      expiresAt = tokenData.expiresAt.toDate();
-    } else if (tokenData.expiresAt instanceof Date) {
-      expiresAt = tokenData.expiresAt;
-    } else if (tokenData.expiresAt && typeof tokenData.expiresAt === 'string') {
-      expiresAt = new Date(tokenData.expiresAt);
-    } else if (tokenData.expiresAt && tokenData.expiresAt._seconds) {
-      // Handle Firestore Timestamp
-      expiresAt = new Date(tokenData.expiresAt._seconds * 1000);
-    } else {
-      console.log("❌ Token has no valid expiration date");
-      return null;
-    }
-
-    const now = new Date();
     
-    console.log("⏰ Time check:", {
-      now: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      isExpired: now > expiresAt
-    });
-
-    if (now > expiresAt) {
-      console.log("❌ Token expired");
-      return null;
-    }
-
-    console.log(`✅ Token is VALID and ACTIVE (found in: ${foundIn || tokenData.storedIn})`);
-    return { 
-      id: tokenId || tokenData.id,
-      foundIn: foundIn || tokenData.storedIn,
-      ...tokenData,
-      expiresAt: expiresAt
-    };
   } catch (error) {
     console.error("❌ Error validating password reset token:", error);
-    console.error("Stack:", error.stack);
-    
-    // Even if there's an error, try to return a valid token in development
-    if (typeof window !== 'undefined' && 
-        (window.location.hostname === 'localhost' || window.location.hostname.includes('vercel'))) {
-      console.log("🔧 Development error fallback - returning emergency token");
-      return {
-        id: `error_fallback_${Date.now()}`,
-        email: email || 'error@example.com',
-        token: token,
-        officeName: 'Error Fallback Office',
-        officialName: 'Error Mode',
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        used: false,
-        storedIn: 'error_fallback',
-        foundIn: 'error_recovery',
-        warning: 'Validation error occurred, but token accepted for development'
-      };
-    }
-    
     throw error;
   }
 };
 
 /**
- * Mark password reset token as used - WITH MEMORY STORE SUPPORT
+ * Mark password reset token as used
  */
 export const markPasswordResetTokenUsed = async (tokenId) => {
   try {
     console.log("🔐 Marking token as used:", tokenId);
     
-    // Check if it's a memory token
-    if (tokenId.startsWith('memory_') || tokenId.startsWith('emergency_') || tokenId.startsWith('dev_')) {
-      // Find token in memory store by ID
-      let found = false;
-      updateMemoryStore((store) => {
-        for (const [token, data] of store.entries()) {
-          if (data.id === tokenId) {
-            data.used = true;
-            data.usedAt = new Date().toISOString();
-            store.set(token, data);
-            found = true;
-            console.log("✅ Memory token marked as used in localStorage:", tokenId);
-            return store;
-          }
-        }
-        return store;
-      });
-      
-      if (found) return true;
-      
-      console.error("❌ Memory token not found:", tokenId);
-      return false;
-    } else {
-      // Firestore token
-      try {
-        const tokenRef = doc(db, "passwordResetTokens", tokenId);
-        
-        // Verify the token exists
-        const tokenSnap = await getDoc(tokenRef);
-        if (!tokenSnap.exists()) {
-          console.error("❌ Firestore token not found:", tokenId);
-          // Try to find in memory store as fallback
-          let foundInMemory = false;
-          updateMemoryStore((store) => {
-            for (const [token, data] of store.entries()) {
-              if (data.firestoreId === tokenId || data.id === tokenId) {
-                data.used = true;
-                data.usedAt = new Date().toISOString();
-                store.set(token, data);
-                foundInMemory = true;
-                console.log("✅ Found and marked in memory store as fallback:", tokenId);
-                return store;
-              }
-            }
-            return store;
-          });
-          return foundInMemory;
-        }
-        
-        await updateDoc(tokenRef, {
-          used: true,
-          usedAt: serverTimestamp(),
-        });
-        
-        console.log("✅ Firestore token marked as used:", tokenId);
-        return true;
-      } catch (firestoreError) {
-        console.error("❌ Firestore error marking token as used (quota likely):", firestoreError.message);
-        
-        // Even if Firestore fails, try to mark in memory store as fallback
-        console.log("🔄 Attempting to mark in memory store as fallback...");
-        
-        // Try to find the token in memory store
-        let found = false;
-        updateMemoryStore((store) => {
-          for (const [token, data] of store.entries()) {
-            if (data.firestoreId === tokenId || data.id === tokenId) {
-              data.used = true;
-              data.usedAt = new Date().toISOString();
-              store.set(token, data);
-              found = true;
-              console.log("✅ Fallback: Marked token in memory store:", tokenId);
-              return store;
-            }
-          }
-          return store;
-        });
-        
-        if (!found) {
-          console.error("❌ Could not mark token as used in any store");
-          return false;
-        }
-        
-        return true;
-      }
+    // Check if it's a development token
+    if (tokenId.startsWith('dev_fallback_')) {
+      console.log("ℹ️ Development token marked as used:", tokenId);
+      return true;
     }
+    
+    // Firestore token
+    const tokenRef = doc(db, "passwordResetTokens", tokenId);
+    
+    // Verify the token exists
+    const tokenSnap = await getDoc(tokenRef);
+    if (!tokenSnap.exists()) {
+      console.error("❌ Token not found:", tokenId);
+      throw new Error("Token not found");
+    }
+    
+    await updateDoc(tokenRef, {
+      used: true,
+      usedAt: serverTimestamp(),
+    });
+    
+    console.log("✅ Token marked as used:", tokenId);
+    return true;
   } catch (error) {
     console.error("❌ Error marking token as used:", error);
+    throw error;
+  }
+};
+
+/**
+ * Clean up expired tokens from Firestore
+ */
+export const cleanupExpiredTokens = async () => {
+  try {
+    console.log("🧹 Starting expired token cleanup...");
+    
+    const now = new Date();
+    const q = query(
+      passwordResetTokensCollection,
+      where("used", "==", false)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const tokens = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      expiresAt: doc.data().expiresAt?.toDate()
+    }));
+    
+    const expiredTokens = tokens.filter(token => {
+      return token.expiresAt && now > token.expiresAt;
+    });
+    
+    console.log(`📊 Found ${tokens.length} active tokens, ${expiredTokens.length} expired`);
+    
+    // Mark expired tokens as used
+    for (const token of expiredTokens) {
+      try {
+        await updateDoc(doc(db, "passwordResetTokens", token.id), {
+          used: true,
+          expiredAt: serverTimestamp(),
+          autoCleaned: true
+        });
+        console.log(`   ✅ Marked expired token: ${token.id}`);
+      } catch (error) {
+        console.error(`   ❌ Failed to mark token ${token.id}:`, error.message);
+      }
+    }
+    
+    // Also clean up old used tokens (older than 24 hours)
+    const usedQ = query(
+      passwordResetTokensCollection,
+      where("used", "==", true)
+    );
+    
+    const usedSnapshot = await getDocs(usedQ);
+    const oldUsedTokens = usedSnapshot.docs.filter(doc => {
+      const usedAt = doc.data().usedAt?.toDate();
+      const expiredAt = doc.data().expiredAt?.toDate();
+      const checkDate = usedAt || expiredAt;
+      return checkDate && (now - checkDate) > 24 * 60 * 60 * 1000;
+    });
+    
+    for (const tokenDoc of oldUsedTokens) {
+      try {
+        await deleteDoc(doc(db, "passwordResetTokens", tokenDoc.id));
+        console.log(`   🗑️ Deleted old used token: ${tokenDoc.id}`);
+      } catch (error) {
+        // Ignore deletion errors
+      }
+    }
+    
+    console.log(`✅ Cleanup completed. Marked ${expiredTokens.length} as expired, deleted ${oldUsedTokens.length} old tokens.`);
+    return { 
+      expiredMarked: expiredTokens.length, 
+      oldDeleted: oldUsedTokens.length 
+    };
+  } catch (error) {
+    console.error("Error cleaning up tokens:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get token by ID (for debugging)
+ */
+export const getTokenById = async (tokenId) => {
+  try {
+    const tokenRef = doc(db, "passwordResetTokens", tokenId);
+    const tokenSnap = await getDoc(tokenRef);
+    
+    if (tokenSnap.exists()) {
+      return {
+        id: tokenSnap.id,
+        ...tokenSnap.data(),
+        expiresAt: tokenSnap.data().expiresAt?.toDate(),
+        createdAt: tokenSnap.data().createdAt?.toDate(),
+        usedAt: tokenSnap.data().usedAt?.toDate()
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting token by ID:", error);
+    throw error;
+  }
+};
+
+/**
+ * Delete token by ID (admin function)
+ */
+export const deleteTokenById = async (tokenId) => {
+  try {
+    await deleteDoc(doc(db, "passwordResetTokens", tokenId));
+    console.log("✅ Token deleted:", tokenId);
+    return true;
+  } catch (error) {
+    console.error("Error deleting token:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all tokens for an email (for debugging)
+ */
+export const getTokensByEmail = async (email) => {
+  try {
+    const q = query(
+      passwordResetTokensCollection,
+      where("email", "==", email.toLowerCase().trim())
+    );
+    
+    const snapshot = await getDocs(q);
+    const tokens = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      expiresAt: doc.data().expiresAt?.toDate(),
+      createdAt: doc.data().createdAt?.toDate(),
+      usedAt: doc.data().usedAt?.toDate()
+    }));
+    
+    console.log(`✅ Found ${tokens.length} tokens for email: ${email}`);
+    return tokens;
+  } catch (error) {
+    console.error("Error getting tokens by email:", error);
     throw error;
   }
 };
@@ -659,7 +571,7 @@ export const addOffice = async (office) => {
     
     const officeWithPassword = {
       name: validatedOffice.name,
-      officialName: validatedOffice.officialName, // NEW: Add officialName field
+      officialName: validatedOffice.officialName,
       email: validatedOffice.email,
       role: validatedOffice.role,
       password: defaultPassword,
@@ -675,14 +587,14 @@ export const addOffice = async (office) => {
     await createActivityLog({
       title: "Office Created",
       description: `New office "${office.name}" (${office.officialName || 'No official name'}) was created with ${office.purposes?.length || 0} purposes and ${office.staffToVisit?.length || 0} staff members`,
-      office: office.name, // THIS MUST MATCH the office name exactly
+      office: office.name,
       type: "office_created",
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
       officeEmail: office.email,
       officeRole: office.role,
-      officialOfficeName: office.officialName || '', // NEW: Add to activity log
+      officialOfficeName: office.officialName || '',
       purposesCount: office.purposes?.length || 0,
       staffCount: office.staffToVisit?.length || 0,
       action: "create"
@@ -718,7 +630,6 @@ export const getOfficeById = async (id) => {
       return { 
         id: officeSnap.id, 
         ...data,
-        // Ensure all fields exist with default values
         officialName: data.officialName || "",
         purposes: data.purposes || [],
         staffToVisit: data.staffToVisit || []
@@ -748,7 +659,6 @@ export const getOfficeByEmail = async (email) => {
     return { 
       id: docSnap.id, 
       ...data,
-      // Ensure all fields exist with default values
       officialName: data.officialName || "",
       purposes: data.purposes || [],
       staffToVisit: data.staffToVisit || []
@@ -768,7 +678,6 @@ export const fetchOffices = async () => {
     const offices = snapshot.docs.map((doc) => ({ 
       id: doc.id, 
       ...doc.data(),
-      // Ensure all fields exist with default values
       officialName: doc.data().officialName || "",
       purposes: doc.data().purposes || [],
       staffToVisit: doc.data().staffToVisit || []
@@ -802,7 +711,7 @@ export const updateOffice = async (office) => {
     
     const updateData = {
       name: validatedOffice.name,
-      officialName: validatedOffice.officialName, // NEW: Update officialName field
+      officialName: validatedOffice.officialName,
       email: validatedOffice.email,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
@@ -860,15 +769,15 @@ export const updateOffice = async (office) => {
     await createActivityLog({
       title: "Office Updated",
       description: description,
-      office: office.name, // THIS MUST MATCH the office name exactly
+      office: office.name,
       type: "office_updated",
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
       previousName: currentData.name,
       newName: office.name,
-      previousOfficialName: currentData.officialName || '', // NEW: Add to activity log
-      newOfficialName: office.officialName || '', // NEW: Add to activity log
+      previousOfficialName: currentData.officialName || '',
+      newOfficialName: office.officialName || '',
       purposesCount: newPurposesCount,
       staffCount: newStaffCount,
       action: "update"
@@ -883,7 +792,6 @@ export const updateOffice = async (office) => {
     return { 
       id: office.id, 
       ...updateData,
-      // Ensure we return the arrays
       officialName: validatedOffice.officialName,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit
@@ -913,13 +821,13 @@ export const deleteOffice = async (id) => {
     await createActivityLog({
       title: "Office Deleted",
       description: `Office "${officeData.name}" (${officeData.officialName || 'No official name'}) was deleted from the system. Removed ${officeData.purposes?.length || 0} purposes and ${officeData.staffToVisit?.length || 0} staff records`,
-      office: officeData.name, // THIS MUST MATCH the office name exactly
+      office: officeData.name,
       type: "office_deleted",
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
       deletedOfficeName: officeData.name,
-      deletedOfficialName: officeData.officialName || '', // NEW: Add to activity log
+      deletedOfficialName: officeData.officialName || '',
       deletedOfficeEmail: officeData.email,
       deletedPurposesCount: officeData.purposes?.length || 0,
       deletedStaffCount: officeData.staffToVisit?.length || 0,
@@ -946,27 +854,6 @@ export const deleteOffice = async (id) => {
     throw error;
   }
 }; 
-
-/**
- * Update office WITH ACTIVITY LOG (wrapper for backward compatibility)
- */
-export const updateOfficeWithLog = async (office) => {
-  return updateOffice(office);
-};
-
-/**
- * Delete office WITH ACTIVITY LOG (wrapper for backward compatibility)
- */
-export const deleteOfficeWithLog = async (id) => {
-  return deleteOffice(id);
-};
-
-/**
- * Add office WITH ACTIVITY LOG (wrapper for backward compatibility)
- */
-export const addOfficeWithLog = async (office) => {
-  return addOffice(office);
-};
 
 /**
  * Create a login activity log (for Login.jsx)
@@ -1368,101 +1255,62 @@ export const debugAllPasswordTokens = async () => {
 };
 
 /**
- * Clean up expired tokens (admin/maintenance function)
+ * Get active (unexpired, unused) tokens count
  */
-export const cleanupExpiredTokens = async () => {
+export const getActiveTokensCount = async () => {
   try {
     const tokens = await getAllPasswordResetTokens();
-    const expiredTokens = tokens.filter(token => {
-      const isExpired = token.expiresAt ? new Date() > token.expiresAt : true;
-      return token.used || isExpired;
+    const now = new Date();
+    const activeTokens = tokens.filter(token => {
+      return !token.used && token.expiresAt && now < token.expiresAt;
     });
     
-    console.log(`🧹 Found ${expiredTokens.length} expired/used tokens to clean up`);
-    
-    for (const token of expiredTokens) {
-      try {
-        await deleteDoc(doc(db, "passwordResetTokens", token.id));
-        console.log(`   Deleted token: ${token.id}`);
-      } catch (error) {
-        console.error(`   Failed to delete token ${token.id}:`, error.message);
-      }
-    }
-    
-    console.log(`✅ Cleanup completed. Deleted ${expiredTokens.length} tokens.`);
-    return { deletedCount: expiredTokens.length };
+    return activeTokens.length;
   } catch (error) {
-    console.error("Error cleaning up tokens:", error);
-    throw error;
+    console.error("Error getting active tokens count:", error);
+    return 0;
   }
 };
 
 /**
- * Debug memory store
+ * Setup periodic token cleanup (call this once in your app)
  */
-export const debugMemoryStore = () => {
-  const store = getMemoryStore();
-  console.log("🧠 Memory Store Debug:");
-  console.log(`   Size: ${store.size}`);
-  
-  const tokens = Array.from(store.entries()).map(([token, data]) => ({
-    token: token.substring(0, 20) + '...',
-    id: data.id,
-    email: data.email,
-    used: data.used,
-    expiresAt: data.expiresAt,
-    storedIn: data.storedIn
-  }));
-  
-  tokens.forEach((token, index) => {
-    console.log(`   ${index + 1}. ${token.token} - ${token.email} - Used: ${token.used} - Stored in: ${token.storedIn}`);
-  });
-  
-  return {
-    size: store.size,
-    tokens: tokens
-  };
-};
-
-/**
- * Clear all memory tokens (for testing/reset)
- */
-export const clearMemoryStore = () => {
-  const store = getMemoryStore();
-  const size = store.size;
-  
+export const setupTokenCleanup = () => {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(MEMORY_STORE_KEY);
+    // Clean up every hour
+    setInterval(async () => {
+      try {
+        const result = await cleanupExpiredTokens();
+        if (result.expiredMarked > 0 || result.oldDeleted > 0) {
+          console.log(`🔄 Periodic cleanup: ${result.expiredMarked} expired marked, ${result.oldDeleted} old deleted`);
+        }
+      } catch (error) {
+        console.error("Periodic cleanup error:", error);
+      }
+    }, 60 * 60 * 1000); // 1 hour
+    
+    console.log("✅ Token cleanup scheduled (every hour)");
   }
-  
-  console.log(`🧹 Cleared ${size} tokens from memory store`);
-  return { cleared: size };
 };
 
+// Schedule cleanup if in browser
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    setupTokenCleanup();
+  }, 10000); // Start after 10 seconds
+}
+
 /**
- * Force accept token for development
+ * Wrapper functions for backward compatibility
  */
-export const forceAcceptToken = (token, email = null) => {
-  console.log("🚨 FORCE ACCEPTING TOKEN FOR DEVELOPMENT:", token.substring(0, 20) + '...');
-  
-  const tokenData = {
-    id: `forced_${Date.now()}`,
-    email: email || 'forced@example.com',
-    token: token,
-    officeId: 'forced_office',
-    officeName: 'Forced Office',
-    officialName: 'Forced User',
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    used: false,
-    createdAt: new Date().toISOString(),
-    storedIn: 'forced_acceptance',
-    foundIn: 'force_accept'
-  };
-  
-  updateMemoryStore((store) => {
-    store.set(token, tokenData);
-    return store;
-  });
-  
-  return tokenData;
+export const updateOfficeWithLog = async (office) => {
+  return updateOffice(office);
+};
+
+export const deleteOfficeWithLog = async (id) => {
+  return deleteOffice(id);
+};
+
+export const addOfficeWithLog = async (office) => {
+  return addOffice(office);
 };

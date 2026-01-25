@@ -8,34 +8,11 @@ if (process.env.SENDGRID_API_KEY) {
   console.log('✅ SendGrid API key configured');
 }
 
-// In-memory token store (fallback when Firestore quota is exceeded)
-const MEMORY_TOKEN_STORE = new Map();
-
 // Rate limiting
 let lastResetTime = 0;
 const RESET_COOLDOWN = 1000; // 1 second between resets globally
 const userResetTimes = new Map();
 const USER_RESET_COOLDOWN = 60 * 1000; // 1 minute per user
-
-// Clean up old memory tokens periodically
-setInterval(() => {
-  const now = new Date();
-  let cleanedCount = 0;
-  
-  for (const [token, data] of MEMORY_TOKEN_STORE.entries()) {
-    if (data.expiresAt && new Date(data.expiresAt) < now) {
-      MEMORY_TOKEN_STORE.delete(token);
-      cleanedCount++;
-    }
-  }
-  
-  if (cleanedCount > 0) {
-    console.log(`🧹 Cleaned ${cleanedCount} expired tokens from memory store`);
-  }
-}, 5 * 60 * 1000); // Every 5 minutes
-
-// Dynamic import for info.services - will only be used if needed
-let addTokenToMemoryStore = null;
 
 export default async function handler(req, res) {
   // Set CORS headers for all requests
@@ -62,10 +39,6 @@ export default async function handler(req, res) {
                                 process.env.FIREBASE_CLIENT_EMAIL && 
                                 process.env.FIREBASE_PRIVATE_KEY),
         nodeEnv: process.env.NODE_ENV || 'development'
-      },
-      memoryStore: {
-        tokenCount: MEMORY_TOKEN_STORE.size,
-        users: Array.from(MEMORY_TOKEN_STORE.values()).map(t => t.email).filter((v, i, a) => a.indexOf(v) === i)
       },
       timestamp: new Date().toISOString()
     });
@@ -144,6 +117,16 @@ export default async function handler(req, res) {
     
     console.log('🔧 Firebase Admin available:', hasFirebaseAdmin);
     
+    if (!hasFirebaseAdmin) {
+      console.error('❌ Firebase Admin not configured');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error. Please contact administrator.',
+        error: 'SERVER_CONFIG_ERROR',
+        details: 'Firebase Admin SDK not properly configured'
+      });
+    }
+    
     let officeData = null;
     let token = null;
     let expiresAt = null;
@@ -152,247 +135,144 @@ export default async function handler(req, res) {
     let officeName = null;
     let officialName = null;
     let tokenId = null;
-    let usingMemoryStore = false;
-    let firestoreError = null;
     
-    // ========== TRY FIRESTORE FIRST ==========
-    if (hasFirebaseAdmin) {
-      try {
-        console.log('\n🔥 Attempting Firebase Admin initialization...');
-        const { default: admin } = await import('firebase-admin');
+    // ========== USE FIRESTORE ONLY ==========
+    try {
+      console.log('\n🔥 Initializing Firebase Admin...');
+      const { default: admin } = await import('firebase-admin');
+      
+      // Initialize Firebase Admin if needed
+      if (!admin.apps.length) {
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
         
-        // Initialize Firebase Admin if needed
-        if (!admin.apps.length) {
-          let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-          
-          // Handle escaped newlines in private key
-          if (privateKey && privateKey.includes('\\n')) {
-            console.log('   🔄 Replacing escaped newlines in private key');
-            privateKey = privateKey.replace(/\\n/g, '\n');
-          }
-          
-          // Validate private key
-          if (!privateKey || privateKey.trim() === '' || !privateKey.includes('BEGIN PRIVATE KEY')) {
-            console.error('❌ Invalid FIREBASE_PRIVATE_KEY format');
-            throw new Error('Invalid Firebase private key format');
-          }
-          
-          console.log('   📝 Initializing Firebase app...');
-          admin.initializeApp({
-            credential: admin.credential.cert({
-              projectId: process.env.FIREBASE_PROJECT_ID,
-              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-              privateKey: privateKey,
-            }),
-          });
-          console.log('✅ Firebase Admin initialized successfully');
+        // Handle escaped newlines in private key
+        if (privateKey && privateKey.includes('\\n')) {
+          console.log('   🔄 Replacing escaped newlines in private key');
+          privateKey = privateKey.replace(/\\n/g, '\n');
         }
         
-        const db = admin.firestore();
-        
-        // Check if email exists in offices collection
-        console.log('🔍 Searching for email in offices collection...');
-        const officesSnapshot = await db
-          .collection('offices')
-          .where('email', '==', normalizedEmail)
-          .limit(1)
-          .get();
-        
-        if (officesSnapshot.empty) {
-          console.log('❌ Email not found in database');
-          return res.status(404).json({
-            success: false,
-            message: 'This email is not registered in the VisiTrak system',
-            email: normalizedEmail,
-            error: 'EMAIL_NOT_FOUND'
-          });
+        // Validate private key
+        if (!privateKey || privateKey.trim() === '' || !privateKey.includes('BEGIN PRIVATE KEY')) {
+          console.error('❌ Invalid FIREBASE_PRIVATE_KEY format');
+          throw new Error('Invalid Firebase private key format');
         }
         
-        // Get office data
-        const officeDoc = officesSnapshot.docs[0];
-        officeData = officeDoc.data();
-        officeId = officeDoc.id;
-        officeName = officeData.name || 'Unknown Office';
-        officialName = officeData.officialName || '';
-        
-        console.log('✅ Email found:', {
-          officeId,
-          email: officeData.email,
-          name: officeName,
-          officialName: officialName
+        console.log('   📝 Initializing Firebase app...');
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: privateKey,
+          }),
         });
-        
-        // Generate secure reset token
-        const crypto = await import('crypto');
-        token = crypto.randomBytes(32).toString('hex');
-        
-        expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-        
-        console.log('🔐 Generated reset token:', token.substring(0, 20) + '...');
-        console.log('⏳ Token expires at:', expiresAt.toISOString());
-        
-        // Save token to Firestore
-        console.log('💾 Saving token to Firestore...');
-        const tokenData = {
+        console.log('✅ Firebase Admin initialized successfully');
+      }
+      
+      const db = admin.firestore();
+      
+      // Check if email exists in offices collection
+      console.log('🔍 Searching for email in offices collection...');
+      const officesSnapshot = await db
+        .collection('offices')
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
+      
+      if (officesSnapshot.empty) {
+        console.log('❌ Email not found in database');
+        return res.status(404).json({
+          success: false,
+          message: 'This email is not registered in the VisiTrak system',
           email: normalizedEmail,
-          token: token,
-          officeId: officeId,
-          officeName: officeName,
-          officialName: officialName,
-          expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
-          used: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          requestTime: new Date().toISOString(),
-          ipAddress: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown'
-        };
-        
-        try {
-          // Try to save to Firestore
-          const tokenRef = await db.collection('passwordResetTokens').add(tokenData);
-          tokenId = tokenRef.id;
-          
-          // Verify save
-          const savedTokenDoc = await tokenRef.get();
-          if (savedTokenDoc.exists) {
-            const savedData = savedTokenDoc.data();
-            console.log('✅ Token saved to Firestore:', {
-              tokenId,
-              email: savedData.email,
-              tokenPreview: savedData.token?.substring(0, 20) + '...',
-              expiresAt: savedData.expiresAt?.toDate()?.toISOString()
-            });
-            tokenSaved = true;
-            
-            // Also store in memory as backup
-            MEMORY_TOKEN_STORE.set(token, {
-              id: tokenId,
-              ...tokenData,
-              storedIn: 'both',
-              firestoreId: tokenId
-            });
-            console.log('   📦 Also stored in memory as backup');
-            
-          } else {
-            console.error('❌ Token document not found after save');
-            throw new Error('Token not saved to Firestore');
-          }
-          
-        } catch (firestoreError) {
-          console.error('❌ Firestore save error:', firestoreError.message);
-          console.error('   Code:', firestoreError.code);
-          console.error('   Details:', firestoreError.details);
-          
-          // Check if it's a quota error
-          if (firestoreError.code === 'resource-exhausted' || 
-              firestoreError.message.includes('quota') ||
-              firestoreError.message.includes('exceeded')) {
-            console.log('⚠️ FIRESTORE QUOTA EXCEEDED - Switching to memory store');
-            firestoreError = 'QUOTA_EXCEEDED';
-            usingMemoryStore = true;
-          } else if (firestoreError.code === 'permission-denied') {
-            console.log('⚠️ Firestore permission denied');
-            firestoreError = 'PERMISSION_DENIED';
-            usingMemoryStore = true;
-          } else {
-            // Re-throw other errors
-            throw firestoreError;
-          }
-        }
-        
-      } catch (firebaseError) {
-        console.error('❌ Firebase error:', firebaseError.message);
-        console.log('🔄 Falling back to memory token store...');
-        firestoreError = firebaseError.message;
-        usingMemoryStore = true;
-      }
-    } else {
-      console.log('⚠️ Firebase Admin not configured, using memory store');
-      usingMemoryStore = true;
-    }
-    
-    // ========== FALLBACK: MEMORY TOKEN STORE ==========
-    if (usingMemoryStore || !tokenSaved) {
-      console.log('\n💾 Using in-memory token store');
-      
-      // Generate token if not already generated
-      if (!token) {
-        const crypto = await import('crypto');
-        token = crypto.randomBytes(32).toString('hex');
-        expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+          error: 'EMAIL_NOT_FOUND'
+        });
       }
       
-      tokenId = `memory_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Get office data
+      const officeDoc = officesSnapshot.docs[0];
+      officeData = officeDoc.data();
+      officeId = officeDoc.id;
+      officeName = officeData.name || 'Unknown Office';
+      officialName = officeData.officialName || '';
       
-      // If we don't have office data from Firestore, use defaults
-      if (!officeName) {
-        officeName = 'Office';
-        officialName = '';
-      }
+      console.log('✅ Email found:', {
+        officeId,
+        email: officeData.email,
+        name: officeName,
+        officialName: officialName
+      });
       
-      // Store in memory
-      MEMORY_TOKEN_STORE.set(token, {
-        id: tokenId,
+      // Generate secure reset token
+      const crypto = await import('crypto');
+      token = crypto.randomBytes(32).toString('hex');
+      
+      expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      
+      console.log('🔐 Generated reset token:', token.substring(0, 20) + '...');
+      console.log('⏳ Token expires at:', expiresAt.toISOString());
+      
+      // Save token to Firestore
+      console.log('💾 Saving token to Firestore...');
+      const tokenData = {
         email: normalizedEmail,
         token: token,
         officeId: officeId,
         officeName: officeName,
         officialName: officialName,
-        expiresAt: expiresAt,
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
         used: false,
-        createdAt: new Date().toISOString(),
-        storedIn: 'memory',
-        firestoreError: firestoreError
-      });
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        requestTime: new Date().toISOString(),
+        ipAddress: req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown'
+      };
       
-      tokenSaved = true;
-      usingMemoryStore = true;
+      const tokenRef = await db.collection('passwordResetTokens').add(tokenData);
+      tokenId = tokenRef.id;
       
-      console.log('✅ Token stored in memory:', {
-        tokenId,
-        email: normalizedEmail,
-        tokenPreview: token.substring(0, 20) + '...',
-        expiresAt: expiresAt.toISOString(),
-        memoryStoreSize: MEMORY_TOKEN_STORE.size
-      });
+      // Verify save
+      const savedTokenDoc = await tokenRef.get();
+      if (savedTokenDoc.exists) {
+        const savedData = savedTokenDoc.data();
+        console.log('✅ Token saved to Firestore:', {
+          tokenId,
+          email: savedData.email,
+          tokenPreview: savedData.token?.substring(0, 20) + '...',
+          expiresAt: savedData.expiresAt?.toDate()?.toISOString()
+        });
+        tokenSaved = true;
+      } else {
+        console.error('❌ Token document not found after save');
+        throw new Error('Token not saved to Firestore');
+      }
       
-      // ========== IMPORTANT: REGISTER WITH INFO.SERVICES.JS MEMORY STORE ==========
-      try {
-        // Dynamically import info.services module
-        if (!addTokenToMemoryStore) {
-          const infoServices = await import('../lib/info.services.js');
-          addTokenToMemoryStore = infoServices.addTokenToMemoryStore;
-        }
-        
-        if (addTokenToMemoryStore) {
-          // Register the token with info.services.js memory store
-          const infoServicesTokenId = addTokenToMemoryStore({
-            token: token,
-            email: normalizedEmail,
-            officeId: officeId,
-            officeName: officeName,
-            officialName: officialName,
-            expiresAt: expiresAt
-          });
-          
-          if (infoServicesTokenId) {
-            console.log("✅ Token registered with info.services memory store:", infoServicesTokenId);
-            
-            // Update tokenId to use the one from info.services for consistency
-            tokenId = infoServicesTokenId;
-            
-            // Update our local memory store entry with the correct ID
-            const updatedEntry = MEMORY_TOKEN_STORE.get(token);
-            if (updatedEntry) {
-              updatedEntry.id = tokenId;
-              MEMORY_TOKEN_STORE.set(token, updatedEntry);
-            }
-          }
-        } else {
-          console.log("⚠️ addTokenToMemoryStore function not available in info.services");
-        }
-      } catch (infoServicesError) {
-        console.error("❌ Error registering token with info.services:", infoServicesError.message);
-        console.log("ℹ️ Token is still stored in local memory store, but validation might fail");
+    } catch (firebaseError) {
+      console.error('❌ Firebase error:', firebaseError.message);
+      console.error('Stack:', firebaseError.stack);
+      
+      // Differentiate between different types of errors
+      if (firebaseError.code === 'resource-exhausted' || 
+          firebaseError.message.includes('quota') ||
+          firebaseError.message.includes('exceeded')) {
+        return res.status(503).json({
+          success: false,
+          message: 'Service temporarily unavailable due to high demand. Please try again in a few minutes.',
+          error: 'SERVICE_UNAVAILABLE',
+          retryAfter: 300 // 5 minutes
+        });
+      } else if (firebaseError.code === 'permission-denied') {
+        return res.status(500).json({
+          success: false,
+          message: 'Server configuration error. Please contact administrator.',
+          error: 'PERMISSION_ERROR',
+          details: 'Firebase permissions issue'
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to process password reset request. Please try again.',
+          error: 'PROCESSING_ERROR',
+          details: process.env.NODE_ENV === 'development' ? firebaseError.message : undefined
+        });
       }
     }
     
@@ -407,8 +287,7 @@ export default async function handler(req, res) {
       tokenPreview: token.substring(0, 20) + '...',
       email: normalizedEmail,
       resetLink: resetLink.substring(0, 100) + (resetLink.length > 100 ? '...' : ''),
-      storage: usingMemoryStore ? 'memory' : 'firestore',
-      firestoreError: firestoreError,
+      storage: 'firestore',
       tokenId: tokenId
     });
     
@@ -416,28 +295,25 @@ export default async function handler(req, res) {
     if (!SENDGRID_CONFIGURED) {
       console.warn('⚠️ SendGrid not fully configured');
       
+      // Even without SendGrid, return success since token was generated
       return res.status(200).json({
         success: true,
         message: 'Password reset token generated (development mode)',
         mode: 'development',
-        storage: usingMemoryStore ? 'memory' : 'firestore',
+        storage: 'firestore',
         email: normalizedEmail,
         office: officeName,
         officialName: officialName,
-        resetLink: resetLink, // Full link for testing
-        token: token, // Include full token for testing
+        resetLink: resetLink, // Still include for testing
+        token: token, // Include for testing
         tokenId: tokenId,
         expiresAt: expiresAt.toISOString(),
         tokenSaved: tokenSaved,
-        memoryStoreSize: MEMORY_TOKEN_STORE.size,
         warning: 'Email not sent - configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL',
-        instructions: 'Click the resetLink above or copy it to test password reset',
-        firestoreStatus: firestoreError ? 'failed' : 'success',
-        firestoreError: firestoreError,
+        instructions: 'Use the token above to manually test password reset in development',
         nextSteps: [
           'Add SENDGRID_API_KEY to Vercel environment variables',
           'Add SENDGRID_FROM_EMAIL to Vercel environment variables',
-          'Check Firebase quota in console.firebase.google.com',
           'Redeploy the application'
         ]
       });
@@ -729,8 +605,7 @@ This is an automated message, please do not reply.
         return res.status(200).json({
           success: true,
           message: 'Password reset email sent successfully',
-          storage: usingMemoryStore ? 'memory' : 'firestore',
-          firestoreStatus: firestoreError ? 'failed_fallback' : 'success',
+          storage: 'firestore',
           email: normalizedEmail,
           office: officeName,
           officialName: officialName,
@@ -738,17 +613,16 @@ This is an automated message, please do not reply.
           messageId: messageId,
           tokenSaved: tokenSaved,
           tokenId: tokenId,
-          memoryStoreSize: MEMORY_TOKEN_STORE.size,
           note: 'Please check your inbox and spam folder for the reset link'
         });
       } else {
         console.warn(`⚠️ Unexpected status code from SendGrid: ${statusCode}`);
         
-        // Even if SendGrid fails, return token for manual testing
+        // Even if SendGrid fails, token was still generated in Firestore
         return res.status(200).json({
           success: true,
           message: 'Password reset token generated but email sending had issues',
-          storage: usingMemoryStore ? 'memory' : 'firestore',
+          storage: 'firestore',
           email: normalizedEmail,
           office: officeName,
           officialName: officialName,
@@ -758,21 +632,19 @@ This is an automated message, please do not reply.
           expiresAt: expiresAt.toISOString(),
           tokenSaved: tokenSaved,
           sendGridStatus: statusCode,
-          memoryStoreSize: MEMORY_TOKEN_STORE.size,
-          warning: 'Email sending had issues, but token was generated',
-          instructions: 'Use the resetLink above to manually test password reset'
+          warning: 'Email sending had issues, but token was generated and saved',
+          instructions: 'Check your email or use the reset link if needed'
         });
       }
       
     } catch (sendGridError) {
       console.error('❌ SendGrid Error:', sendGridError.message);
       
-      // Even if SendGrid completely fails, return the token for manual testing
+      // Even if SendGrid completely fails, token is still in Firestore
       return res.status(200).json({
         success: true,
         message: 'Password reset token generated but email sending failed',
-        storage: usingMemoryStore ? 'memory' : 'firestore',
-        firestoreStatus: firestoreError ? 'failed_fallback' : 'success',
+        storage: 'firestore',
         email: normalizedEmail,
         office: officeName,
         officialName: officialName,
@@ -781,14 +653,13 @@ This is an automated message, please do not reply.
         tokenId: tokenId,
         expiresAt: expiresAt.toISOString(),
         tokenSaved: tokenSaved,
-        memoryStoreSize: MEMORY_TOKEN_STORE.size,
-        warning: 'Email sending failed, but token was generated',
         sendGridError: sendGridError.message,
-        instructions: 'Use the resetLink above to manually test password reset',
+        warning: 'Email sending failed, but token was generated and saved',
+        instructions: 'Use the reset link above to complete password reset',
         troubleshooting: [
-          'Check SendGrid API key configuration',
-          'Verify sender email is verified in SendGrid',
-          'Test with the resetLink provided above'
+          'Check your spam folder',
+          'Verify email address is correct',
+          'Contact support if issue persists'
         ]
       });
     }
@@ -802,8 +673,7 @@ This is an automated message, please do not reply.
       message: 'An unexpected error occurred while processing your request',
       error: 'INTERNAL_SERVER_ERROR',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      timestamp: new Date().toISOString(),
-      memoryStoreSize: MEMORY_TOKEN_STORE.size
+      timestamp: new Date().toISOString()
     });
   }
 }
