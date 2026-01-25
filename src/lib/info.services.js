@@ -1,4 +1,4 @@
-// lib/info.services.js - CORRECT VERSION USING FIRESTORE ONLY
+// lib/info.services.js - COMPLETE FIXED VERSION WITH PROPER EXPIRATION
 import { db } from "./firebase";
 import {
   collection,
@@ -34,7 +34,6 @@ const createActivityLog = async (logData) => {
     return true;
   } catch (error) {
     console.error("❌ Error creating activity log:", error);
-    // Don't throw - we don't want office operations to fail because of logging
     return false;
   }
 };
@@ -56,7 +55,6 @@ const getCurrentUser = () => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       const user = JSON.parse(savedUser);
-      console.log("🔍 Current user for activity log:", user);
       return {
         email: user.email || "unknown@email.com",
         name: user.name || "Unknown User",
@@ -82,19 +80,52 @@ const getCurrentUser = () => {
 };
 
 /* =============================
-   PASSWORD RESET FUNCTIONS - FIRESTORE ONLY
+   PASSWORD RESET FUNCTIONS - WITH FIXED EXPIRATION CHECKING
 ============================= */
 
 /**
- * Validate password reset token with email verification
+ * Parse expiration date from Firestore timestamp
+ */
+const parseExpirationDate = (firestoreTimestamp) => {
+  try {
+    if (!firestoreTimestamp) return null;
+    
+    // If it's a Firestore Timestamp object
+    if (firestoreTimestamp.toDate && typeof firestoreTimestamp.toDate === 'function') {
+      return firestoreTimestamp.toDate();
+    }
+    
+    // If it's in Firestore's object format {_seconds, _nanoseconds}
+    if (firestoreTimestamp._seconds) {
+      return new Date(firestoreTimestamp._seconds * 1000);
+    }
+    
+    // If it's already a Date object
+    if (firestoreTimestamp instanceof Date) {
+      return firestoreTimestamp;
+    }
+    
+    // If it's an ISO string
+    if (typeof firestoreTimestamp === 'string') {
+      return new Date(firestoreTimestamp);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error parsing expiration date:", error);
+    return null;
+  }
+};
+
+/**
+ * Validate password reset token with PROPER EXPIRATION CHECKING
  */
 export const validatePasswordResetToken = async (token, email = null) => {
   try {
-    console.log("🔍 [validatePasswordResetToken] called with:", { 
+    console.log("🔍 [validatePasswordResetToken] Starting validation...", { 
       token: token?.substring(0, 20) + (token?.length > 20 ? '...' : ''),
       email: email || 'not provided',
-      tokenLength: token?.length,
-      time: new Date().toISOString()
+      currentTime: new Date().toISOString()
     });
 
     if (!token || token.trim() === '') {
@@ -103,7 +134,7 @@ export const validatePasswordResetToken = async (token, email = null) => {
     }
 
     const cleanToken = token.trim();
-    const now = new Date();
+    const now = new Date(); // Current time
     
     let cleanEmail = null;
     if (email) {
@@ -115,7 +146,7 @@ export const validatePasswordResetToken = async (token, email = null) => {
       console.log("📧 Clean email for verification:", cleanEmail);
     }
 
-    console.log("🔑 Querying Firestore for token...");
+    console.log("🔑 Querying Firestore for token:", cleanToken.substring(0, 20) + '...');
 
     // ========== QUERY FIRESTORE FOR TOKEN ==========
     try {
@@ -141,12 +172,26 @@ export const validatePasswordResetToken = async (token, email = null) => {
       console.log("📄 Token document found:", {
         id: tokenId,
         email: tokenData.email,
-        tokenPreview: tokenData.token?.substring(0, 20) + '...',
         used: tokenData.used,
-        expiresAt: tokenData.expiresAt?.toDate()?.toISOString()
+        expiresAtRaw: tokenData.expiresAt
       });
 
-      // Verify email if provided
+      // STEP 1: Check if token is already used
+      if (tokenData.used === true) {
+        console.log("❌ Token already used");
+        
+        // Clean up used token
+        try {
+          await deleteDoc(doc(db, "passwordResetTokens", tokenId));
+          console.log("🧹 Deleted used token");
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        
+        return null;
+      }
+
+      // STEP 2: Verify email if provided
       if (cleanEmail && tokenData.email) {
         const storedEmail = tokenData.email?.toLowerCase();
         if (storedEmail !== cleanEmail) {
@@ -156,74 +201,88 @@ export const validatePasswordResetToken = async (token, email = null) => {
         console.log("✅ Email verified successfully");
       }
 
-      // Check if token is already used
-      if (tokenData.used === true) {
-        console.log("❌ Token already used");
-        
-        // Clean up used tokens periodically
-        try {
-          await deleteDoc(doc(db, "passwordResetTokens", tokenId));
-          console.log("🧹 Cleaned up used token");
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-        
-        return null;
-      }
-
-      // Check if token has expired
-      const expiresAt = tokenData.expiresAt?.toDate();
+      // STEP 3: CRITICAL - Check expiration PROPERLY
+      const expiresAt = parseExpirationDate(tokenData.expiresAt);
+      
       if (!expiresAt) {
         console.log("❌ Token has no valid expiration date");
         return null;
       }
-
-      console.log("⏰ Expiration check:", {
+      
+      console.log("⏰ Expiration check DETAILED:", {
         now: now.toISOString(),
+        nowMillis: now.getTime(),
         expiresAt: expiresAt.toISOString(),
-        isExpired: now > expiresAt,
-        timeLeft: Math.round((expiresAt - now) / 1000) + " seconds"
+        expiresAtMillis: expiresAt.getTime(),
+        timeDifferenceMs: expiresAt.getTime() - now.getTime(),
+        timeDifferenceMinutes: Math.round((expiresAt.getTime() - now.getTime()) / 60000),
+        isExpired: now.getTime() > expiresAt.getTime()
       });
 
-      if (now > expiresAt) {
-        console.log("❌ Token expired");
+      // CRITICAL FIX: Use getTime() for accurate comparison
+      if (now.getTime() > expiresAt.getTime()) {
+        console.log("❌ Token EXPIRED - Marking as used and cleaning up");
         
-        // Mark as used to prevent reuse
+        // Mark as used
         try {
           await updateDoc(doc(db, "passwordResetTokens", tokenId), {
             used: true,
-            expiredAt: serverTimestamp()
+            expiredAt: serverTimestamp(),
+            markedExpiredAt: new Date().toISOString()
           });
-        } catch (e) {
-          // Ignore update errors
+          console.log("✅ Marked expired token as used");
+        } catch (updateError) {
+          console.error("Failed to mark token as expired:", updateError);
+        }
+        
+        // Try to delete it
+        try {
+          await deleteDoc(doc(db, "passwordResetTokens", tokenId));
+          console.log("✅ Deleted expired token");
+        } catch (deleteError) {
+          console.error("Failed to delete expired token:", deleteError);
         }
         
         return null;
       }
 
+      const timeLeftMinutes = Math.round((expiresAt.getTime() - now.getTime()) / 60000);
       console.log(`✅ Token is VALID and ACTIVE`);
-      console.log(`   Time left: ${Math.round((expiresAt - now) / 60000)} minutes`);
+      console.log(`   Time left: ${timeLeftMinutes} minutes`);
       
       return { 
         id: tokenId,
         ...tokenData,
-        expiresAt: expiresAt
+        expiresAt: expiresAt,
+        timeLeftMinutes: timeLeftMinutes
       };
       
     } catch (firestoreError) {
       console.error("❌ Firestore query error:", firestoreError.message);
+      console.error("Error details:", firestoreError);
       
-      // In development, we can provide a fallback for testing
+      // In development mode only, allow testing
       const isDevelopment = process.env.NODE_ENV === 'development' || 
                            (typeof window !== 'undefined' && 
                             (window.location.hostname === 'localhost' || 
                              window.location.hostname.includes('vercel')));
       
       if (isDevelopment) {
-        console.log("🔧 Development fallback - checking if token looks valid");
-        // Only for testing - accept tokens that look like valid reset tokens
+        console.log("🔧 Development mode - checking if token looks valid");
         if (cleanToken && cleanToken.length >= 32 && /^[a-f0-9]+$/i.test(cleanToken)) {
-          console.log("⚠️ DEVELOPMENT MODE: Accepting token without Firestore validation");
+          console.log("⚠️ DEVELOPMENT MODE: Creating test token");
+          
+          // Create a test token with 15-minute expiration
+          const testExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+          
+          // IMPORTANT: In development, we still check if it would be expired
+          if (now.getTime() > testExpiresAt.getTime()) {
+            console.log("❌ Development token would be expired");
+            return null;
+          }
+          
+          const timeLeftMinutes = Math.round((testExpiresAt.getTime() - now.getTime()) / 60000);
+          
           return {
             id: `dev_fallback_${Date.now()}`,
             email: cleanEmail || 'dev@example.com',
@@ -231,9 +290,10 @@ export const validatePasswordResetToken = async (token, email = null) => {
             officeId: 'dev_office_id',
             officeName: 'Development Office',
             officialName: 'Dev User',
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            expiresAt: testExpiresAt,
             used: false,
-            warning: 'Firestore unavailable, using development token for testing only'
+            warning: 'Development token - NOT FOR PRODUCTION',
+            timeLeftMinutes: timeLeftMinutes
           };
         }
       }
@@ -243,7 +303,67 @@ export const validatePasswordResetToken = async (token, email = null) => {
     
   } catch (error) {
     console.error("❌ Error validating password reset token:", error);
+    console.error("Stack trace:", error.stack);
     throw error;
+  }
+};
+
+/**
+ * Debug function to check a specific token's status
+ */
+export const debugTokenStatus = async (token) => {
+  try {
+    const cleanToken = token.trim();
+    console.log("🔍 DEBUG Token Status for:", cleanToken.substring(0, 20) + '...');
+    
+    const q = query(
+      passwordResetTokensCollection,
+      where("token", "==", cleanToken)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      console.log("❌ Token not found in database");
+      return { found: false };
+    }
+    
+    const docSnap = querySnapshot.docs[0];
+    const tokenData = docSnap.data();
+    const tokenId = docSnap.id;
+    
+    const expiresAt = parseExpirationDate(tokenData.expiresAt);
+    const now = new Date();
+    const isExpired = expiresAt ? now.getTime() > expiresAt.getTime() : true;
+    const isUsed = tokenData.used === true;
+    const isValid = !isUsed && !isExpired;
+    const timeLeftMinutes = expiresAt ? Math.round((expiresAt.getTime() - now.getTime()) / 60000) : null;
+    
+    console.log("📊 Token Status:", {
+      id: tokenId,
+      email: tokenData.email,
+      used: isUsed,
+      expiresAt: expiresAt?.toISOString(),
+      currentTime: now.toISOString(),
+      isExpired: isExpired,
+      isValid: isValid,
+      timeLeftMinutes: timeLeftMinutes
+    });
+    
+    return {
+      found: true,
+      id: tokenId,
+      email: tokenData.email,
+      used: isUsed,
+      expiresAt: expiresAt,
+      isExpired: isExpired,
+      isValid: isValid,
+      timeLeftMinutes: timeLeftMinutes
+    };
+    
+  } catch (error) {
+    console.error("Debug error:", error);
+    return { error: error.message };
   }
 };
 
@@ -291,6 +411,9 @@ export const cleanupExpiredTokens = async () => {
     console.log("🧹 Starting expired token cleanup...");
     
     const now = new Date();
+    const nowMillis = now.getTime();
+    
+    // Get all unused tokens
     const q = query(
       passwordResetTokensCollection,
       where("used", "==", false)
@@ -300,11 +423,11 @@ export const cleanupExpiredTokens = async () => {
     const tokens = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      expiresAt: doc.data().expiresAt?.toDate()
+      expiresAt: parseExpirationDate(doc.data().expiresAt)
     }));
     
     const expiredTokens = tokens.filter(token => {
-      return token.expiresAt && now > token.expiresAt;
+      return token.expiresAt && nowMillis > token.expiresAt.getTime();
     });
     
     console.log(`📊 Found ${tokens.length} active tokens, ${expiredTokens.length} expired`);
@@ -315,15 +438,17 @@ export const cleanupExpiredTokens = async () => {
         await updateDoc(doc(db, "passwordResetTokens", token.id), {
           used: true,
           expiredAt: serverTimestamp(),
-          autoCleaned: true
+          autoCleaned: true,
+          cleanedAt: new Date().toISOString()
         });
-        console.log(`   ✅ Marked expired token: ${token.id}`);
+        console.log(`   ✅ Marked expired token: ${token.id} (expired at: ${token.expiresAt?.toISOString()})`);
       } catch (error) {
         console.error(`   ❌ Failed to mark token ${token.id}:`, error.message);
       }
     }
     
-    // Also clean up old used tokens (older than 24 hours)
+    // Also clean up old used tokens (older than 1 hour)
+    const oneHourAgo = new Date(nowMillis - 60 * 60 * 1000);
     const usedQ = query(
       passwordResetTokensCollection,
       where("used", "==", true)
@@ -331,10 +456,10 @@ export const cleanupExpiredTokens = async () => {
     
     const usedSnapshot = await getDocs(usedQ);
     const oldUsedTokens = usedSnapshot.docs.filter(doc => {
-      const usedAt = doc.data().usedAt?.toDate();
-      const expiredAt = doc.data().expiredAt?.toDate();
+      const usedAt = parseExpirationDate(doc.data().usedAt);
+      const expiredAt = parseExpirationDate(doc.data().expiredAt);
       const checkDate = usedAt || expiredAt;
-      return checkDate && (now - checkDate) > 24 * 60 * 60 * 1000;
+      return checkDate && checkDate.getTime() < oneHourAgo.getTime();
     });
     
     for (const tokenDoc of oldUsedTokens) {
@@ -358,7 +483,7 @@ export const cleanupExpiredTokens = async () => {
 };
 
 /**
- * Get token by ID (for debugging)
+ * Get token by ID
  */
 export const getTokenById = async (tokenId) => {
   try {
@@ -366,12 +491,13 @@ export const getTokenById = async (tokenId) => {
     const tokenSnap = await getDoc(tokenRef);
     
     if (tokenSnap.exists()) {
+      const data = tokenSnap.data();
       return {
         id: tokenSnap.id,
-        ...tokenSnap.data(),
-        expiresAt: tokenSnap.data().expiresAt?.toDate(),
-        createdAt: tokenSnap.data().createdAt?.toDate(),
-        usedAt: tokenSnap.data().usedAt?.toDate()
+        ...data,
+        expiresAt: parseExpirationDate(data.expiresAt),
+        createdAt: parseExpirationDate(data.createdAt),
+        usedAt: parseExpirationDate(data.usedAt)
       };
     }
     return null;
@@ -396,7 +522,7 @@ export const deleteTokenById = async (tokenId) => {
 };
 
 /**
- * Get all tokens for an email (for debugging)
+ * Get all tokens for an email
  */
 export const getTokensByEmail = async (email) => {
   try {
@@ -409,9 +535,9 @@ export const getTokensByEmail = async (email) => {
     const tokens = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      expiresAt: doc.data().expiresAt?.toDate(),
-      createdAt: doc.data().createdAt?.toDate(),
-      usedAt: doc.data().usedAt?.toDate()
+      expiresAt: parseExpirationDate(doc.data().expiresAt),
+      createdAt: parseExpirationDate(doc.data().createdAt),
+      usedAt: parseExpirationDate(doc.data().usedAt)
     }));
     
     console.log(`✅ Found ${tokens.length} tokens for email: ${email}`);
@@ -517,19 +643,15 @@ export const checkEmailExists = async (email, excludeId = null) => {
  * Validate office data structure
  */
 const validateOfficeData = (office) => {
-  // Ensure arrays are properly formatted
   const validatedOffice = { ...office };
   
-  // Ensure officialName exists
   if (!validatedOffice.officialName) {
     validatedOffice.officialName = "";
   }
   
-  // Validate purposes array
   if (!validatedOffice.purposes || !Array.isArray(validatedOffice.purposes)) {
     validatedOffice.purposes = [];
   } else {
-    // Ensure each purpose has required fields
     validatedOffice.purposes = validatedOffice.purposes.map((purpose, index) => ({
       id: purpose.id || `purpose_${Date.now()}_${index}`,
       name: purpose.name || `Purpose ${index + 1}`,
@@ -537,11 +659,9 @@ const validateOfficeData = (office) => {
     }));
   }
   
-  // Validate staffToVisit array
   if (!validatedOffice.staffToVisit || !Array.isArray(validatedOffice.staffToVisit)) {
     validatedOffice.staffToVisit = [];
   } else {
-    // Ensure each staff has required fields
     validatedOffice.staffToVisit = validatedOffice.staffToVisit.map((staff, index) => ({
       id: staff.id || `staff_${Date.now()}_${index}`,
       name: staff.name || `Staff ${index + 1}`,
@@ -557,7 +677,6 @@ const validateOfficeData = (office) => {
  */
 export const addOffice = async (office) => {
   try {
-    // Check if email already exists
     const existingOffice = await getOfficeByEmail(office.email);
     if (existingOffice) {
       throw new Error(`Office with email ${office.email} already exists`);
@@ -566,7 +685,6 @@ export const addOffice = async (office) => {
     const defaultPassword =
       office.role === "super" ? "superadmin2025" : "officeadmin2025";
 
-    // Validate and format office data
     const validatedOffice = validateOfficeData(office);
     
     const officeWithPassword = {
@@ -582,7 +700,6 @@ export const addOffice = async (office) => {
 
     const docRef = await addDoc(officesCollection, officeWithPassword);
     
-    // 🔹 CRITICAL: Create activity log for the NEW OFFICE
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Created",
@@ -601,15 +718,11 @@ export const addOffice = async (office) => {
     });
     
     console.log(`✅ Office "${office.name}" added successfully with activity log`);
-    console.log(`   - Official Name: ${office.officialName || 'Not provided'}`);
-    console.log(`   - Purposes: ${office.purposes?.length || 0} items`);
-    console.log(`   - Staff to visit: ${office.staffToVisit?.length || 0} items`);
     
-    // Return with ID and a fallback date for immediate UI display
     return { 
       id: docRef.id, 
       ...officeWithPassword,
-      createdAt: new Date() // Fallback for immediate display
+      createdAt: new Date()
     };
   } catch (error) {
     console.error("Error adding office:", error);
@@ -643,7 +756,7 @@ export const getOfficeById = async (id) => {
 };
 
 /**
- * Get office by email (for profile lookup)
+ * Get office by email
  */
 export const getOfficeByEmail = async (email) => {
   try {
@@ -698,15 +811,12 @@ export const updateOffice = async (office) => {
   try {
     const officeRef = doc(db, "offices", office.id);
     
-    // First, get current office data
     const currentOfficeSnap = await getDoc(officeRef);
     if (!currentOfficeSnap.exists()) {
       throw new Error(`Office with ID ${office.id} not found`);
     }
     
     const currentData = currentOfficeSnap.data();
-    
-    // Validate and format update data
     const validatedOffice = validateOfficeData(office);
     
     const updateData = {
@@ -719,20 +829,17 @@ export const updateOffice = async (office) => {
       updatedAt: serverTimestamp(),
     };
 
-    // Only update password if provided
     if (office.password) {
       updateData.password = office.password;
     }
 
     await updateDoc(officeRef, updateData);
     
-    // 🔹 CRITICAL: Create activity log for the UPDATED OFFICE
     const currentUser = getCurrentUser();
     
     let description = `Office "${office.name}" was updated`;
     let changes = [];
     
-    // Track what changed
     if (office.password && office.password !== currentData.password) {
       changes.push("password changed");
     }
@@ -749,7 +856,6 @@ export const updateOffice = async (office) => {
       changes.push(`role changed from "${currentData.role}" to "${office.role}"`);
     }
     
-    // Track array changes
     const currentPurposesCount = currentData.purposes?.length || 0;
     const newPurposesCount = office.purposes?.length || 0;
     if (currentPurposesCount !== newPurposesCount) {
@@ -784,11 +890,7 @@ export const updateOffice = async (office) => {
     });
     
     console.log(`✅ Office "${office.name}" updated successfully with activity log`);
-    console.log(`   - Official Name: ${office.officialName || 'Not provided'}`);
-    console.log(`   - New purposes count: ${newPurposesCount}`);
-    console.log(`   - New staff count: ${newStaffCount}`);
     
-    // Return updated office data
     return { 
       id: office.id, 
       ...updateData,
@@ -816,7 +918,6 @@ export const deleteOffice = async (id) => {
     
     const officeData = officeDoc.data();
     
-    // 🔹 CRITICAL: Create activity log BEFORE deleting
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Office Deleted",
@@ -834,13 +935,9 @@ export const deleteOffice = async (id) => {
       action: "delete"
     });
     
-    // Now delete the office
     await deleteDoc(officeRef);
     
     console.log(`✅ Office "${officeData.name}" deleted successfully with activity log`);
-    console.log(`   - Official Name: ${officeData.officialName || 'Not provided'}`);
-    console.log(`   - Removed ${officeData.purposes?.length || 0} purposes`);
-    console.log(`   - Removed ${officeData.staffToVisit?.length || 0} staff records`);
     return { 
       success: true, 
       id, 
@@ -856,7 +953,7 @@ export const deleteOffice = async (id) => {
 }; 
 
 /**
- * Create a login activity log (for Login.jsx)
+ * Create a login activity log
  */
 export const createLoginActivityLog = async (userData) => {
   try {
@@ -882,13 +979,12 @@ export const createLoginActivityLog = async (userData) => {
 };
 
 /**
- * Get offices with specific purpose (for filtering/searching)
+ * Get offices with specific purpose
  */
 export const getOfficesByPurpose = async (purposeName) => {
   try {
     const allOffices = await fetchOffices();
     
-    // Filter offices that have the specified purpose
     const filteredOffices = allOffices.filter(office => 
       office.purposes && 
       office.purposes.some(purpose => 
@@ -905,13 +1001,12 @@ export const getOfficesByPurpose = async (purposeName) => {
 };
 
 /**
- * Get offices with specific staff (for filtering/searching)
+ * Get offices with specific staff
  */
 export const getOfficesByStaff = async (staffName) => {
   try {
     const allOffices = await fetchOffices();
     
-    // Filter offices that have the specified staff
     const filteredOffices = allOffices.filter(office => 
       office.staffToVisit && 
       office.staffToVisit.some(staff => 
@@ -953,7 +1048,6 @@ export const addPurposeToOffice = async (officeId, purpose) => {
     const officeRef = doc(db, "offices", officeId);
     await updateDoc(officeRef, updateData);
     
-    // Create activity log
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Purpose Added",
@@ -1001,7 +1095,6 @@ export const addStaffToOffice = async (officeId, staff) => {
     const officeRef = doc(db, "offices", officeId);
     await updateDoc(officeRef, updateData);
     
-    // Create activity log
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Staff Added",
@@ -1048,7 +1141,6 @@ export const removePurposeFromOffice = async (officeId, purposeId) => {
     const officeRef = doc(db, "offices", officeId);
     await updateDoc(officeRef, updateData);
     
-    // Create activity log
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Purpose Removed",
@@ -1095,7 +1187,6 @@ export const removeStaffFromOffice = async (officeId, staffId) => {
     const officeRef = doc(db, "offices", officeId);
     await updateDoc(officeRef, updateData);
     
-    // Create activity log
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Staff Removed",
@@ -1138,7 +1229,6 @@ export const updateOfficeOfficialName = async (officeId, officialName) => {
     
     await updateDoc(officeRef, updateData);
     
-    // Create activity log
     const currentUser = getCurrentUser();
     await createActivityLog({
       title: "Official Name Updated",
@@ -1190,7 +1280,7 @@ export const createPasswordResetRequestLog = async (email) => {
 };
 
 /**
- * Get all password reset tokens (admin function)
+ * Get all password reset tokens
  */
 export const getAllPasswordResetTokens = async () => {
   try {
@@ -1198,9 +1288,9 @@ export const getAllPasswordResetTokens = async () => {
     const tokens = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-      expiresAt: doc.data().expiresAt?.toDate() || null,
-      createdAt: doc.data().createdAt?.toDate() || null,
-      usedAt: doc.data().usedAt?.toDate() || null
+      expiresAt: parseExpirationDate(doc.data().expiresAt),
+      createdAt: parseExpirationDate(doc.data().createdAt),
+      usedAt: parseExpirationDate(doc.data().usedAt)
     }));
     
     console.log(`✅ Fetched ${tokens.length} password reset tokens`);
@@ -1220,18 +1310,19 @@ export const debugAllPasswordTokens = async () => {
     console.log("🔍 DEBUG: All password reset tokens in database:");
     
     const tokens = [];
+    const now = new Date();
     snapshot.docs.forEach((doc, index) => {
       const data = doc.data();
-      const expiresAt = data.expiresAt?.toDate();
-      const isExpired = expiresAt ? new Date() > expiresAt : true;
+      const expiresAt = parseExpirationDate(data.expiresAt);
+      const isExpired = expiresAt ? now.getTime() > expiresAt.getTime() : true;
       
       tokens.push({
         id: doc.id,
         ...data,
         expiresAt: expiresAt,
         isExpired: isExpired,
-        createdAt: data.createdAt?.toDate() || null,
-        usedAt: data.usedAt?.toDate() || null
+        createdAt: parseExpirationDate(data.createdAt),
+        usedAt: parseExpirationDate(data.usedAt)
       });
       
       console.log(`  ${index + 1}. ID: ${doc.id}`);
@@ -1240,12 +1331,11 @@ export const debugAllPasswordTokens = async () => {
       console.log(`     Used: ${data.used}`);
       console.log(`     Expires: ${expiresAt?.toISOString()}`);
       console.log(`     Expired: ${isExpired ? 'YES' : 'NO'}`);
-      console.log(`     Created: ${data.createdAt?.toDate()?.toISOString()}`);
-      console.log(`     Used At: ${data.usedAt?.toDate()?.toISOString()}`);
-      console.log(`     ---`);
+      console.log(`     Time left: ${expiresAt ? Math.round((expiresAt.getTime() - now.getTime()) / 60000) + " min" : "N/A"}`);
     });
     
-    console.log(`📊 Summary: ${tokens.length} total tokens, ${tokens.filter(t => !t.used && !t.isExpired).length} valid unused tokens`);
+    const validTokens = tokens.filter(t => !t.used && !t.isExpired);
+    console.log(`📊 Summary: ${tokens.length} total tokens, ${validTokens.length} valid unused tokens`);
     
     return tokens;
   } catch (error) {
@@ -1262,7 +1352,7 @@ export const getActiveTokensCount = async () => {
     const tokens = await getAllPasswordResetTokens();
     const now = new Date();
     const activeTokens = tokens.filter(token => {
-      return !token.used && token.expiresAt && now < token.expiresAt;
+      return !token.used && token.expiresAt && now.getTime() < token.expiresAt.getTime();
     });
     
     return activeTokens.length;
@@ -1273,11 +1363,11 @@ export const getActiveTokensCount = async () => {
 };
 
 /**
- * Setup periodic token cleanup (call this once in your app)
+ * Setup periodic token cleanup
  */
 export const setupTokenCleanup = () => {
   if (typeof window !== 'undefined') {
-    // Clean up every hour
+    // Clean up every 30 minutes
     setInterval(async () => {
       try {
         const result = await cleanupExpiredTokens();
@@ -1287,9 +1377,9 @@ export const setupTokenCleanup = () => {
       } catch (error) {
         console.error("Periodic cleanup error:", error);
       }
-    }, 60 * 60 * 1000); // 1 hour
+    }, 30 * 60 * 1000); // 30 minutes
     
-    console.log("✅ Token cleanup scheduled (every hour)");
+    console.log("✅ Token cleanup scheduled (every 30 minutes)");
   }
 };
 
