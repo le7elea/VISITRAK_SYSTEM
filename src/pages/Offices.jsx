@@ -1,6 +1,6 @@
 // pages/Offices.jsx
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check } from "lucide-react";
+import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock } from "lucide-react";
 import { fetchOffices, addOffice, updateOffice, deleteOffice } from "../lib/info.services";
 
 const isValidEmail = (email) =>
@@ -110,8 +110,8 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
     return (
       <span className={`text-[10px] font-medium tracking-wider px-2 py-1 rounded-full border ${
         isSuper 
-          ? "bg-purple-50 text-purple-700 border-purple-200" 
-          : "bg-blue-50 text-blue-700 border-blue-200"
+          ? "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700 border-purple-200" 
+          : "bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border-blue-200"
       }`}>
         {isSuper ? "SUPER ADMIN" : "OFFICE ADMIN"}
       </span>
@@ -119,25 +119,42 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
   }, []);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 transition-all duration-300 hover:shadow-xl hover:border-[#7400EA]/20 group flex flex-col dark:bg-gray-800 dark:border-purple-700">
+    <div className={`bg-white rounded-2xl border p-6 transition-all duration-300 hover:shadow-xl group flex flex-col dark:bg-gray-800 ${
+      office.role === "super" 
+        ? "border-purple-300 hover:border-purple-400 dark:border-purple-600" 
+        : "border-gray-200 hover:border-[#7400EA]/20 dark:border-gray-700"
+    }`}>
       {/* Card Header with Role Badge */}
       <div className="flex justify-between items-start mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#7400EA]/20 to-[#5B2D8B]/20 rounded-lg flex items-center justify-center dark:bg-white ">
-              <span className="text-lg font-bold text-[#7400EA] ">
-                {office.name?.charAt(0).toUpperCase() || "O"}
-              </span>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center dark:bg-white ${
+              office.role === "super" 
+                ? "bg-gradient-to-br from-purple-500/20 to-purple-700/20" 
+                : "bg-gradient-to-br from-[#7400EA]/20 to-[#5B2D8B]/20"
+            }`}>
+              {office.role === "super" ? (
+                <Shield className="w-5 h-5 text-purple-600" />
+              ) : (
+                <span className="text-lg font-bold text-[#7400EA]">
+                  {office.name?.charAt(0).toUpperCase() || "O"}
+                </span>
+              )}
             </div>
             {getRoleBadge(office.role)}
             {office.role === "super" && (
               <span className="text-[8px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white">
-                PRIMARY
+                PROTECTED
               </span>
             )}
           </div>
-          <h4 className="text-xl font-bold text-gray-800 group-hover:text-[#7400EA] transition-colors dark:text-gray-100">
+          <h4 className={`text-xl font-bold group-hover:text-[#7400EA] transition-colors dark:text-gray-100 ${
+            office.role === "super" ? "text-purple-700 group-hover:text-purple-600" : "text-gray-800"
+          }`}>
             {office.name}
+            {office.role === "super" && (
+              <Lock className="inline ml-2 w-4 h-4 text-purple-500" />
+            )}
           </h4>
           {office.officialName && (
             <p className="text-sm text-gray-600 mt-1 line-clamp-2 dark:text-gray-500">
@@ -146,22 +163,28 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
           )}
         </div>
         
-        {/* Action Buttons - Minimal */}
+        {/* Action Buttons - Hide delete for super admin */}
         <div className="flex gap-1">
           <button 
             onClick={() => onEdit(index)} 
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-[#7400EA]"
+            className={`p-2 hover:bg-gray-100 rounded-lg transition-colors ${
+              office.role === "super" 
+                ? "text-purple-500 hover:text-purple-700 hover:bg-purple-50" 
+                : "text-gray-500 hover:text-[#7400EA]"
+            }`}
             title="Edit"
           >
             <Pencil size={16} />
           </button>
-          <button 
-            onClick={() => onDelete(index)} 
-            className="p-2 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600"
-            title="Delete"
-          >
-            <Trash2 size={16} />
-          </button>
+          {office.role !== "super" && (
+            <button 
+              onClick={() => onDelete(index)} 
+              className="p-2 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600"
+              title="Delete"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       </div>
       
@@ -171,20 +194,20 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
           icon={Mail} 
           label="Email" 
           value={office.email ? office.email.split('@')[0] : "N/A"} 
-          color="purple"
+          color={office.role === "super" ? "purple" : "purple"}
         />
         <StatItem 
           icon={Calendar} 
           label="Created" 
           value={formatDate(office.createdAt)} 
-          color="blue"
+          color={office.role === "super" ? "purple" : "blue"}
         />
         {office.purposes?.length > 0 && (
           <StatItem 
             icon={Target} 
             label="Purposes" 
             value={office.purposes.length} 
-            color="green"
+            color={office.role === "super" ? "purple" : "green"}
           />
         )}
         {office.staffToVisit?.length > 0 && (
@@ -192,7 +215,7 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
             icon={Users} 
             label="Staff" 
             value={office.staffToVisit.length} 
-            color="orange"
+            color={office.role === "super" ? "purple" : "orange"}
           />
         )}
       </div>
@@ -202,7 +225,11 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
         <div className="mt-auto pt-4 border-t border-gray-100">
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500">Password:</span>
-            <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">
+            <code className={`text-xs font-mono px-2 py-1 rounded ${
+              office.role === "super" 
+                ? "bg-purple-100 text-purple-700" 
+                : "bg-gray-100 text-gray-700"
+            }`}>
               {office.password}
             </code>
           </div>
@@ -225,8 +252,7 @@ const AddOfficeModal = memo(({
   onNewPurposeChange,
   newStaff,
   onNewStaffChange,
-  loading,
-  hasSuperAdmin // ADDED: New prop to check if super admin exists
+  loading
 }) => {
   if (!show) return null;
 
@@ -414,86 +440,36 @@ const AddOfficeModal = memo(({
               </div>
             </div>
 
-            {/* User Role */}
+            {/* User Role - Only Office Admin for new offices */}
             <div className="bg-gray-50 rounded-2xl p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Key className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Key className="w-5 h-5 text-blue-600" />
                 </div>
                 <h4 className="text-lg font-semibold text-gray-800">Access Level</h4>
               </div>
               
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Super Admin Option - Disabled if already exists */}
-                  <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${data.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"} ${hasSuperAdmin && "opacity-50 cursor-not-allowed"}`}>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Only Office Admin Option - Auto-selected */}
+                  <label className="relative overflow-hidden rounded-xl border-2 border-blue-500 bg-blue-50 cursor-not-allowed">
                     <input
                       type="radio"
-                      checked={data.role === "super"}
-                      onChange={() => {
-                        if (!hasSuperAdmin) {
-                          onDataChange({ ...data, role: "super" })
-                        }
-                      }}
+                      checked={true}
                       className="sr-only"
-                      disabled={loading || hasSuperAdmin}
+                      disabled
                     />
                     <div className="p-5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${data.role === "super" ? "bg-purple-100" : "bg-gray-100"}`}>
-                            <User className={`w-4 h-4 ${data.role === "super" ? "text-purple-600" : "text-gray-400"}`} />
-                          </div>
-                          <span className="font-semibold text-gray-800">Super Admin</span>
-                          {hasSuperAdmin && (
-                            <span className="text-xs text-red-600 font-medium ml-2">
-                              (Already exists)
-                            </span>
-                          )}
-                        </div>
-                        {data.role === "super" && (
-                          <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Password:</span>
-                          <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">superadmin2025</code>
-                        </div>
-                        <p className="text-xs text-gray-500">Full system access and administration privileges</p>
-                        {hasSuperAdmin && (
-                          <p className="text-xs text-red-500 font-medium mt-2">
-                            ⚠️ Only one Super Admin is allowed. An existing Super Admin was found.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </label>
-                  
-                  {/* Office Admin Option */}
-                  <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${data.role === "office" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
-                    <input
-                      type="radio"
-                      checked={data.role === "office"}
-                      onChange={() => onDataChange({ ...data, role: "office" })}
-                      className="sr-only"
-                      disabled={loading}
-                    />
-                    <div className="p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${data.role === "office" ? "bg-blue-100" : "bg-gray-100"}`}>
-                            <Building className={`w-4 h-4 ${data.role === "office" ? "text-blue-600" : "text-gray-400"}`} />
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-100">
+                            <Building className="w-4 h-4 text-blue-600" />
                           </div>
                           <span className="font-semibold text-gray-800">Office Admin</span>
                         </div>
-                        {data.role === "office" && (
-                          <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
+                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
@@ -501,6 +477,9 @@ const AddOfficeModal = memo(({
                           <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">officeadmin2025</code>
                         </div>
                         <p className="text-xs text-gray-500">Limited to specific office functions and data</p>
+                        <p className="text-xs text-blue-500 font-medium mt-2">
+                          ℹ️ All new offices are created as Office Admins.
+                        </p>
                       </div>
                     </div>
                   </label>
@@ -644,17 +623,13 @@ const Offices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔹 Track super admin status
-  const [hasSuperAdmin, setHasSuperAdmin] = useState(false);
-  const [existingSuperAdminId, setExistingSuperAdminId] = useState(null);
-
   // 🔹 Add Office Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [addData, setAddData] = useState({ 
     name: "", 
     officialName: "", 
     email: "", 
-    role: "office",
+    role: "office", // Always "office" for new offices
     purposes: [],
     staffToVisit: []
   });
@@ -702,7 +677,7 @@ const Offices = () => {
     return emailPart ? `${emailPart}@gmail.com` : "";
   }, []);
 
-  // 🔹 Load offices from Firestore and check for super admin
+  // 🔹 Load offices from Firestore
   useEffect(() => {
     const loadOffices = async () => {
       setLoading(true);
@@ -710,16 +685,6 @@ const Offices = () => {
       try {
         const data = await fetchOffices();
         setOffices(data);
-        
-        // Check if super admin already exists
-        const superAdmin = data.find(office => office.role === "super");
-        if (superAdmin) {
-          setHasSuperAdmin(true);
-          setExistingSuperAdminId(superAdmin.id);
-        } else {
-          setHasSuperAdmin(false);
-          setExistingSuperAdminId(null);
-        }
       } catch (err) {
         console.error("Error loading offices:", err);
         setError(`Failed to load offices: ${err.message}`);
@@ -776,12 +741,6 @@ const Offices = () => {
       return;
     }
     
-    // 🔹 ADDED: Check if trying to create super admin when one already exists
-    if (addData.role === "super" && hasSuperAdmin) {
-      setAddError("A Super Admin already exists. Only one Super Admin is allowed.");
-      return;
-    }
-    
     const emailExists = offices.some(office => 
       office.email && office.email.toLowerCase() === addData.email.toLowerCase()
     );
@@ -795,7 +754,7 @@ const Offices = () => {
     setAddError("");
     
     try {
-      const defaultPassword = addData.role === "super" ? "superadmin2025" : "officeadmin2025";
+      const defaultPassword = "officeadmin2025"; // Fixed password for office admin
       const tempId = `temp_${Date.now()}`;
       
       const tempOffice = {
@@ -803,7 +762,7 @@ const Offices = () => {
         name: addData.name,
         officialName: addData.officialName,
         email: addData.email,
-        role: addData.role,
+        role: "office", // Always office admin
         password: defaultPassword,
         purposes: addData.purposes,
         staffToVisit: addData.staffToVisit,
@@ -812,13 +771,6 @@ const Offices = () => {
       
       // Update local state immediately
       setOffices(prev => [...prev, tempOffice]);
-      
-      // Update super admin status if needed
-      if (addData.role === "super") {
-        setHasSuperAdmin(true);
-        setExistingSuperAdminId(tempId);
-      }
-      
       setShowAddModal(false);
       
       // Reset form
@@ -840,6 +792,7 @@ const Offices = () => {
         try {
           const newOffice = await addOffice({
             ...addData,
+            role: "office", // Ensure it's office admin
             password: defaultPassword
           });
           
@@ -848,21 +801,9 @@ const Offices = () => {
               ? { ...newOffice, createdAt: newOffice.createdAt || new Date() }
               : office
           ));
-          
-          // Update super admin ID with real ID from database
-          if (addData.role === "super") {
-            setExistingSuperAdminId(newOffice.id);
-          }
         } catch (err) {
           console.error("Error saving office to Firestore:", err);
           setOffices(prev => prev.filter(office => office.id !== tempId));
-          
-          // Revert super admin status if save failed
-          if (addData.role === "super") {
-            setHasSuperAdmin(false);
-            setExistingSuperAdminId(null);
-          }
-          
           alert(`Warning: Office "${addData.name}" failed to save to database: ${err.message}`);
         } finally {
           setAddLoading(false);
@@ -874,7 +815,7 @@ const Offices = () => {
       setAddError(`Failed to add office: ${err.message}`);
       setAddLoading(false);
     }
-  }, [addData, offices, hasSuperAdmin]);
+  }, [addData, offices]);
 
   // 🔹 Open edit modal
   const openEditModal = useCallback((index) => {
@@ -886,7 +827,7 @@ const Offices = () => {
         name: office.name || "",
         officialName: office.officialName || "",
         email: office.email || "",
-        role: office.role || "office",
+        role: office.role || "office", // Preserve original role
         purposes: office.purposes || [],
         staffToVisit: office.staffToVisit || []
       });
@@ -981,13 +922,6 @@ const Offices = () => {
       return;
     }
     
-    // 🔹 ADDED: Check if trying to change to super admin when one already exists
-    const currentOffice = offices[editIndex];
-    if (editData.role === "super" && currentOffice.role !== "super" && hasSuperAdmin) {
-      setEditError("A Super Admin already exists. Only one Super Admin is allowed.");
-      return;
-    }
-    
     const emailExists = offices.some((office, index) => 
       index !== editIndex && 
       office.email && 
@@ -1009,7 +943,7 @@ const Offices = () => {
         name: editData.name,
         officialName: editData.officialName,
         email: editData.email,
-        role: editData.role,
+        role: editData.role, // Keep original role (super or office)
         purposes: editData.purposes,
         staffToVisit: editData.staffToVisit,
         createdAt: originalOffice.createdAt,
@@ -1020,16 +954,6 @@ const Offices = () => {
       const updatedOffices = [...offices];
       updatedOffices[editIndex] = updatedOffice;
       setOffices(updatedOffices);
-      
-      // Update super admin status if needed
-      if (editData.role === "super" && originalOffice.role !== "super") {
-        setHasSuperAdmin(true);
-        setExistingSuperAdminId(editData.id);
-      } else if (editData.role !== "super" && originalOffice.role === "super") {
-        setHasSuperAdmin(false);
-        setExistingSuperAdminId(null);
-      }
-      
       setEditIndex(null);
       
       alert(`Office "${editData.name}" updated successfully!`);
@@ -1040,21 +964,9 @@ const Offices = () => {
           await updateOffice(updatedOffice);
         } catch (err) {
           console.error("Error updating office in Firestore:", err);
-          
-          // Revert changes
           const revertedOffices = [...offices];
           revertedOffices[editIndex] = originalOffice;
           setOffices(revertedOffices);
-          
-          // Revert super admin status
-          if (originalOffice.role === "super") {
-            setHasSuperAdmin(true);
-            setExistingSuperAdminId(originalOffice.id);
-          } else {
-            setHasSuperAdmin(false);
-            setExistingSuperAdminId(null);
-          }
-          
           alert(`Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`);
         } finally {
           setEditLoading(false);
@@ -1066,7 +978,7 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [editIndex, editData, offices, hasSuperAdmin]);
+  }, [editIndex, editData, offices]);
 
   // 🔹 OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -1075,11 +987,12 @@ const Offices = () => {
     const officeToDelete = offices[deleteIndex];
     if (!officeToDelete || !officeToDelete.id) return;
     
-    // 🔹 ADDED: Warn before deleting super admin
+    // 🔹 PREVENT deleting super admin
     if (officeToDelete.role === "super") {
-      if (!window.confirm("Are you sure you want to delete the only Super Admin? This might limit system administration capabilities.")) {
-        return;
-      }
+      alert("Super Admin accounts cannot be deleted. This account is protected.");
+      setDeleteIndex(null);
+      setDeleteConfirmed(false);
+      return;
     }
     
     const originalOffice = officeToDelete;
@@ -1089,13 +1002,6 @@ const Offices = () => {
       // Update local state immediately
       const updatedOffices = offices.filter((_, i) => i !== deleteIndex);
       setOffices(updatedOffices);
-      
-      // Update super admin status if deleting super admin
-      if (officeToDelete.role === "super") {
-        setHasSuperAdmin(false);
-        setExistingSuperAdminId(null);
-      }
-      
       setDeleteIndex(null);
       setDeleteConfirmed(false);
       
@@ -1107,20 +1013,11 @@ const Offices = () => {
           await deleteOffice(officeToDelete.id);
         } catch (err) {
           console.error("Error deleting office from Firestore:", err);
-          
-          // Restore office
           setOffices(prev => {
             const restored = [...prev];
             restored.splice(deleteIndex, 0, originalOffice);
             return restored;
           });
-          
-          // Restore super admin status
-          if (originalOffice.role === "super") {
-            setHasSuperAdmin(true);
-            setExistingSuperAdminId(originalOffice.id);
-          }
-          
           alert(`Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`);
         } finally {
           setDeleteLoading(false);
@@ -1143,7 +1040,7 @@ const Offices = () => {
             <h3 className="text-2xl font-bold mb-2">Office Accounts</h3>
             <p className="text-black/80 dark:text-gray-400">
               {loading ? "Loading..." : `${offices.length} office${offices.length !== 1 ? 's' : ''} registered`}
-              {hasSuperAdmin && " (1 Super Admin)"}
+              {offices.some(o => o.role === "super") && " (Super Admin protected)"}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -1214,7 +1111,6 @@ const Offices = () => {
         newStaff={newStaff}
         onNewStaffChange={handleAddStaffInput}
         loading={addLoading}
-        hasSuperAdmin={hasSuperAdmin} // Pass super admin status
       />
 
       {/* 🔹 EDIT MODAL */}
@@ -1222,15 +1118,29 @@ const Offices = () => {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-6">
+            <div className={`sticky top-0 bg-gradient-to-r text-white px-8 py-6 ${
+              editData.role === "super" 
+                ? "from-purple-600 to-purple-700" 
+                : "from-blue-600 to-blue-700"
+            }`}>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-                    <Pencil size={24} />
+                    {editData.role === "super" ? (
+                      <Shield size={24} />
+                    ) : (
+                      <Pencil size={24} />
+                    )}
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold">Edit Office</h3>
-                    <p className="text-white/80 text-sm mt-1">Update office details and preferences</p>
+                    <h3 className="text-2xl font-bold">
+                      {editData.role === "super" ? "Edit Super Admin" : "Edit Office"}
+                    </h3>
+                    <p className="text-white/80 text-sm mt-1">
+                      {editData.role === "super" 
+                        ? "Update Super Admin account details" 
+                        : "Update office details and preferences"}
+                    </p>
                   </div>
                 </div>
                 <button 
@@ -1252,36 +1162,73 @@ const Offices = () => {
                 </div>
               )}
               
+              {/* Super Admin Warning */}
+              {editData.role === "super" && (
+                <div className="mb-6 p-4 bg-purple-50 border-l-4 border-purple-500 rounded-r-lg">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-800 mb-1">
+                        ⚠️ Super Admin Account (Protected)
+                      </p>
+                      <p className="text-sm text-purple-700">
+                        This is a protected Super Admin account. You can edit its details but cannot delete it or change its role.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="space-y-8">
                 {/* Basic Information */}
-                <div className="bg-gray-50 rounded-2xl p-6">
+                <div className={`rounded-2xl p-6 ${
+                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                }`}>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Building className="w-5 h-5 text-blue-600" />
+                    <div className={`p-2 rounded-lg ${
+                      editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                    }`}>
+                      {editData.role === "super" ? (
+                        <Shield className="w-5 h-5 text-purple-600" />
+                      ) : (
+                        <Building className="w-5 h-5 text-blue-600" />
+                      )}
                     </div>
-                    <h4 className="text-lg font-semibold text-gray-800">Office Details</h4>
+                    <h4 className="text-lg font-semibold text-gray-800">
+                      {editData.role === "super" ? "Super Admin Details" : "Office Details"}
+                    </h4>
                   </div>
                   
                   <div className="space-y-6">
                     <div>
                       <label className="text-sm font-medium text-gray-700 block mb-3">
-                        Office Name (e,g: SDS, Registrar, etc.)
+                        {editData.role === "super" ? "Super Admin Name" : "Office Name (e,g: SDS, Registrar, etc.)"}
                       </label>
                       <div className="relative">
                         <input
                           value={editData.name || ""}
                           onChange={(e) => handleEditNameChange(e.target.value)}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all uppercase"
+                          className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
+                            editData.role === "super" 
+                              ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
+                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                          }`}
                           disabled={editLoading}
                           style={{ textTransform: 'uppercase' }}
                         />
                         <div className="absolute right-3 top-3">
-                          <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">UPPERCASE</span>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            editData.role === "super" 
+                              ? "bg-purple-100 text-purple-600" 
+                              : "bg-blue-100 text-blue-600"
+                          }`}>
+                            UPPERCASE
+                          </span>
                         </div>
                       </div>
                       <div className="mt-4">
                         <label className="text-sm font-medium text-gray-700 block mb-2">
-                          Office Email <span className="text-red-500">*</span>
+                          Email <span className="text-red-500">*</span>
                         </label>
 
                         <input
@@ -1290,7 +1237,11 @@ const Offices = () => {
                           onChange={(e) =>
                             setEditData(prev => ({ ...prev, email: e.target.value.toLowerCase() }))
                           }
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                          className={`w-full px-4 py-3 border rounded-xl ${
+                            editData.role === "super" 
+                              ? "border-purple-300 focus:border-purple-500" 
+                              : "border-gray-300 focus:border-blue-500"
+                          }`}
                           disabled={editLoading}
                         />
                       </div>
@@ -1299,14 +1250,18 @@ const Offices = () => {
                     
                     <div>
                       <label className="text-sm font-medium text-gray-700 block mb-3">
-                        Official Office Name <span className="text-red-500">*</span>
+                        {editData.role === "super" ? "Full Name / Title" : "Official Office Name"} <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <input
                           value={editData.officialName || ""}
                           onChange={(e) => setEditData(prev => ({ ...prev, officialName: e.target.value }))}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                          placeholder="Enter official office name"
+                          className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 ${
+                            editData.role === "super" 
+                              ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
+                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                          }`}
+                          placeholder={editData.role === "super" ? "Enter full name or title" : "Enter official office name"}
                           disabled={editLoading}
                         />
                         <div className="absolute right-3 top-3">
@@ -1317,83 +1272,77 @@ const Offices = () => {
                   </div>
                 </div>
 
-                {/* User Role */}
-                <div className="bg-gray-50 rounded-2xl p-6">
+                {/* User Role - Show current role but cannot change */}
+                <div className={`rounded-2xl p-6 ${
+                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                }`}>
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Key className="w-5 h-5 text-purple-600" />
+                    <div className={`p-2 rounded-lg ${
+                      editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                    }`}>
+                      {editData.role === "super" ? (
+                        <Shield className="w-5 h-5 text-purple-600" />
+                      ) : (
+                        <Key className="w-5 h-5 text-blue-600" />
+                      )}
                     </div>
                     <h4 className="text-lg font-semibold text-gray-800">Access Level</h4>
                   </div>
                   
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Super Admin Option */}
-                      <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${editData.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"} ${editData.role !== "super" && hasSuperAdmin && editData.id !== existingSuperAdminId && "opacity-50 cursor-not-allowed"}`}>
-                        <input
-                          type="radio"
-                          checked={editData.role === "super"}
-                          onChange={() => {
-                            // Allow if editing the existing super admin or if no super admin exists
-                            if (editData.role === "super" || !hasSuperAdmin || editData.id === existingSuperAdminId) {
-                              setEditData(prev => ({ ...prev, role: "super" }))
-                            }
-                          }}
-                          className="sr-only"
-                          disabled={editLoading || (editData.role !== "super" && hasSuperAdmin && editData.id !== existingSuperAdminId)}
-                        />
+                    <div className="grid grid-cols-1 gap-4">
+                      {/* Display current role - cannot be changed */}
+                      <label className={`relative overflow-hidden rounded-xl border-2 cursor-not-allowed ${
+                        editData.role === "super" 
+                          ? "border-purple-500 bg-gradient-to-r from-purple-50 to-purple-100" 
+                          : "border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100"
+                      }`}>
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${editData.role === "super" ? "bg-purple-100" : "bg-gray-100"}`}>
-                                <User className={`w-4 h-4 ${editData.role === "super" ? "text-purple-600" : "text-gray-400"}`} />
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                              }`}>
+                                {editData.role === "super" ? (
+                                  <Shield className="w-4 h-4 text-purple-600" />
+                                ) : (
+                                  <Building className="w-4 h-4 text-blue-600" />
+                                )}
                               </div>
-                              <span className="font-semibold text-gray-800">Super Admin</span>
-                              {hasSuperAdmin && editData.role !== "super" && editData.id !== existingSuperAdminId && (
-                                <span className="text-xs text-red-600 font-medium ml-2">
-                                  (Already exists)
+                              <div>
+                                <span className="font-semibold text-gray-800">
+                                  {editData.role === "super" ? "Super Admin" : "Office Admin"}
                                 </span>
-                              )}
-                            </div>
-                            {editData.role === "super" && (
-                              <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {editData.role === "super" 
+                                    ? "Full system access and administration privileges" 
+                                    : "Limited to specific office functions and data"}
+                                </p>
                               </div>
-                            )}
+                            </div>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                              editData.role === "super" ? "bg-purple-500" : "bg-blue-500"
+                            }`}>
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-500">Full system access and administration privileges</p>
-                          {hasSuperAdmin && editData.role !== "super" && editData.id !== existingSuperAdminId && (
-                            <p className="text-xs text-red-500 font-medium mt-2">
-                              ⚠️ Only one Super Admin is allowed. An existing Super Admin was found.
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Password:</span>
+                              <code className={`font-mono px-2 py-1 rounded ${
+                                editData.role === "super" 
+                                  ? "bg-purple-100 text-purple-700" 
+                                  : "bg-gray-100 text-gray-700"
+                              }`}>
+                                {editData.role === "super" ? "superadmin2025" : "officeadmin2025"}
+                              </code>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {editData.role === "super" 
+                                ? "Account role is protected and cannot be changed" 
+                                : "Account role cannot be changed"}
                             </p>
-                          )}
-                        </div>
-                      </label>
-                      
-                      {/* Office Admin Option */}
-                      <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${editData.role === "office" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
-                        <input
-                          type="radio"
-                          checked={editData.role === "office"}
-                          onChange={() => setEditData(prev => ({ ...prev, role: "office" }))}
-                          className="sr-only"
-                          disabled={editLoading}
-                        />
-                        <div className="p-5">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${editData.role === "office" ? "bg-blue-100" : "bg-gray-100"}`}>
-                                <Building className={`w-4 h-4 ${editData.role === "office" ? "text-blue-600" : "text-gray-400"}`} />
-                              </div>
-                              <span className="font-semibold text-gray-800">Office Admin</span>
-                            </div>
-                            {editData.role === "office" && (
-                              <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
-                              </div>
-                            )}
                           </div>
-                          <p className="text-xs text-gray-500">Limited to specific office functions and data</p>
                         </div>
                       </label>
                     </div>
@@ -1401,18 +1350,28 @@ const Offices = () => {
                 </div>
 
                 {/* Purposes of Visit */}
-                <div className="bg-gray-50 rounded-2xl p-6">
+                <div className={`rounded-2xl p-6 ${
+                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                }`}>
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Target className="w-5 h-5 text-blue-600" />
+                      <div className={`p-2 rounded-lg ${
+                        editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                      }`}>
+                        <Target className={`w-5 h-5 ${
+                          editData.role === "super" ? "text-purple-600" : "text-blue-600"
+                        }`} />
                       </div>
                       <div>
                         <h4 className="text-lg font-semibold text-gray-800">Visit Purposes</h4>
                         <p className="text-sm text-gray-500">What visitors can select when visiting</p>
                       </div>
                     </div>
-                    <span className="text-sm font-medium bg-blue-100 text-blue-600 px-3 py-1 rounded-full">
+                    <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                      editData.role === "super" 
+                        ? "bg-purple-100 text-purple-600" 
+                        : "bg-blue-100 text-blue-600"
+                    }`}>
                       {editData.purposes.length} added
                     </span>
                   </div>
@@ -1425,7 +1384,11 @@ const Offices = () => {
                           value={editNewPurpose}
                           onChange={(e) => handleEditPurposeInput(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && addPurposeToEditList()}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all uppercase"
+                          className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
+                            editData.role === "super" 
+                              ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
+                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                          }`}
                           placeholder="Add a purpose"
                           disabled={editLoading}
                           style={{ textTransform: 'uppercase' }}
@@ -1438,7 +1401,11 @@ const Offices = () => {
                         type="button"
                         onClick={addPurposeToEditList}
                         disabled={editLoading || !editNewPurpose.trim()}
-                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                        className={`px-6 py-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium ${
+                          editData.role === "super"
+                            ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                            : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                        } text-white`}
                       >
                         <Plus size={18} />
                         Add
@@ -1449,14 +1416,22 @@ const Offices = () => {
                       {editData.purposes.map((purpose) => (
                         <div 
                           key={purpose.id} 
-                          className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02]"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] ${
+                            editData.role === "super"
+                              ? "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
+                              : "bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700"
+                          }`}
                         >
                           <Target size={14} className="flex-shrink-0" />
                           <span className="font-medium">{purpose.name}</span>
                           <button
                             type="button"
                             onClick={() => removePurposeFromEditList(purpose.id)}
-                            className="ml-1 text-blue-400 hover:text-blue-600 transition-colors"
+                            className={`ml-1 transition-colors ${
+                              editData.role === "super"
+                                ? "text-purple-400 hover:text-purple-600"
+                                : "text-blue-400 hover:text-blue-600"
+                            }`}
                           >
                             <X size={14} />
                           </button>
@@ -1467,18 +1442,28 @@ const Offices = () => {
                 </div>
 
                 {/* Staff/Instructors to Visit */}
-                <div className="bg-gray-50 rounded-2xl p-6">
+                <div className={`rounded-2xl p-6 ${
+                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                }`}>
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-lg">
-                        <UserPlus className="w-5 h-5 text-green-600" />
+                      <div className={`p-2 rounded-lg ${
+                        editData.role === "super" ? "bg-purple-100" : "bg-green-100"
+                      }`}>
+                        <UserPlus className={`w-5 h-5 ${
+                          editData.role === "super" ? "text-purple-600" : "text-green-600"
+                        }`} />
                       </div>
                       <div>
                         <h4 className="text-lg font-semibold text-gray-800">Staff & Instructors</h4>
                         <p className="text-sm text-gray-500">Who visitors can request to meet</p>
                       </div>
                     </div>
-                    <span className="text-sm font-medium bg-green-100 text-green-600 px-3 py-1 rounded-full">
+                    <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                      editData.role === "super" 
+                        ? "bg-purple-100 text-purple-600" 
+                        : "bg-green-100 text-green-600"
+                    }`}>
                       {editData.staffToVisit.length} added
                     </span>
                   </div>
@@ -1491,7 +1476,11 @@ const Offices = () => {
                           value={editNewStaff}
                           onChange={(e) => handleEditStaffInput(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && addStaffToEditList()}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all uppercase"
+                          className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
+                            editData.role === "super" 
+                              ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
+                              : "border-gray-300 focus:border-green-500 focus:ring-green-500/20"
+                          }`}
                           placeholder="Add staff/instructor name"
                           disabled={editLoading}
                           style={{ textTransform: 'uppercase' }}
@@ -1504,7 +1493,11 @@ const Offices = () => {
                         type="button"
                         onClick={addStaffToEditList}
                         disabled={editLoading || !editNewStaff.trim()}
-                        className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                        className={`px-6 py-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium ${
+                          editData.role === "super"
+                            ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                            : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                        } text-white`}
                       >
                         <Plus size={18} />
                         Add
@@ -1515,14 +1508,22 @@ const Offices = () => {
                       {editData.staffToVisit.map((staff) => (
                         <div 
                           key={staff.id} 
-                          className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-green-100 text-green-700 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02]"
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] ${
+                            editData.role === "super"
+                              ? "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
+                              : "bg-gradient-to-r from-green-50 to-green-100 text-green-700"
+                          }`}
                         >
                           <UserPlus size={14} className="flex-shrink-0" />
                           <span className="font-medium">{staff.name}</span>
                           <button
                             type="button"
                             onClick={() => removeStaffFromEditList(staff.id)}
-                            className="ml-1 text-green-400 hover:text-green-600 transition-colors"
+                            className={`ml-1 transition-colors ${
+                              editData.role === "super"
+                                ? "text-purple-400 hover:text-purple-600"
+                                : "text-green-400 hover:text-green-600"
+                            }`}
                           >
                             <X size={14} />
                           </button>
@@ -1537,7 +1538,11 @@ const Offices = () => {
                   <button 
                     onClick={saveEdit} 
                     disabled={editLoading}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-4 rounded-xl transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed group"
+                    className={`w-full py-4 rounded-xl transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed group ${
+                      editData.role === "super"
+                        ? "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                        : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                    } text-white`}
                   >
                     {editLoading ? (
                       <span className="flex items-center justify-center gap-3">
@@ -1547,7 +1552,7 @@ const Offices = () => {
                     ) : (
                       <span className="flex items-center justify-center gap-3">
                         <Check size={20} />
-                        UPDATE OFFICE
+                        {editData.role === "super" ? "UPDATE SUPER ADMIN" : "UPDATE OFFICE"}
                         <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                         </svg>
@@ -1634,37 +1639,54 @@ const Offices = () => {
                 </div>
               </div>
 
-              {/* Warning Message */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <div className="flex items-start">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800 mb-1">Important Warning</p>
-                    <p className="text-sm text-yellow-700">
-                      All data associated with this office account will be permanently deleted. 
-                      This includes any documents, files, or records created by this user.
-                    </p>
+              {/* Warning Message - Special message for super admin */}
+              {offices[deleteIndex]?.role === "super" ? (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <Shield className="w-5 h-5 text-purple-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-800 mb-1">Super Admin Protected</p>
+                      <p className="text-sm text-purple-700">
+                        Super Admin accounts cannot be deleted from this interface. 
+                        This account is protected and required for system administration.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Extra Confirmation for Safety */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <label className="flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={deleteConfirmed}
-                    onChange={(e) => setDeleteConfirmed(e.target.checked)}
-                    className="h-5 w-5 text-red-600 rounded border-gray-300 mr-3 focus:ring-red-500 focus:ring-offset-0"
-                  />
-                  <div>
-                    <p className="font-medium text-gray-800">I confirm I want to delete this account</p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      I understand this action is permanent and cannot be undone
-                    </p>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-800 mb-1">Important Warning</p>
+                      <p className="text-sm text-yellow-700">
+                        All data associated with this office account will be permanently deleted. 
+                        This includes any documents, files, or records created by this user.
+                      </p>
+                    </div>
                   </div>
-                </label>
-              </div>
+                </div>
+              )}
+
+              {/* Extra Confirmation for Safety - Only show for non-super admin */}
+              {offices[deleteIndex]?.role !== "super" && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <label className="flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={deleteConfirmed}
+                      onChange={(e) => setDeleteConfirmed(e.target.checked)}
+                      className="h-5 w-5 text-red-600 rounded border-gray-300 mr-3 focus:ring-red-500 focus:ring-offset-0"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-800">I confirm I want to delete this account</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        I understand this action is permanent and cannot be undone
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3">
@@ -1679,23 +1701,38 @@ const Offices = () => {
                   <X size={18} />
                   Cancel
                 </button>
-                <button 
-                  onClick={confirmDelete} 
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={deleteLoading || !deleteConfirmed}
-                >
-                  {deleteLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 size={18} />
-                      Delete Account
-                    </>
-                  )}
-                </button>
+                
+                {offices[deleteIndex]?.role === "super" ? (
+                  <button 
+                    onClick={() => {
+                      alert("Super Admin accounts cannot be deleted. This account is protected.");
+                      setDeleteIndex(null);
+                      setDeleteConfirmed(false);
+                    }}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2 cursor-not-allowed opacity-50"
+                  >
+                    <Shield size={18} />
+                    Protected
+                  </button>
+                ) : (
+                  <button 
+                    onClick={confirmDelete} 
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={deleteLoading || !deleteConfirmed}
+                  >
+                    {deleteLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={18} />
+                        Delete Account
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
            </div>
