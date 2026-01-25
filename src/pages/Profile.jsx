@@ -1,10 +1,10 @@
-// pages/Profile.jsx
+// pages/Profile.jsx - COMPLETE FIXED VERSION
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import ProfileCard from "../components/ProfileCard";
 import Tabs from "../components/Tabs";
 import InfoRow from "../components/InfoRow";
-import { fetchOffices, updateOffice } from "../lib/info.services";
+import { fetchOffices, updateOffice, getOfficeByEmail, getOfficeById } from "../lib/info.services";
 import { 
   collection, 
   query, 
@@ -30,7 +30,7 @@ const Profile = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   
   // Date filtering states
-  const [dateFilter, setDateFilter] = useState("all"); // "all", "today", "yesterday", "week", "month", "custom"
+  const [dateFilter, setDateFilter] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
@@ -54,6 +54,7 @@ const Profile = () => {
     return officeName.toString().trim().toLowerCase();
   };
 
+  // Enhanced user loading with SUPERADMIN SPECIAL HANDLING
   useEffect(() => {
     const loadUserData = async () => {
       setLoading(true);
@@ -66,14 +67,96 @@ const Profile = () => {
         }
         
         const parsedUser = JSON.parse(savedUser);
+        console.log("🔍 Loading user data:", {
+          email: parsedUser.email,
+          type: parsedUser.type,
+          role: parsedUser.role,
+          id: parsedUser.id
+        });
         
         const officesData = await fetchOffices();
         setOffices(officesData);
         
-        const userOffice = officesData.find(
-          office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
-        );
+        let userOffice = null;
         
+        // ========== SPECIAL HANDLING FOR SUPERADMIN ==========
+        if (parsedUser.type === "SuperAdmin" || parsedUser.role === "super") {
+          console.log("👑 SUPERADMIN DETECTED - Special handling");
+          
+          // For SuperAdmin, we have multiple strategies:
+          
+          // 1. FIRST: Try to find ANY super admin office (primary strategy)
+          console.log("🔍 Strategy 1: Looking for any super admin office");
+          userOffice = officesData.find(office => office.role === "super");
+          
+          if (userOffice) {
+            console.log("✅ Found super admin office:", {
+              name: userOffice.name,
+              email: userOffice.email,
+              id: userOffice.id
+            });
+            
+            // Check if email matches - if not, we'll update localStorage
+            if (userOffice.email !== parsedUser.email) {
+              console.log("🔄 SuperAdmin email changed:", {
+                old: parsedUser.email,
+                new: userOffice.email
+              });
+            }
+          }
+          
+          // 2. SECOND: If no super admin found, check if current user's ID exists
+          if (!userOffice && parsedUser.id) {
+            console.log("🔍 Strategy 2: Looking by ID:", parsedUser.id);
+            userOffice = officesData.find(office => office.id === parsedUser.id);
+          }
+          
+          // 3. THIRD: Try email lookup (might fail if email changed)
+          if (!userOffice && parsedUser.email) {
+            console.log("🔍 Strategy 3: Looking by email:", parsedUser.email);
+            userOffice = officesData.find(
+              office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
+            );
+          }
+        } else {
+          // ========== REGULAR OFFICE ADMIN HANDLING ==========
+          console.log("🏢 OFFICE ADMIN DETECTED");
+          
+          // Strategy 1: Try to find by ID first
+          if (parsedUser.id) {
+            console.log("🔍 Strategy 1: Looking up by ID:", parsedUser.id);
+            userOffice = officesData.find(office => office.id === parsedUser.id);
+            if (userOffice) {
+              console.log("✅ Found user by ID:", userOffice.name);
+            }
+          }
+          
+          // Strategy 2: Try to find by email
+          if (!userOffice && parsedUser.email) {
+            console.log("🔍 Strategy 2: Looking up by email:", parsedUser.email);
+            userOffice = officesData.find(
+              office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
+            );
+            if (userOffice) {
+              console.log("✅ Found user by email:", userOffice.name);
+            }
+          }
+          
+          // Strategy 3: Use the info.services function
+          if (!userOffice && parsedUser.email) {
+            console.log("🔍 Strategy 3: Using getOfficeByEmail function");
+            try {
+              userOffice = await getOfficeByEmail(parsedUser.email);
+              if (userOffice) {
+                console.log("✅ Found user via getOfficeByEmail:", userOffice.name);
+              }
+            } catch (error) {
+              console.log("getOfficeByEmail error:", error);
+            }
+          }
+        }
+        
+        // ========== CREATE USER OBJECT ==========
         if (userOffice) {
           const type = userOffice.role === "super" ? "SuperAdmin" : "OfficeAdmin";
           
@@ -92,44 +175,84 @@ const Profile = () => {
           
           setUser(completeUser);
           
-          localStorage.setItem("user", JSON.stringify({
+          // CRITICAL: Always update localStorage with current data
+          const updatedUserData = {
             ...parsedUser,
-            name: userOffice.name,
-            role: userOffice.role,
             id: userOffice.id,
-            office: userOffice.name
-          }));
+            name: userOffice.name,
+            email: userOffice.email, // This updates the email if it changed!
+            role: userOffice.role,
+            office: userOffice.name,
+            type: type
+          };
+          
+          localStorage.setItem("user", JSON.stringify(updatedUserData));
+          
+          console.log("✅ User data loaded and localStorage updated:", {
+            oldEmail: parsedUser.email,
+            newEmail: userOffice.email,
+            type: type,
+            isSuperAdmin: type === "SuperAdmin"
+          });
           
           await loadActivityLogs(completeUser);
         } else {
-          const fallbackUser = {
-            id: "temp-" + Date.now(),
-            name: parsedUser.office || "User",
-            email: parsedUser.email,
-            role: parsedUser.type === "SuperAdmin" ? "super" : "office",
-            type: parsedUser.type,
-            office: parsedUser.office || "Not Assigned",
-            password: parsedUser.type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025",
-            createdAt: new Date(),
-            isInDatabase: false,
-            needsSetup: true
-          };
+          console.log("⚠️ User not found in database");
           
-          setUser(fallbackUser);
-          await loadActivityLogs(fallbackUser);
+          // For SuperAdmin specifically, we can create a fallback
+          if (parsedUser.type === "SuperAdmin" || parsedUser.role === "super") {
+            console.log("👑 Creating SuperAdmin fallback");
+            
+            // Check if there are ANY offices in the system
+            console.log("📊 Total offices in system:", officesData.length);
+            
+            const fallbackUser = {
+              id: parsedUser.id || "superadmin-fallback",
+              name: parsedUser.name || "Super Administrator",
+              email: parsedUser.email,
+              role: "super",
+              type: "SuperAdmin",
+              office: "System Administration",
+              password: "superadmin2025",
+              createdAt: new Date(),
+              isInDatabase: false,
+              needsSetup: true,
+              setupReason: "No super admin found in database"
+            };
+            
+            setUser(fallbackUser);
+            await loadActivityLogs(fallbackUser);
+          } else {
+            // Regular office admin fallback
+            const fallbackUser = {
+              id: parsedUser.id || "temp-" + Date.now(),
+              name: parsedUser.name || parsedUser.office || "User",
+              email: parsedUser.email,
+              role: parsedUser.role || "office",
+              type: parsedUser.type || "OfficeAdmin",
+              office: parsedUser.office || "Not Assigned",
+              password: parsedUser.type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025",
+              createdAt: new Date(),
+              isInDatabase: false,
+              needsSetup: true
+            };
+            
+            setUser(fallbackUser);
+            await loadActivityLogs(fallbackUser);
+          }
         }
       } catch (error) {
-        console.error("Error loading user data:", error);
+        console.error("❌ Error loading user data:", error);
         
         const savedUser = localStorage.getItem("user");
         if (savedUser) {
           const parsedUser = JSON.parse(savedUser);
           const fallbackUser = {
-            id: "error-fallback",
-            name: parsedUser.office || "User",
+            id: parsedUser.id || "error-fallback",
+            name: parsedUser.name || parsedUser.office || "User",
             email: parsedUser.email,
-            role: parsedUser.type === "SuperAdmin" ? "super" : "office",
-            type: parsedUser.type,
+            role: parsedUser.role || (parsedUser.type === "SuperAdmin" ? "super" : "office"),
+            type: parsedUser.type || "OfficeAdmin",
             office: parsedUser.office || "Not Assigned",
             password: parsedUser.type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025",
             createdAt: new Date(),
@@ -147,16 +270,137 @@ const Profile = () => {
     loadUserData();
   }, [navigate]);
 
+  // Add a refresh function to manually reload user data
+  const refreshUserData = async () => {
+    setLoading(true);
+    try {
+      const savedUser = localStorage.getItem("user");
+      if (!savedUser) {
+        navigate('/login');
+        return;
+      }
+      
+      const parsedUser = JSON.parse(savedUser);
+      
+      // Clear old data and reload
+      const officesData = await fetchOffices();
+      setOffices(officesData);
+      
+      let userOffice = null;
+      
+      // Try all strategies again
+      if (parsedUser.id) {
+        userOffice = officesData.find(office => office.id === parsedUser.id);
+      }
+      
+      if (!userOffice && parsedUser.email) {
+        userOffice = officesData.find(
+          office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
+        );
+      }
+      
+      if (userOffice) {
+        const type = userOffice.role === "super" ? "SuperAdmin" : "OfficeAdmin";
+        const completeUser = {
+          id: userOffice.id,
+          name: userOffice.name,
+          email: userOffice.email,
+          role: userOffice.role,
+          type: type,
+          office: userOffice.name,
+          password: userOffice.password || (type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025"),
+          createdAt: userOffice.createdAt,
+          updatedAt: userOffice.updatedAt,
+          isInDatabase: true
+        };
+        
+        setUser(completeUser);
+        
+        localStorage.setItem("user", JSON.stringify({
+          ...parsedUser,
+          id: userOffice.id,
+          name: userOffice.name,
+          email: userOffice.email,
+          role: userOffice.role,
+          office: userOffice.name,
+          type: type
+        }));
+        
+        await loadActivityLogs(completeUser);
+        console.log("✅ User data refreshed");
+      }
+    } catch (error) {
+      console.error("Error refreshing user data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // SuperAdmin-specific refresh function
+  const refreshSuperAdmin = async () => {
+    setLoading(true);
+    try {
+      const savedUser = localStorage.getItem("user");
+      if (!savedUser) return;
+      
+      const parsedUser = JSON.parse(savedUser);
+      
+      // Force reload offices
+      const officesData = await fetchOffices();
+      setOffices(officesData);
+      
+      // Look for any super admin
+      const superAdminOffice = officesData.find(office => office.role === "super");
+      
+      if (superAdminOffice) {
+        const completeUser = {
+          id: superAdminOffice.id,
+          name: superAdminOffice.name,
+          email: superAdminOffice.email,
+          role: "super",
+          type: "SuperAdmin",
+          office: superAdminOffice.name,
+          password: superAdminOffice.password || "superadmin2025",
+          createdAt: superAdminOffice.createdAt,
+          updatedAt: superAdminOffice.updatedAt,
+          isInDatabase: true
+        };
+        
+        setUser(completeUser);
+        
+        // Update localStorage with the correct email
+        localStorage.setItem("user", JSON.stringify({
+          ...parsedUser,
+          id: superAdminOffice.id,
+          name: superAdminOffice.name,
+          email: superAdminOffice.email, // KEY: Update the email!
+          role: "super",
+          office: superAdminOffice.name,
+          type: "SuperAdmin"
+        }));
+        
+        console.log("✅ SuperAdmin refreshed with new email:", superAdminOffice.email);
+        await loadActivityLogs(completeUser);
+      } else {
+        alert("No SuperAdmin found in the system!");
+      }
+    } catch (error) {
+      console.error("Error refreshing SuperAdmin:", error);
+      alert("Error refreshing: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadActivityLogs = async (userData) => {
     try {
       console.log("🔍 Loading activity logs for user:", {
         name: userData.name,
-        office: userData.office,
-        role: userData.role,
-        type: userData.type
+        email: userData.email,
+        office: userData.office
       });
       
-      // Load ALL logs first, then filter in memory to avoid Firestore index issues
+      // Load ALL logs first, then filter in memory
       const allLogsQuery = query(
         collection(db, "activityLogs"),
         orderBy("timestamp", "desc"),
@@ -164,7 +408,6 @@ const Profile = () => {
       );
       
       const snapshot = await getDocs(allLogsQuery);
-      console.log(`📊 Total activity logs in database: ${snapshot.docs.length}`);
       
       const allLogs = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -197,30 +440,15 @@ const Profile = () => {
             minute: '2-digit'
           }),
           fullDate: date,
-          timestamp: date.getTime(), // Store timestamp for filtering
-          normalizedOffice: normalizeOfficeName(data.office) // Add normalized office for easier filtering
+          timestamp: date.getTime(),
+          normalizedOffice: normalizeOfficeName(data.office)
         };
       });
       
-      // Debug: Show all unique office values in the logs
-      const uniqueOffices = [...new Set(allLogs.map(log => log.office))];
-      console.log("🏢 Unique office values in logs:", uniqueOffices);
-      console.log("👤 Current user office:", userData.office);
-      
-      // Show sample logs for debugging
-      if (allLogs.length > 0) {
-        console.log("📝 Sample logs (first 5):");
-        allLogs.slice(0, 5).forEach((log, idx) => {
-          console.log(`  ${idx + 1}. Office: "${log.office}" | Title: "${log.title}" | Type: "${log.type}"`);
-        });
-      }
-      
-      // Store all logs (filtering happens in filteredHistoryData useMemo)
       setActivityLogs(allLogs);
       
     } catch (error) {
       console.error("❌ Error loading activity logs:", error);
-      console.error("Error details:", error.message);
       setActivityLogs([]);
     }
   };
@@ -273,7 +501,7 @@ const Profile = () => {
         
       case "week":
         const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+        weekStart.setDate(now.getDate() - now.getDay());
         weekStart.setHours(0, 0, 0, 0);
         return logs.filter(log => log.timestamp >= weekStart.getTime());
         
@@ -292,7 +520,7 @@ const Profile = () => {
           log.timestamp <= end.getTime()
         );
         
-      default: // "all"
+      default:
         return logs;
     }
   };
@@ -300,76 +528,33 @@ const Profile = () => {
   const filteredHistoryData = useMemo(() => {
     if (!user) return [];
     
-    // console.log("🔍 Filtering history data:");
-    // console.log("  User Role:", user.role);
-    // console.log("  User Type:", user.type);
-    // console.log("  User Office:", user.office);
-    // console.log("  Total Logs:", activityLogs.length);
-    // console.log("  Date Filter:", dateFilter);
-    
     // First filter by office/user role
     let filteredLogs = [];
     
     if (user.role === "super" || user.type === "SuperAdmin") {
-      // Super admin sees ALL logs
-      console.log("✅ Super Admin - showing all", activityLogs.length, "logs");
       filteredLogs = [...activityLogs];
     } else {
-      // Office admin sees ONLY their office logs
       const userNormalizedOffice = normalizeOfficeName(user.office || user.name);
       const userNormalizedEmail = user.email ? user.email.toLowerCase() : "";
       
-      console.log("  🔍 Filtering for office:", `"${user.office}" (normalized: "${userNormalizedOffice}")`);
-      
       filteredLogs = activityLogs.filter(log => {
-        // Get normalized values
         const logNormalizedOffice = log.normalizedOffice || normalizeOfficeName(log.office);
         const logNormalizedUserName = normalizeOfficeName(log.userName);
         const logUserEmail = log.userEmail ? log.userEmail.toLowerCase() : "";
         
-        // Check multiple conditions for matching
         const matchesOffice = logNormalizedOffice === userNormalizedOffice;
         const matchesUserName = logNormalizedUserName === userNormalizedOffice;
         const createdByUser = logUserEmail === userNormalizedEmail;
         const systemLogForUser = logNormalizedOffice === "system" && createdByUser;
-        
-        // Special case: Check if log office contains user office (for partial matches)
         const containsUserOffice = logNormalizedOffice.includes(userNormalizedOffice) || 
                                    userNormalizedOffice.includes(logNormalizedOffice);
         
-        const shouldInclude = matchesOffice || matchesUserName || createdByUser || systemLogForUser || containsUserOffice;
-        
-        // Debug first few logs
-        if (activityLogs.indexOf(log) < 3) {
-          console.log(`  Log ${activityLogs.indexOf(log) + 1}:`, {
-            logOffice: log.office,
-            normalized: logNormalizedOffice,
-            userOffice: user.office,
-            userNormalized: userNormalizedOffice,
-            matches: shouldInclude,
-            conditions: { matchesOffice, matchesUserName, createdByUser, systemLogForUser, containsUserOffice }
-          });
-        }
-        
-        return shouldInclude;
+        return matchesOffice || matchesUserName || createdByUser || systemLogForUser || containsUserOffice;
       });
-      
-      console.log(`✅ Office Admin (${user.office}) - showing ${filteredLogs.length} logs after office filter`);
-      
-      // Debug: Show what logs we found
-      if (filteredLogs.length > 0) {
-        console.log("📝 Found logs:");
-        filteredLogs.slice(0, Math.min(3, filteredLogs.length)).forEach((log, idx) => {
-          console.log(`  ${idx + 1}. Office: "${log.office}" | Title: "${log.title}" | User: "${log.userName}"`);
-        });
-      }
     }
     
     // Then apply date filtering
-    const dateFilteredLogs = filterByDateRange(filteredLogs);
-    console.log(`📅 After date filtering (${dateFilter}): ${dateFilteredLogs.length} logs`);
-    
-    return dateFilteredLogs;
+    return filterByDateRange(filteredLogs);
   }, [user, activityLogs, dateFilter, customStartDate, customEndDate]);
 
   const officePersonalInfo = useMemo(() => {
@@ -380,7 +565,6 @@ const Profile = () => {
       { label: "Email Address:", value: user.email || "Not set" },
       { label: "User Role:", value: user.role === "super" ? "Super Administrator" : "Office Administrator" },
     ];
-    
     
     if (user.createdAt) {
       let dateStr = "N/A";
@@ -430,8 +614,10 @@ const Profile = () => {
     
     if (user.needsSetup) {
       baseInfo.push({ 
-        label: "Setup Required:", 
-        value: "Add yourself to Offices" 
+        label: "Setup Status:", 
+        value: user.type === "SuperAdmin" 
+          ? "SuperAdmin Sync Required" 
+          : "Setup Required" 
       });
     }
     
@@ -477,7 +663,7 @@ const Profile = () => {
     }
     
     if (!user.isInDatabase) {
-      alert("User not found in database. Please add yourself to Offices first.");
+      alert("User not found in database. Click Refresh or log out and log back in.");
       return;
     }
     
@@ -500,6 +686,7 @@ const Profile = () => {
       
       setUser(prev => ({ ...prev, password: newPassword }));
       
+      // Update localStorage
       const savedUser = localStorage.getItem("user");
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
@@ -509,12 +696,12 @@ const Profile = () => {
         }));
       }
       
+      // Log activity
       try {
-        // Make sure to use the exact office name for the log
         await addDoc(collection(db, "activityLogs"), {
           title: "Password Changed",
           description: `${user.name} updated their password`,
-          office: user.office || user.name, // Use exact office name
+          office: user.office || user.name,
           userId: user.id,
           userEmail: user.email,
           userName: user.name,
@@ -561,7 +748,6 @@ const Profile = () => {
       setShowCustomDatePicker(false);
     } else {
       setShowCustomDatePicker(true);
-      // Set default custom range (last 7 days)
       const end = new Date();
       const start = new Date();
       start.setDate(end.getDate() - 7);
@@ -580,18 +766,77 @@ const Profile = () => {
 
   const SetupInstructions = () => (
     <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-      <h3 className="font-semibold text-yellow-700 mb-2">Setup Required</h3>
-      <p className="text-sm text-gray-600 mb-3">
-        Your account needs to be added to the system.
-      </p>
-      <ol className="text-sm text-gray-700 space-y-1 ml-4">
-        <li>1. Go to the Offices page</li>
-        <li>2. Click "Add Office" button</li>
-        <li>3. Use your email: <code className="bg-gray-100 px-2 py-1 rounded">{user?.email}</code></li>
-        <li>4. Choose your role</li>
-        <li>5. Click "ADD OFFICE"</li>
-        <li>6. Return to this page and refresh</li>
-      </ol>
+      <h3 className="font-semibold text-yellow-700 mb-2">
+        {user?.type === "SuperAdmin" ? "SuperAdmin Sync Required" : "Setup Required"}
+      </h3>
+      
+      {user?.type === "SuperAdmin" ? (
+        <>
+          <p className="text-sm text-gray-600 mb-3">
+            Your SuperAdmin profile needs to sync with the database. This usually happens when you've changed your email.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={refreshSuperAdmin}
+              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Sync SuperAdmin Profile
+            </button>
+            <p className="text-xs text-gray-500">
+              This will update your profile with the current SuperAdmin email from the database.
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-600 mb-3">
+            Your account needs to be re-synced with the system.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={refreshUserData}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh Profile Data
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            >
+              Log Out & Log Back In
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // Add refresh button to header
+  const HeaderButtons = () => (
+    <div className="flex items-center gap-3">
+      {user?.needsSetup && (
+        <button
+          onClick={user?.type === "SuperAdmin" ? refreshSuperAdmin : refreshUserData}
+          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2 text-sm font-medium"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {user?.type === "SuperAdmin" ? "Sync SuperAdmin" : "Refresh"}
+        </button>
+      )}
+      <button
+        onClick={() => navigate('/offices')}
+        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+      >
+        Go to Offices
+      </button>
     </div>
   );
 
@@ -625,15 +870,17 @@ const Profile = () => {
 
   return (
     <div className="p-4 sm:p-6 md:p-10">
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-5">
         <div>
           <h1 className="text-2xl font-semibold">My Profile</h1>
           <p className="text-gray-500 text-sm mt-1">
             {user.needsSetup && "Setup Required • "}
             {user.type === "SuperAdmin" && "System Administrator"}
             {user.type === "OfficeAdmin" && `${user.office} Office`}
+            {user.needsSetup && " • Click Refresh above"}
           </p>
         </div>
+        <HeaderButtons />
       </div>
 
       {user.needsSetup && <SetupInstructions />}
@@ -653,6 +900,15 @@ const Profile = () => {
         <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md border border-purple-200 mt-4">
           <div className="flex justify-between items-center mb-6">
             <h2 className="font-semibold text-lg">Personal Information</h2>
+            <button
+              onClick={user?.type === "SuperAdmin" ? refreshSuperAdmin : refreshUserData}
+              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {user?.type === "SuperAdmin" ? "Sync" : "Refresh"}
+            </button>
           </div>
 
           <div className="space-y-4">
@@ -660,24 +916,60 @@ const Profile = () => {
               <InfoRow key={index} label={info.label} value={info.value} />
             ))}
           </div>
+          
+          {user.needsSetup && user.type === "SuperAdmin" && (
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Note for SuperAdmin:</strong> After changing your email in Offices, 
+                click the "Sync" button above to update your profile with the new email.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
       {activeTab === "Password" && (
         <div className="bg-white dark:bg-gray-800 p-5 mt-4 rounded-xl shadow-md border border-purple-200">
-          <div className="flex items-center gap-2 mb-6">
-            <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-            </svg>
-            <h2 className="text-xl font-semibold">Password</h2>
+          <div className="flex items-center justify-between gap-2 mb-6">
+            <div className="flex items-center gap-2">
+              <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+              </svg>
+              <h2 className="text-xl font-semibold">Password</h2>
+            </div>
+            <button
+              onClick={user?.type === "SuperAdmin" ? refreshSuperAdmin : refreshUserData}
+              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {user?.type === "SuperAdmin" ? "Sync" : "Refresh"}
+            </button>
           </div>
 
           {!user.isInDatabase ? (
             <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-yellow-700 mb-3">
-                <strong>Password management requires setup.</strong>
+                <strong>Profile sync required.</strong> Your profile data needs to be refreshed.
               </p>
-              <SetupInstructions />
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <button
+                  onClick={user?.type === "SuperAdmin" ? refreshSuperAdmin : refreshUserData}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {user?.type === "SuperAdmin" ? "Sync SuperAdmin Now" : "Refresh Profile Now"}
+                </button>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Log Out & Log Back In
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -686,6 +978,14 @@ const Profile = () => {
                   <div className="p-3 bg-gray-50 rounded">
                     <p className="font-medium mb-1">Current Password:</p>
                     <p className="font-mono text-lg">{getDefaultPassword()}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                    <p className="text-sm text-blue-700">
+                      <strong>Email:</strong> {user.email}
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Ensure this matches your email in Offices
+                    </p>
                   </div>
                 </div>
               </div>
@@ -774,7 +1074,7 @@ const Profile = () => {
                 <select
                   value={dateFilter}
                   onChange={(e) => handleDateFilterChange(e.target.value)}
-                  className="appearance-none px-4 py-2 pr-8 border border-gray-300   rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800 text-sm font-medium"
+                  className="appearance-none px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800 text-sm font-medium"
                 >
                   {dateFilterOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -842,7 +1142,7 @@ const Profile = () => {
 
           {/* Filter Summary */}
           {dateFilter !== "all" && filteredHistoryData.length > 0 && (
-            <div className="mb-4 p-3 bg-purple-50 dark:bg-gray-700  border border-purple-100 rounded-lg">
+            <div className="mb-4 p-3 bg-purple-50 dark:bg-gray-700 border border-purple-100 rounded-lg">
               <p className="text-sm text-purple-700 dark:text-white">
                 Showing activities for: <strong>{dateFilterOptions.find(opt => opt.value === dateFilter)?.label}</strong>
                 {dateFilter === "custom" && customStartDate && customEndDate && (
