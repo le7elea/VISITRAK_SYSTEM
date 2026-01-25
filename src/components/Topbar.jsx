@@ -134,7 +134,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
                   address: data.address || "N/A",
                   office: data.office || "N/A",
                   purpose: data.purpose || "N/A",
-                  staffToVisit: data.staffToVisit || "N/A",
+                  staffName: data.staffName || "N/A",
                   date: checkInDate.toLocaleDateString(),
                   timeIn: checkInDate.toLocaleTimeString(),
                   status: data.status || "checked-in"
