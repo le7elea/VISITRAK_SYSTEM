@@ -130,6 +130,11 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
               </span>
             </div>
             {getRoleBadge(office.role)}
+            {office.role === "super" && (
+              <span className="text-[8px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white">
+                PRIMARY
+              </span>
+            )}
           </div>
           <h4 className="text-xl font-bold text-gray-800 group-hover:text-[#7400EA] transition-colors dark:text-gray-100">
             {office.name}
@@ -220,7 +225,8 @@ const AddOfficeModal = memo(({
   onNewPurposeChange,
   newStaff,
   onNewStaffChange,
-  loading 
+  loading,
+  hasSuperAdmin // ADDED: New prop to check if super admin exists
 }) => {
   if (!show) return null;
 
@@ -419,13 +425,18 @@ const AddOfficeModal = memo(({
               
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${data.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
+                  {/* Super Admin Option - Disabled if already exists */}
+                  <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${data.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"} ${hasSuperAdmin && "opacity-50 cursor-not-allowed"}`}>
                     <input
                       type="radio"
                       checked={data.role === "super"}
-                      onChange={() => onDataChange({ ...data, role: "super" })}
+                      onChange={() => {
+                        if (!hasSuperAdmin) {
+                          onDataChange({ ...data, role: "super" })
+                        }
+                      }}
                       className="sr-only"
-                      disabled={loading}
+                      disabled={loading || hasSuperAdmin}
                     />
                     <div className="p-5">
                       <div className="flex items-center justify-between mb-3">
@@ -434,6 +445,11 @@ const AddOfficeModal = memo(({
                             <User className={`w-4 h-4 ${data.role === "super" ? "text-purple-600" : "text-gray-400"}`} />
                           </div>
                           <span className="font-semibold text-gray-800">Super Admin</span>
+                          {hasSuperAdmin && (
+                            <span className="text-xs text-red-600 font-medium ml-2">
+                              (Already exists)
+                            </span>
+                          )}
                         </div>
                         {data.role === "super" && (
                           <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
@@ -447,10 +463,16 @@ const AddOfficeModal = memo(({
                           <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">superadmin2025</code>
                         </div>
                         <p className="text-xs text-gray-500">Full system access and administration privileges</p>
+                        {hasSuperAdmin && (
+                          <p className="text-xs text-red-500 font-medium mt-2">
+                            ⚠️ Only one Super Admin is allowed. An existing Super Admin was found.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </label>
                   
+                  {/* Office Admin Option */}
                   <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${data.role === "office" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
                     <input
                       type="radio"
@@ -622,6 +644,10 @@ const Offices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // 🔹 Track super admin status
+  const [hasSuperAdmin, setHasSuperAdmin] = useState(false);
+  const [existingSuperAdminId, setExistingSuperAdminId] = useState(null);
+
   // 🔹 Add Office Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [addData, setAddData] = useState({ 
@@ -661,7 +687,7 @@ const Offices = () => {
   // 🔹 Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
   
-  // 🔹 ADD THE MISSING FUNCTION
+  // 🔹 Generate email from name
   const generateEmailFromName = useCallback((name) => {
     if (!name || !name.trim()) return "";
     
@@ -676,7 +702,7 @@ const Offices = () => {
     return emailPart ? `${emailPart}@gmail.com` : "";
   }, []);
 
-  // 🔹 Load offices from Firestore
+  // 🔹 Load offices from Firestore and check for super admin
   useEffect(() => {
     const loadOffices = async () => {
       setLoading(true);
@@ -684,6 +710,16 @@ const Offices = () => {
       try {
         const data = await fetchOffices();
         setOffices(data);
+        
+        // Check if super admin already exists
+        const superAdmin = data.find(office => office.role === "super");
+        if (superAdmin) {
+          setHasSuperAdmin(true);
+          setExistingSuperAdminId(superAdmin.id);
+        } else {
+          setHasSuperAdmin(false);
+          setExistingSuperAdminId(null);
+        }
       } catch (err) {
         console.error("Error loading offices:", err);
         setError(`Failed to load offices: ${err.message}`);
@@ -701,10 +737,10 @@ const Offices = () => {
     }
   }, [deleteIndex]);
 
-  // 🔹 Handle add office name change - FIXED
+  // 🔹 Handle add office name change
   const handleAddNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value); // Use original value, not uppercase
+    const generatedEmail = generateEmailFromName(value);
     
     setAddData(prev => ({
       ...prev,
@@ -740,6 +776,12 @@ const Offices = () => {
       return;
     }
     
+    // 🔹 ADDED: Check if trying to create super admin when one already exists
+    if (addData.role === "super" && hasSuperAdmin) {
+      setAddError("A Super Admin already exists. Only one Super Admin is allowed.");
+      return;
+    }
+    
     const emailExists = offices.some(office => 
       office.email && office.email.toLowerCase() === addData.email.toLowerCase()
     );
@@ -768,8 +810,15 @@ const Offices = () => {
         createdAt: new Date()
       };
       
-      // 🔹 OPTIMIZATION: Update local state immediately
+      // Update local state immediately
       setOffices(prev => [...prev, tempOffice]);
+      
+      // Update super admin status if needed
+      if (addData.role === "super") {
+        setHasSuperAdmin(true);
+        setExistingSuperAdminId(tempId);
+      }
+      
       setShowAddModal(false);
       
       // Reset form
@@ -786,7 +835,7 @@ const Offices = () => {
       
       alert(`Office "${addData.name}" added successfully!`);
       
-      // 🔹 OPTIMIZATION: Save to Firestore in background
+      // Save to Firestore in background
       setTimeout(async () => {
         try {
           const newOffice = await addOffice({
@@ -799,9 +848,21 @@ const Offices = () => {
               ? { ...newOffice, createdAt: newOffice.createdAt || new Date() }
               : office
           ));
+          
+          // Update super admin ID with real ID from database
+          if (addData.role === "super") {
+            setExistingSuperAdminId(newOffice.id);
+          }
         } catch (err) {
           console.error("Error saving office to Firestore:", err);
           setOffices(prev => prev.filter(office => office.id !== tempId));
+          
+          // Revert super admin status if save failed
+          if (addData.role === "super") {
+            setHasSuperAdmin(false);
+            setExistingSuperAdminId(null);
+          }
+          
           alert(`Warning: Office "${addData.name}" failed to save to database: ${err.message}`);
         } finally {
           setAddLoading(false);
@@ -813,7 +874,7 @@ const Offices = () => {
       setAddError(`Failed to add office: ${err.message}`);
       setAddLoading(false);
     }
-  }, [addData, offices]);
+  }, [addData, offices, hasSuperAdmin]);
 
   // 🔹 Open edit modal
   const openEditModal = useCallback((index) => {
@@ -835,10 +896,10 @@ const Offices = () => {
     }
   }, [offices]);
 
-  // 🔹 Handle edit office name change - FIXED
+  // 🔹 Handle edit office name change
   const handleEditNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value); // Use original value, not uppercase
+    const generatedEmail = generateEmailFromName(value);
     
     setEditData(prev => ({
       ...prev,
@@ -920,6 +981,13 @@ const Offices = () => {
       return;
     }
     
+    // 🔹 ADDED: Check if trying to change to super admin when one already exists
+    const currentOffice = offices[editIndex];
+    if (editData.role === "super" && currentOffice.role !== "super" && hasSuperAdmin) {
+      setEditError("A Super Admin already exists. Only one Super Admin is allowed.");
+      return;
+    }
+    
     const emailExists = offices.some((office, index) => 
       index !== editIndex && 
       office.email && 
@@ -948,23 +1016,45 @@ const Offices = () => {
         password: originalOffice.password
       };
       
-      // 🔹 OPTIMIZATION: Update local state immediately
+      // Update local state immediately
       const updatedOffices = [...offices];
       updatedOffices[editIndex] = updatedOffice;
       setOffices(updatedOffices);
+      
+      // Update super admin status if needed
+      if (editData.role === "super" && originalOffice.role !== "super") {
+        setHasSuperAdmin(true);
+        setExistingSuperAdminId(editData.id);
+      } else if (editData.role !== "super" && originalOffice.role === "super") {
+        setHasSuperAdmin(false);
+        setExistingSuperAdminId(null);
+      }
+      
       setEditIndex(null);
       
       alert(`Office "${editData.name}" updated successfully!`);
       
-      // 🔹 OPTIMIZATION: Save to Firestore in background
+      // Save to Firestore in background
       setTimeout(async () => {
         try {
           await updateOffice(updatedOffice);
         } catch (err) {
           console.error("Error updating office in Firestore:", err);
+          
+          // Revert changes
           const revertedOffices = [...offices];
           revertedOffices[editIndex] = originalOffice;
           setOffices(revertedOffices);
+          
+          // Revert super admin status
+          if (originalOffice.role === "super") {
+            setHasSuperAdmin(true);
+            setExistingSuperAdminId(originalOffice.id);
+          } else {
+            setHasSuperAdmin(false);
+            setExistingSuperAdminId(null);
+          }
+          
           alert(`Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`);
         } finally {
           setEditLoading(false);
@@ -976,7 +1066,7 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [editIndex, editData, offices]);
+  }, [editIndex, editData, offices, hasSuperAdmin]);
 
   // 🔹 OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -985,29 +1075,52 @@ const Offices = () => {
     const officeToDelete = offices[deleteIndex];
     if (!officeToDelete || !officeToDelete.id) return;
     
+    // 🔹 ADDED: Warn before deleting super admin
+    if (officeToDelete.role === "super") {
+      if (!window.confirm("Are you sure you want to delete the only Super Admin? This might limit system administration capabilities.")) {
+        return;
+      }
+    }
+    
     const originalOffice = officeToDelete;
     setDeleteLoading(true);
     
     try {
-      // 🔹 OPTIMIZATION: Update local state immediately
+      // Update local state immediately
       const updatedOffices = offices.filter((_, i) => i !== deleteIndex);
       setOffices(updatedOffices);
+      
+      // Update super admin status if deleting super admin
+      if (officeToDelete.role === "super") {
+        setHasSuperAdmin(false);
+        setExistingSuperAdminId(null);
+      }
+      
       setDeleteIndex(null);
       setDeleteConfirmed(false);
       
       alert(`Office "${officeToDelete.name}" deleted successfully!`);
       
-      // 🔹 OPTIMIZATION: Delete from Firestore in background
+      // Delete from Firestore in background
       setTimeout(async () => {
         try {
           await deleteOffice(officeToDelete.id);
         } catch (err) {
           console.error("Error deleting office from Firestore:", err);
+          
+          // Restore office
           setOffices(prev => {
             const restored = [...prev];
             restored.splice(deleteIndex, 0, originalOffice);
             return restored;
           });
+          
+          // Restore super admin status
+          if (originalOffice.role === "super") {
+            setHasSuperAdmin(true);
+            setExistingSuperAdminId(originalOffice.id);
+          }
+          
           alert(`Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`);
         } finally {
           setDeleteLoading(false);
@@ -1030,6 +1143,7 @@ const Offices = () => {
             <h3 className="text-2xl font-bold mb-2">Office Accounts</h3>
             <p className="text-black/80 dark:text-gray-400">
               {loading ? "Loading..." : `${offices.length} office${offices.length !== 1 ? 's' : ''} registered`}
+              {hasSuperAdmin && " (1 Super Admin)"}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -1100,6 +1214,7 @@ const Offices = () => {
         newStaff={newStaff}
         onNewStaffChange={handleAddStaffInput}
         loading={addLoading}
+        hasSuperAdmin={hasSuperAdmin} // Pass super admin status
       />
 
       {/* 🔹 EDIT MODAL */}
@@ -1213,13 +1328,19 @@ const Offices = () => {
                   
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${editData.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
+                      {/* Super Admin Option */}
+                      <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${editData.role === "super" ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-white"} ${editData.role !== "super" && hasSuperAdmin && editData.id !== existingSuperAdminId && "opacity-50 cursor-not-allowed"}`}>
                         <input
                           type="radio"
                           checked={editData.role === "super"}
-                          onChange={() => setEditData(prev => ({ ...prev, role: "super" }))}
+                          onChange={() => {
+                            // Allow if editing the existing super admin or if no super admin exists
+                            if (editData.role === "super" || !hasSuperAdmin || editData.id === existingSuperAdminId) {
+                              setEditData(prev => ({ ...prev, role: "super" }))
+                            }
+                          }}
                           className="sr-only"
-                          disabled={editLoading}
+                          disabled={editLoading || (editData.role !== "super" && hasSuperAdmin && editData.id !== existingSuperAdminId)}
                         />
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-3">
@@ -1228,6 +1349,11 @@ const Offices = () => {
                                 <User className={`w-4 h-4 ${editData.role === "super" ? "text-purple-600" : "text-gray-400"}`} />
                               </div>
                               <span className="font-semibold text-gray-800">Super Admin</span>
+                              {hasSuperAdmin && editData.role !== "super" && editData.id !== existingSuperAdminId && (
+                                <span className="text-xs text-red-600 font-medium ml-2">
+                                  (Already exists)
+                                </span>
+                              )}
                             </div>
                             {editData.role === "super" && (
                               <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
@@ -1236,9 +1362,15 @@ const Offices = () => {
                             )}
                           </div>
                           <p className="text-xs text-gray-500">Full system access and administration privileges</p>
+                          {hasSuperAdmin && editData.role !== "super" && editData.id !== existingSuperAdminId && (
+                            <p className="text-xs text-red-500 font-medium mt-2">
+                              ⚠️ Only one Super Admin is allowed. An existing Super Admin was found.
+                            </p>
+                          )}
                         </div>
                       </label>
                       
+                      {/* Office Admin Option */}
                       <label className={`relative overflow-hidden rounded-xl border-2 transition-all cursor-pointer ${editData.role === "office" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"}`}>
                         <input
                           type="radio"
