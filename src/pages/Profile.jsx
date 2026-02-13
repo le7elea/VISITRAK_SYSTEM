@@ -973,14 +973,14 @@ const Profile = () => {
                     <p className="font-medium mb-1">Current Password:</p>
                     <p className="font-mono text-lg">{getDefaultPassword()}</p>
                   </div>
-                  <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                  {/* <div className="p-3 bg-blue-50 border border-blue-100 rounded">
                     <p className="text-sm text-blue-700">
                       <strong>Email:</strong> {user.email}
                     </p>
                     <p className="text-xs text-blue-600 mt-1">
                       Ensure this matches your email in Offices
                     </p>
-                  </div>
+                  </div> */}
                 </div>
               </div>
 
