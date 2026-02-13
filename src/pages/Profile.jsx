@@ -16,7 +16,7 @@ import {
   limit 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import profileImg from "../assets/profile03.png";
+import profileImg from "../assets/bisulogo.png";
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("Overview");

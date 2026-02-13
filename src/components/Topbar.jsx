@@ -8,7 +8,7 @@ import {
   Timestamp 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import profileImg from "../assets/profile03.png";
+import profileImg from "../assets/bisulogo.png";
 import { Sun, Moon, Bell, User, X, ChevronRight } from "lucide-react";
 import VisitorInfoModal from "./VisitorInfoModal"; // Import the modal
 
