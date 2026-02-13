@@ -1490,7 +1490,7 @@ const Analytics = () => {
                     className="flex items-center gap-2 px-6 py-2.5 bg-[#553C9A] text-white rounded-lg text-sm font-medium hover:bg-[#44307B] transition-colors shadow-lg"
                   >
                     <Printer size={16} />
-                    <span>Print / Save as PDF</span>
+                    <span>Print Report</span>
                   </button>
                 </div>
               </div>
