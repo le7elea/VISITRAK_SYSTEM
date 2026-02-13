@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart2, ChevronDown, MoreHorizontal, Download, MessageSquare, Calendar, FileText, Printer } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import bisuLogo from '../assets/bisulogo.png';
+import bagongPilipinasLogo from '../assets/bagong_pilipinas_logo.png';
+import tuvISOLogo from '../assets/tuvISO_logo.png';
 
 const calculateSatisfactionRates = (feedbacks = []) => {
   const total = feedbacks.length;
@@ -478,19 +481,29 @@ const Analytics = () => {
     }
   };
 
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3) return null;
+    const [year, month, day] = parts;
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  };
+
   // --- Filter visits based on date range ---
   const filteredVisits = useMemo(() => {
     return visits.filter(v => {
       try {
-        const checkInDate = v?.checkInTime ? (v.checkInTime.toDate ? v.checkInTime.toDate() : new Date(v.checkInTime)) : new Date();
+        if (!v?.checkInTime) return false;
+        const checkInDate = v.checkInTime.toDate ? v.checkInTime.toDate() : new Date(v.checkInTime);
         if (isNaN(checkInDate.getTime())) return false;
         
         checkInDate.setHours(0, 0, 0, 0);
         
-        const startDate = new Date(dateRange.start);
+        const startDate = parseLocalDate(dateRange.start);
+        const endDate = parseLocalDate(dateRange.end);
+        if (!startDate || !endDate) return false;
         startDate.setHours(0, 0, 0, 0);
-        
-        const endDate = new Date(dateRange.end);
         endDate.setHours(23, 59, 59, 999);
         
         return checkInDate >= startDate && checkInDate <= endDate;
@@ -502,23 +515,23 @@ const Analytics = () => {
 
   // --- Filter feedbacks based on date range ---
   const filteredFeedbacks = useMemo(() => {
+    if (!filteredVisits.length) return [];
+
+    const visitIdSet = new Set(filteredVisits.map(v => v.id).filter(Boolean));
+    const startDate = parseLocalDate(dateRange.start);
+    const endDate = parseLocalDate(dateRange.end);
+    if (!startDate || !endDate) return [];
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
     return feedbacks.filter(f => {
-      try {
-        const feedbackDate = f?.createdAt ? (f.createdAt.toDate ? f.createdAt.toDate() : new Date(f.createdAt)) : new Date();
-        if (isNaN(feedbackDate.getTime())) return false;
-        
-        const startDate = new Date(dateRange.start);
-        startDate.setHours(0, 0, 0, 0);
-        
-        const endDate = new Date(dateRange.end);
-        endDate.setHours(23, 59, 59, 999);
-        
-        return feedbackDate >= startDate && feedbackDate <= endDate;
-      } catch (error) {
-        return false;
-      }
+      if (!visitIdSet.has(f.visitId)) return false;
+      if (!f?.createdAt) return false;
+      const feedbackDate = f.createdAt.toDate ? f.createdAt.toDate() : new Date(f.createdAt);
+      if (isNaN(feedbackDate.getTime())) return false;
+      return feedbackDate >= startDate && feedbackDate <= endDate;
     });
-  }, [feedbacks, dateRange]);
+  }, [feedbacks, filteredVisits, dateRange]);
 
   // Get visit details for each feedback with anonymous names
   const feedbacksWithVisitDetails = useMemo(() => {
@@ -553,6 +566,94 @@ const Analytics = () => {
     const total = filteredFeedbacks.reduce((sum, f) => sum + (f.averageRating || 0), 0);
     return (total / filteredFeedbacks.length).toFixed(1);
   }, [filteredFeedbacks]);
+
+  const printOfficeName = useMemo(() => {
+    if (currentUser && currentUser.type === "OfficeAdmin") {
+      return currentUser.originalOffice || currentUser.office || "Office of the College of Computing and Information Sciences";
+    }
+    return "Office of the College of Computing and Information Sciences";
+  }, [currentUser]);
+
+  const topTrafficDay = useMemo(() => {
+    if (!trafficData || trafficData.length === 0) return null;
+    return trafficData.reduce((max, item) => (item.count > max.count ? item : max), trafficData[0]);
+  }, [trafficData]);
+
+  const topSatisfactionBand = useMemo(() => {
+    if (!satisfactionRates || satisfactionRates.length === 0) return null;
+    return satisfactionRates.reduce((max, item) => (item.pct > max.pct ? item : max), satisfactionRates[0]);
+  }, [satisfactionRates]);
+
+  const feedbacksWithComments = useMemo(() => {
+    return feedbacksWithVisitDetails.filter(
+      f => f.comment && f.comment.trim() !== '' && f.comment !== 'No comment provided'
+    );
+  }, [feedbacksWithVisitDetails]);
+
+  const feedbackHighlights = useMemo(() => {
+    return feedbacksWithComments.slice(0, 8);
+  }, [feedbacksWithComments]);
+
+  const printSummaryParagraphs = useMemo(() => {
+    const officeLabel = currentUser && currentUser.type === "OfficeAdmin"
+      ? `the ${currentUser.originalOffice || currentUser.office} office`
+      : "all offices";
+    const visits = filteredVisits.length;
+    const feedbackCount = filteredFeedbacks.length;
+    const avgSat = avgSatisfaction;
+    const topDayText = topTrafficDay
+      ? `${topTrafficDay.day} had the highest traffic with ${topTrafficDay.count} visit${topTrafficDay.count !== 1 ? 's' : ''}`
+      : "no single peak traffic day was observed";
+    const topBandText = topSatisfactionBand
+      ? `${topSatisfactionBand.label.toLowerCase()} (${topSatisfactionBand.pct}%)`
+      : "no satisfaction distribution is available yet";
+    const commentsCount = feedbacksWithComments.length;
+
+    const p1 = `For the period ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, ${officeLabel} recorded ${visits} visitor check-in${visits !== 1 ? 's' : ''} and received ${feedbackCount} feedback response${feedbackCount !== 1 ? 's' : ''}, including ${commentsCount} written comment${commentsCount !== 1 ? 's' : ''}. The average satisfaction rating for this period was ${avgSat} out of 5. ${topDayText}, and the most common satisfaction category was ${topBandText}.`;
+
+    const p2 = feedbackCount > 0
+      ? `Written feedback highlights are summarized from ${commentsCount} comment${commentsCount !== 1 ? 's' : ''} and reflect the most frequent themes observed during the reporting period.`
+      : `No written feedback was submitted during this period, so qualitative insights are not available.`;
+
+    return [p1, p2];
+  }, [
+    currentUser,
+    filteredVisits,
+    filteredFeedbacks,
+    avgSatisfaction,
+    topTrafficDay,
+    topSatisfactionBand,
+    feedbacksWithComments,
+    dateRange
+  ]);
+
+  const recommendationsText = useMemo(() => {
+    const avg = parseFloat(avgSatisfaction || "0");
+    if (filteredVisits.length === 0) {
+      return "No visits were recorded in this period. Consider promoting visitor check-ins and validating that the log process is active across all entry points.";
+    }
+    if (filteredFeedbacks.length === 0) {
+      return "Encourage visitors to submit feedback to improve the quality of insights. Simple prompts and QR access points can increase response rates.";
+    }
+    if (avg >= 4.0) {
+      return "Overall satisfaction is strong. Maintain service quality and continue monitoring peak traffic days to sustain performance.";
+    }
+    if (avg >= 3.0) {
+      return "Satisfaction is moderate. Focus on recurring issues surfaced in comments and reinforce service consistency during peak traffic days.";
+    }
+    return "Satisfaction is below target. Prioritize immediate service improvements, review operational bottlenecks, and follow up on critical feedback.";
+  }, [avgSatisfaction, filteredVisits.length, filteredFeedbacks.length]);
+
+  const reportId = useMemo(() => {
+    const start = (dateRange.start || "").replace(/-/g, "");
+    const end = (dateRange.end || "").replace(/-/g, "");
+    if (!start || !end) return "VA-REPORT";
+    return `VA-${start}-${end}`;
+  }, [dateRange]);
+
+  const preparedOn = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  }, []);
 
   // --- Export Functions ---
   const exportToCSV = () => {
@@ -873,10 +974,10 @@ const Analytics = () => {
           body * {
             visibility: hidden;
           }
-          .print-section, .print-section * {
+          .print-only-section, .print-only-section * {
             visibility: visible;
           }
-          .print-section {
+          .print-only-section {
             position: absolute;
             left: 0;
             top: 0;
@@ -887,14 +988,168 @@ const Analytics = () => {
           .no-print {
             display: none !important;
           }
-          .print-break {
-            page-break-after: always;
+          @page {
+            margin: 0.5in;
+          }
+          html, body {
+            margin: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .report-page {
+            font-family: "Times New Roman", Times, serif;
+            color: #111;
+          }
+          .report-title {
+            letter-spacing: 0.12em;
+          }
+          .report-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid #000;
+            padding-bottom: 2px;
+            margin-bottom: 6px;
+          }
+          .report-meta {
+            font-size: 11px;
+          }
+          .report-box {
+            border: 1px solid #000;
+            padding: 8px;
           }
         }
       `}</style>
       
       <main className="flex flex-col print-section">
-        <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto dark:bg-gray-900 ">
+        {/* Print-Only Summary */}
+        <div className="hidden print:block bg-white print-only-section">
+          <div className="max-w-6xl mx-auto report-page">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center">
+                <div className="w-28 h-20 flex items-center justify-center">
+                  <img
+                    src={bisuLogo}
+                    alt="BISU Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div>
+                  <p className="text-[14px]">Republic of the Philippines</p>
+                  <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
+                  <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                  <p className="text-[14px]">{printOfficeName}</p>
+                  <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="w-22 h-26 flex items-center justify-center">
+                  <img
+                    src={bagongPilipinasLogo}
+                    alt="Bagong Pilipinas Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="w-42 h-26 flex items-center justify-center">
+                  <img
+                    src={tuvISOLogo}
+                    alt="ISO 9001:2015 Certification"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <h2 className="text-sm font-bold uppercase report-title">Visitor Analytics Report</h2>
+              <p className="text-xs text-gray-700">
+                Reporting Period: {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
+              </p>
+            </div>
+            <div className="border-b border-black mt-3"></div>
+
+            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 report-meta">
+              <div><span className="font-bold">Report No.:</span> {reportId}</div>
+              <div><span className="font-bold">Prepared On:</span> {preparedOn}</div>
+              <div><span className="font-bold">Prepared By:</span> VisiTrak System</div>
+              <div>
+                <span className="font-bold">Office:</span>{" "}
+                {currentUser && currentUser.type === "OfficeAdmin"
+                  ? (currentUser.originalOffice || currentUser.office || "N/A")
+                  : "All Offices"}
+              </div>
+            </div>
+            <div className="border-b border-gray-300 mt-3"></div>
+
+            <div className="mt-4">
+              <h3 className="report-section-title">1. Executive Summary</h3>
+              {printSummaryParagraphs.map((p, idx) => (
+                <p key={idx} className="text-[12px] leading-relaxed text-gray-800 mb-3 text-justify">
+                  {p}
+                </p>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <h3 className="report-section-title">2. Key Figures</h3>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="report-box">
+                  <span className="font-bold">Office:</span> {currentUser && currentUser.type === "OfficeAdmin"
+                    ? (currentUser.originalOffice || currentUser.office || "N/A")
+                    : "All Offices"}
+                </div>
+                <div className="report-box">
+                  <span className="font-bold">Period:</span> {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
+                </div>
+                <div className="report-box">
+                  <span className="font-bold">Total Visitors:</span> {filteredVisits.length}
+                </div>
+                <div className="report-box">
+                  <span className="font-bold">Total Feedback Responses:</span> {filteredFeedbacks.length}
+                </div>
+                <div className="report-box">
+                  <span className="font-bold">Avg Satisfaction:</span> {avgSatisfaction}/5.0
+                </div>
+                <div className="report-box">
+                  <span className="font-bold">Top Traffic Day:</span> {topTrafficDay ? `${topTrafficDay.day} (${topTrafficDay.count})` : "N/A"}
+                </div>
+                <div className="report-box col-span-2">
+                  <span className="font-bold">Top Satisfaction Band:</span> {topSatisfactionBand ? `${topSatisfactionBand.label} (${topSatisfactionBand.pct}%)` : "N/A"}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <h3 className="report-section-title">3. Findings</h3>
+              <p className="text-[12px] leading-relaxed text-gray-800 mb-3 text-justify">
+                {topTrafficDay
+                  ? `Visitor traffic concentrated most on ${topTrafficDay.day}, indicating peak activity on that day. `
+                  : "Visitor traffic did not show a clear peak day for this period. "}
+                {topSatisfactionBand
+                  ? `The satisfaction distribution is led by the ${topSatisfactionBand.label.toLowerCase()} category at ${topSatisfactionBand.pct}%. `
+                  : "Satisfaction distribution is not yet available due to insufficient feedback. "}
+                {feedbacksWithComments.length > 0
+                  ? `Qualitative feedback provides additional context to these results.`
+                  : `No written feedback was captured to support qualitative analysis.`}
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <h3 className="report-section-title">4. Recommendations</h3>
+              <p className="text-[12px] leading-relaxed text-gray-800 text-justify">
+                {recommendationsText}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto dark:bg-gray-900 print:hidden">
           <div className="max-w-6xl mx-auto space-y-6">
             
             
