@@ -1274,7 +1274,7 @@ const Analytics = () => {
                          <Printer size={16} className="text-gray-600" />
                          <div>
                            <div className="text-sm font-medium text-gray-800">Print Report</div>
-                           <div className="text-xs text-gray-500">Print or save as PDF</div>
+                           <div className="text-xs text-gray-500">Print Report</div>
                          </div>
                        </button>
                      </div>
@@ -1593,7 +1593,7 @@ const Analytics = () => {
                       className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#6B46C1] to-[#553C9A] text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
                     >
                       <Download size={16} />
-                      <span>Export Report</span>
+                      <span>Print Report</span>
                     </button>
                   </div>
                 </div>
