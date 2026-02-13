@@ -831,12 +831,6 @@ const Profile = () => {
           {user?.type === "SuperAdmin" ? "Sync SuperAdmin" : "Refresh"}
         </button>
       )}
-      <button
-        onClick={() => navigate('/offices')}
-        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-      >
-        Go to Offices
-      </button>
     </div>
   );
 
