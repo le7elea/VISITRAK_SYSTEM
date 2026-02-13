@@ -120,10 +120,12 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         const unsub = onSnapshot(collection(db, "offices"), (snapshot) => {
           const data = snapshot.docs.map((doc) => {
             const d = doc.data();
-            return {
+          return {
               id: doc.id,
               name: d.name || "",
               officialName: d.officialName || "",
+              role: d.role || "",
+              email: d.email || "",
             };
           });
           
@@ -439,17 +441,57 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     return { total, checkedIn, checkedOut, avgSatisfaction };
   }, [filteredVisitors]);
 
+  const currentOfficeRecord = useMemo(() => {
+    if (!user || offices.length === 0) return null;
+
+    if (user.id) {
+      const byId = offices.find(o => o.id === user.id);
+      if (byId) return byId;
+    }
+
+    const userEmail = user.email ? user.email.toLowerCase().trim() : "";
+    if (userEmail) {
+      const byEmail = offices.find(o => (o.email || "").toLowerCase().trim() === userEmail);
+      if (byEmail) return byEmail;
+    }
+
+    if (user.office) {
+      const byOfficeName = offices.find(o => o.name === user.office);
+      if (byOfficeName) return byOfficeName;
+    }
+
+    if (user.type === "SuperAdmin") {
+      return offices.find(o => o.role === "super") || null;
+    }
+
+    return null;
+  }, [user, offices]);
+
   // Get the official office name for print header
   const printOfficeName = useMemo(() => {
+    const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
+
     if (user.type === "OfficeAdmin" && user.office) {
       const office = offices.find(o => o.name === user.office);
       return office?.officialName || user.office;
-    } else if (officeFilter !== "All Offices") {
+    }
+
+    if (user.type === "SuperAdmin" && officeFilter === "All Offices") {
+      return (
+        currentOfficeRecord?.officialName ||
+        currentOfficeRecord?.name ||
+        user.office ||
+        fallbackOfficeName
+      );
+    }
+
+    if (officeFilter !== "All Offices") {
       const office = offices.find(o => o.name === officeFilter);
       return office?.officialName || officeFilter;
     }
-    return "Office of the College of Computing and Information Sciences";
-  }, [user, officeFilter, offices]);
+
+    return fallbackOfficeName;
+  }, [user, officeFilter, offices, currentOfficeRecord]);
 
   if (loading) {
     return (

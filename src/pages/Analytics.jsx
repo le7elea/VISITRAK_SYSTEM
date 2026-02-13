@@ -244,6 +244,8 @@ const Analytics = () => {
   const [visits, setVisits] = useState([]);
   // State for feedbacks from database
   const [feedbacks, setFeedbacks] = useState([]);
+  // State for office metadata (official names)
+  const [offices, setOffices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -258,6 +260,30 @@ const Analytics = () => {
       console.log("👤 Current user:", user);
       console.log("🏢 User office - Original:", user.originalOffice, "Normalized:", user.office);
     }
+  }, []);
+
+  // Fetch office records so print header can use official office names
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "offices"), (snapshot) => {
+      const data = snapshot.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          name: d.name || "",
+          officialName: d.officialName || "",
+          role: d.role || "",
+          email: d.email || "",
+        };
+      });
+
+      setOffices(data);
+    }, (error) => {
+      console.error("Error fetching offices:", error);
+    });
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // Fetch ALL visits (simplified approach)
@@ -567,12 +593,46 @@ const Analytics = () => {
     return (total / filteredFeedbacks.length).toFixed(1);
   }, [filteredFeedbacks]);
 
-  const printOfficeName = useMemo(() => {
-    if (currentUser && currentUser.type === "OfficeAdmin") {
-      return currentUser.originalOffice || currentUser.office || "Office of the College of Computing and Information Sciences";
+  const currentOfficeRecord = useMemo(() => {
+    if (!currentUser || offices.length === 0) return null;
+
+    if (currentUser.id) {
+      const byId = offices.find(o => o.id === currentUser.id);
+      if (byId) return byId;
     }
-    return "Office of the College of Computing and Information Sciences";
-  }, [currentUser]);
+
+    const userEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : "";
+    if (userEmail) {
+      const byEmail = offices.find(o => (o.email || "").toLowerCase().trim() === userEmail);
+      if (byEmail) return byEmail;
+    }
+
+    const userOffice = currentUser.originalOffice || currentUser.office;
+    if (userOffice) {
+      const byOfficeName = offices.find(o => compareOfficeNames(o.name, userOffice));
+      if (byOfficeName) return byOfficeName;
+    }
+
+    if (currentUser.type === "SuperAdmin") {
+      return offices.find(o => o.role === "super") || null;
+    }
+
+    return null;
+  }, [currentUser, offices]);
+
+  const printOfficeName = useMemo(() => {
+    const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
+
+    if (!currentUser) return fallbackOfficeName;
+
+    return (
+      currentOfficeRecord?.officialName ||
+      currentOfficeRecord?.name ||
+      currentUser.originalOffice ||
+      currentUser.office ||
+      fallbackOfficeName
+    );
+  }, [currentUser, currentOfficeRecord]);
 
   const topTrafficDay = useMemo(() => {
     if (!trafficData || trafficData.length === 0) return null;
