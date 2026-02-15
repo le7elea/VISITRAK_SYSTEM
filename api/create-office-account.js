@@ -109,6 +109,8 @@ export default async function handler(req, res) {
       purposes: normalizeList(purposes),
       staffToVisit: normalizeList(staffToVisit),
       status: "active",
+      passwordChanged: false,
+      passwordChangedAt: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };

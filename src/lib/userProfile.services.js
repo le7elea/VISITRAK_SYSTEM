@@ -76,6 +76,8 @@ export const buildSessionUser = (authUser, officeData = null) => {
     role,
     type: role === "super" ? "SuperAdmin" : "OfficeAdmin",
     status: officeData?.status || "active",
+    passwordChanged: officeData?.passwordChanged === true,
+    passwordChangedAt: officeData?.passwordChangedAt || null,
     isInDatabase: !!officeData,
     emailVerified: authUser.emailVerified,
     authProvider: "firebase-auth",

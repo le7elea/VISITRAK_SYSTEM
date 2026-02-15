@@ -118,6 +118,9 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
     );
   }, []);
 
+  const defaultPassword = office.role === "super" ? "superadmin2025" : "officeadmin2025";
+  const passwordAlreadyChanged = office.passwordChanged === true;
+
   return (
     <div className={`bg-white rounded-2xl border p-6 transition-all duration-300 hover:shadow-xl group flex flex-col dark:bg-gray-800 ${
       office.role === "super" 
@@ -218,6 +221,21 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
             color={office.role === "super" ? "purple" : "orange"}
           />
         )}
+      </div>
+
+      <div className="mt-auto pt-4 border-t border-gray-100">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-600">Password Status:</span>
+          {passwordAlreadyChanged ? (
+            <span className="px-2 py-1 rounded bg-green-100 text-green-700 text-xs font-medium">
+              Already changed
+            </span>
+          ) : (
+            <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 text-xs">
+              {defaultPassword}
+            </code>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -746,6 +764,8 @@ const Offices = () => {
         officialName: addData.officialName,
         email: addData.email,
         role: "office", // Always office admin
+        passwordChanged: false,
+        passwordChangedAt: null,
         purposes: addData.purposes,
         staffToVisit: addData.staffToVisit,
         createdAt: new Date()
@@ -809,6 +829,8 @@ const Offices = () => {
         officialName: office.officialName || "",
         email: office.email || "",
         role: office.role || "office", // Preserve original role
+        passwordChanged: office.passwordChanged === true,
+        passwordChangedAt: office.passwordChangedAt || null,
         purposes: office.purposes || [],
         staffToVisit: office.staffToVisit || []
       });
@@ -925,6 +947,8 @@ const Offices = () => {
         officialName: editData.officialName,
         email: editData.email,
         role: editData.role, // Keep original role (super or office)
+        passwordChanged: editData.passwordChanged === true,
+        passwordChangedAt: editData.passwordChangedAt || null,
         purposes: editData.purposes,
         staffToVisit: editData.staffToVisit,
         createdAt: originalOffice.createdAt
@@ -1308,9 +1332,18 @@ const Offices = () => {
                           </div>
                           <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Credentials:</span>
-                              <span className="text-xs text-gray-500">Managed in Firebase Auth</span>
+                              <span className="text-gray-600">Password Status:</span>
+                              {editData.passwordChanged ? (
+                                <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                                  Already changed
+                                </span>
+                              ) : (
+                                <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 text-xs">
+                                  {editData.role === "super" ? "superadmin2025" : "officeadmin2025"}
+                                </code>
+                              )}
                             </div>
+                            <p className="text-xs text-gray-500">Credentials are managed in Firebase Auth.</p>
                             <p className="text-xs text-gray-500">
                               {editData.role === "super" 
                                 ? "Account role is protected and cannot be changed" 

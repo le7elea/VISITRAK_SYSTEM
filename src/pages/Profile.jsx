@@ -17,6 +17,8 @@ import {
   orderBy, 
   getDocs, 
   addDoc, 
+  doc,
+  updateDoc,
   serverTimestamp,
   limit 
 } from "firebase/firestore";
@@ -172,6 +174,8 @@ const Profile = () => {
             role: userOffice.role,
             type: type,
             office: userOffice.name,
+            passwordChanged: userOffice.passwordChanged === true,
+            passwordChangedAt: userOffice.passwordChangedAt || null,
             createdAt: userOffice.createdAt,
             updatedAt: userOffice.updatedAt,
             isInDatabase: true
@@ -217,6 +221,8 @@ const Profile = () => {
               role: "super",
               type: "SuperAdmin",
               office: "System Administration",
+              passwordChanged: false,
+              passwordChangedAt: null,
               createdAt: new Date(),
               isInDatabase: false,
               needsSetup: true,
@@ -234,6 +240,8 @@ const Profile = () => {
               role: parsedUser.role || "office",
               type: parsedUser.type || "OfficeAdmin",
               office: parsedUser.office || "Not Assigned",
+              passwordChanged: false,
+              passwordChangedAt: null,
               createdAt: new Date(),
               isInDatabase: false,
               needsSetup: true
@@ -256,6 +264,8 @@ const Profile = () => {
             role: parsedUser.role || (parsedUser.type === "SuperAdmin" ? "super" : "office"),
             type: parsedUser.type || "OfficeAdmin",
             office: parsedUser.office || "Not Assigned",
+            passwordChanged: false,
+            passwordChangedAt: null,
             createdAt: new Date(),
             isInDatabase: false,
             needsSetup: true
@@ -309,6 +319,8 @@ const Profile = () => {
           role: userOffice.role,
           type: type,
           office: userOffice.name,
+          passwordChanged: userOffice.passwordChanged === true,
+          passwordChangedAt: userOffice.passwordChangedAt || null,
           createdAt: userOffice.createdAt,
           updatedAt: userOffice.updatedAt,
           isInDatabase: true
@@ -360,6 +372,8 @@ const Profile = () => {
           role: "super",
           type: "SuperAdmin",
           office: superAdminOffice.name,
+          passwordChanged: superAdminOffice.passwordChanged === true,
+          passwordChangedAt: superAdminOffice.passwordChangedAt || null,
           createdAt: superAdminOffice.createdAt,
           updatedAt: superAdminOffice.updatedAt,
           isInDatabase: true
@@ -452,8 +466,10 @@ const Profile = () => {
     }
   };
 
-  const getPasswordHint = () =>
-    "Password is securely managed by Firebase Authentication.";
+  const getDefaultPassword = () =>
+    user?.role === "super" ? "superadmin2025" : "officeadmin2025";
+
+  const hasChangedPassword = user?.passwordChanged === true;
 
   // Filter logs by date range
   const filterByDateRange = (logs) => {
@@ -673,6 +689,14 @@ const Profile = () => {
       );
       await reauthenticateWithCredential(firebaseUser, credential);
       await updatePassword(firebaseUser, newPassword);
+
+      if (user?.id) {
+        await updateDoc(doc(db, "offices", user.id), {
+          passwordChanged: true,
+          passwordChangedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
       
       // Log activity
       try {
@@ -693,6 +717,15 @@ const Profile = () => {
       }
       
       alert("Password updated successfully!");
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              passwordChanged: true,
+              passwordChangedAt: new Date(),
+            }
+          : prev
+      );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -958,8 +991,17 @@ const Profile = () => {
               <div className="text-gray-600 text-sm">
                 <div className="space-y-4">
                   <div className="p-3 bg-gray-50 rounded">
-                    <p className="font-medium mb-1">Password Security:</p>
-                    <p className="text-sm text-gray-600">{getPasswordHint()}</p>
+                    <p className="font-medium mb-1">Default Password:</p>
+                    {hasChangedPassword ? (
+                      <p className="text-sm text-green-700 font-medium">
+                        Password already changed
+                      </p>
+                    ) : (
+                      <p className="font-mono text-lg">{getDefaultPassword()}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Password is managed securely by Firebase Authentication.
+                    </p>
                   </div>
                   {/* <div className="p-3 bg-blue-50 border border-blue-100 rounded">
                     <p className="text-sm text-blue-700">

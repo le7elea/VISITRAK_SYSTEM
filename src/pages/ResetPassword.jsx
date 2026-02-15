@@ -2,9 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   confirmPasswordReset,
+  signInWithEmailAndPassword,
+  signOut,
   verifyPasswordResetCode,
 } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { auth, db } from "../lib/firebase";
+import { getOfficeProfileForAuthUser } from "../lib/userProfile.services";
 
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
@@ -127,6 +131,29 @@ const ResetPassword = () => {
     try {
       setSubmitting(true);
       await confirmPasswordReset(auth, oobCode, newPassword);
+
+      try {
+        if (accountEmail) {
+          const loginResult = await signInWithEmailAndPassword(
+            auth,
+            accountEmail,
+            newPassword
+          );
+          const officeProfile = await getOfficeProfileForAuthUser(loginResult.user);
+
+          if (officeProfile?.id) {
+            await updateDoc(doc(db, "offices", officeProfile.id), {
+              passwordChanged: true,
+              passwordChangedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+
+          await signOut(auth);
+        }
+      } catch (statusError) {
+        console.error("Password status sync error:", statusError);
+      }
 
       setModal({
         show: true,
@@ -252,7 +279,7 @@ const ResetPassword = () => {
           {submitting ? "Updating..." : "Create Password"}
         </button>
 
-        <p className="text-xs text-gray-400 mt-6">© 2025 VisiTrak System - BISU. All rights reserved.</p>
+        <p className="text-xs text-gray-400 mt-6">(c) 2025 VisiTrak System - BISU. All rights reserved.</p>
       </div>
 
       <Modal

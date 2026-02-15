@@ -222,9 +222,9 @@ export const changePassword = async (currentPassword, newPassword) => {
     // Update password in Firebase Auth
     await updatePassword(user, newPassword);
     
-    // Update password in Firestore
+    // Update password metadata in Firestore
     await updateDoc(doc(db, "offices", user.uid), {
-      password: newPassword,
+      passwordChanged: true,
       passwordChangedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });

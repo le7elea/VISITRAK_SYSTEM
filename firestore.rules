@@ -16,7 +16,13 @@ service cloud.firestore {
     }
 
     function isOwnOffice(officeId) {
-      return signedIn() && request.auth.uid == officeId;
+      return signedIn() && (
+        request.auth.uid == officeId ||
+        (
+          exists(/databases/$(database)/documents/offices/$(officeId)) &&
+          get(/databases/$(database)/documents/offices/$(officeId)).data.uid == request.auth.uid
+        )
+      );
     }
 
     // Offices directory for admin users.
