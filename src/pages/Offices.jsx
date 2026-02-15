@@ -222,21 +222,6 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
           />
         )}
       </div>
-
-      <div className="mt-auto pt-4 border-t border-gray-100">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Password Status:</span>
-          {passwordAlreadyChanged ? (
-            <span className="px-2 py-1 rounded bg-green-100 text-green-700 text-xs font-medium">
-              Already changed
-            </span>
-          ) : (
-            <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 text-xs">
-              {defaultPassword}
-            </code>
-          )}
-        </div>
-      </div>
     </div>
   );
 });
@@ -1329,26 +1314,6 @@ const Offices = () => {
                             }`}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Password Status:</span>
-                              {editData.passwordChanged ? (
-                                <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
-                                  Already changed
-                                </span>
-                              ) : (
-                                <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700 text-xs">
-                                  {editData.role === "super" ? "superadmin2025" : "officeadmin2025"}
-                                </code>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500">Credentials are managed in Firebase Auth.</p>
-                            <p className="text-xs text-gray-500">
-                              {editData.role === "super" 
-                                ? "Account role is protected and cannot be changed" 
-                                : "Account role cannot be changed"}
-                            </p>
                           </div>
                         </div>
                       </label>
