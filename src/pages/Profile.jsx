@@ -999,9 +999,6 @@ const Profile = () => {
                     ) : (
                       <p className="font-mono text-lg">{getDefaultPassword()}</p>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      Password is managed securely by Firebase Authentication.
-                    </p>
                   </div>
                   {/* <div className="p-3 bg-blue-50 border border-blue-100 rounded">
                     <p className="text-sm text-blue-700">
