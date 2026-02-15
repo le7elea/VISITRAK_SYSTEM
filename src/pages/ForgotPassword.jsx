@@ -1,8 +1,6 @@
 // pages/ForgotPassword.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../lib/firebase";
 
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
@@ -39,6 +37,10 @@ const ForgotPassword = () => {
 
   const navigate = useNavigate();
 
+  const isRouteNotFoundResponse = (payload = {}) =>
+    typeof payload.message === "string" &&
+    payload.message.toLowerCase().includes("route not found");
+
   const ensureAuthUserExists = async (normalizedEmail) => {
     const response = await fetch("/api/provision-auth-user", {
       method: "POST",
@@ -57,10 +59,7 @@ const ForgotPassword = () => {
 
     if (!response.ok || payload.success === false) {
       if (response.status === 404) {
-        if (
-          typeof payload.message === "string" &&
-          payload.message.toLowerCase().includes("route not found")
-        ) {
+        if (isRouteNotFoundResponse(payload)) {
           const error = new Error(
             "Provision API route is missing. Restart your API server or deploy latest backend."
           );
@@ -77,6 +76,53 @@ const ForgotPassword = () => {
         payload.message || "Unable to prepare account for password reset."
       );
     }
+  };
+
+  const sendStyledResetEmail = async (normalizedEmail) => {
+    const response = await fetch("/api/send-password-reset", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Ignore parse failures and fallback to generic error message.
+    }
+
+    if (!response.ok || payload.success === false) {
+      if (response.status === 404) {
+        if (isRouteNotFoundResponse(payload)) {
+          const error = new Error(
+            "Password reset API route is missing. Restart your API server or deploy latest backend."
+          );
+          error.code = "api/route-not-found";
+          throw error;
+        }
+
+        const error = new Error("This email is not registered in our system.");
+        error.code = "auth/user-not-found";
+        throw error;
+      }
+
+      if (response.status === 429) {
+        const error = new Error(payload.message || "Please wait before requesting another reset.");
+        error.code = "auth/too-many-requests";
+        throw error;
+      }
+
+      const error = new Error(payload.message || "Unable to send reset email right now.");
+      if (payload.error) {
+        error.code = payload.error;
+      }
+      throw error;
+    }
+
+    return payload;
   };
 
   const handleResetPassword = async (e) => {
@@ -105,34 +151,16 @@ const ForgotPassword = () => {
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      const actionCodeSettings = {
-        url: `${window.location.origin}/reset-password`,
-        handleCodeInApp: true,
-      };
-
-      try {
-        await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
-      } catch (error) {
-        if (error.code === "auth/user-not-found") {
-          await ensureAuthUserExists(normalizedEmail);
-          await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
-        } else if (
-          error.code === "auth/invalid-continue-uri" ||
-          error.code === "auth/unauthorized-continue-uri"
-        ) {
-          // Fallback to Firebase default reset page when custom redirect is not allowed.
-          await sendPasswordResetEmail(auth, normalizedEmail);
-        } else {
-          throw error;
-        }
-      }
+      await ensureAuthUserExists(normalizedEmail);
+      const apiPayload = await sendStyledResetEmail(normalizedEmail);
 
       setModal({
         show: true,
         title: "Email Sent Successfully",
         message:
           `Password reset link has been sent to:\n${normalizedEmail}\n\n` +
-          "Please check your inbox (and spam folder).",
+          "Please check your inbox (and spam folder)." +
+          (apiPayload.warning ? `\n\nNote: ${apiPayload.warning}` : ""),
       });
 
       setEmail("");
@@ -148,18 +176,15 @@ const ForgotPassword = () => {
       } else if (error.code === "api/route-not-found") {
         errorTitle = "Server Update Needed";
         errorMessage = "Backend route missing. Start/restart API server with latest code.";
+      } else if (error.code === "SERVER_CONFIG_ERROR") {
+        errorTitle = "Server Configuration Error";
+        errorMessage = "Email service is not configured yet. Contact administrator.";
       } else if (error.code === "auth/invalid-email") {
         errorTitle = "Invalid Email";
         errorMessage = "Please enter a valid email address.";
-      } else if (error.code === "auth/invalid-continue-uri") {
-        errorTitle = "Configuration Error";
-        errorMessage = "Reset redirect URL is invalid. Contact administrator.";
-      } else if (error.code === "auth/unauthorized-continue-uri") {
-        errorTitle = "Configuration Error";
-        errorMessage = "Current domain is not authorized in Firebase Authentication.";
       } else if (error.code === "auth/too-many-requests") {
         errorTitle = "Too Many Requests";
-        errorMessage = "Please wait a few minutes before trying again.";
+        errorMessage = error.message || "Please wait a few minutes before trying again.";
       } else if (error.code === "auth/network-request-failed") {
         errorTitle = "Connection Error";
         errorMessage = "Cannot connect right now. Please check your internet connection.";

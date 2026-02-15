@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 
 import cleanupTokens from "./api/cleanup-tokens.js";
+import completePasswordReset from "./api/complete-password-reset.js";
 import createOfficeAccount from "./api/create-office-account.js";
 import debugFirebase from "./api/debug-firebase.js";
 import deleteOfficeAccount from "./api/delete-office-account.js";
@@ -18,6 +19,7 @@ const routes = {
   "/api/delete-office-account": deleteOfficeAccount,
   "/api/provision-auth-user": provisionAuthUser,
   "/api/send-password-reset": sendPasswordReset,
+  "/api/complete-password-reset": completePasswordReset,
   "/api/cleanup-tokens": cleanupTokens,
   "/api/firestore-usage": firestoreUsage,
   "/api/debug-firebase": debugFirebase,

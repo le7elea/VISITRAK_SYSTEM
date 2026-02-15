@@ -40,6 +40,10 @@ const ResetPassword = () => {
 
   const mode = params.get("mode");
   const oobCode = params.get("oobCode");
+  const token = params.get("token");
+  const tokenEmail = (params.get("email") || "").trim().toLowerCase();
+  const isFirebaseResetFlow = mode === "resetPassword" && !!oobCode;
+  const isTokenResetFlow = !!token && !!tokenEmail;
 
   const [validating, setValidating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +64,13 @@ const ResetPassword = () => {
 
   useEffect(() => {
     const validateCode = async () => {
-      if (!oobCode || mode !== "resetPassword") {
+      if (isTokenResetFlow) {
+        setAccountEmail(tokenEmail);
+        setValidating(false);
+        return;
+      }
+
+      if (!isFirebaseResetFlow) {
         setModal({
           show: true,
           title: "Invalid Link",
@@ -88,7 +98,7 @@ const ResetPassword = () => {
     };
 
     validateCode();
-  }, [mode, oobCode]);
+  }, [isFirebaseResetFlow, isTokenResetFlow, oobCode, tokenEmail]);
 
   const rules = {
     length: newPassword.length >= 10,
@@ -98,8 +108,35 @@ const ResetPassword = () => {
 
   const passwordValid = rules.length && rules.uppercase && rules.special;
 
+  const completeTokenReset = async () => {
+    const response = await fetch("/api/complete-password-reset", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token,
+        email: tokenEmail,
+        newPassword,
+      }),
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Ignore parse errors and use fallback message.
+    }
+
+    if (!response.ok || payload.success === false) {
+      const error = new Error(payload.message || "Failed to reset password.");
+      error.code = payload.error || `HTTP_${response.status}`;
+      throw error;
+    }
+  };
+
   const handleResetPassword = async () => {
-    if (!oobCode) {
+    if (!isTokenResetFlow && !oobCode) {
       setModal({
         show: true,
         title: "Invalid Link",
@@ -130,29 +167,33 @@ const ResetPassword = () => {
 
     try {
       setSubmitting(true);
-      await confirmPasswordReset(auth, oobCode, newPassword);
+      if (isTokenResetFlow) {
+        await completeTokenReset();
+      } else {
+        await confirmPasswordReset(auth, oobCode, newPassword);
 
-      try {
-        if (accountEmail) {
-          const loginResult = await signInWithEmailAndPassword(
-            auth,
-            accountEmail,
-            newPassword
-          );
-          const officeProfile = await getOfficeProfileForAuthUser(loginResult.user);
+        try {
+          if (accountEmail) {
+            const loginResult = await signInWithEmailAndPassword(
+              auth,
+              accountEmail,
+              newPassword
+            );
+            const officeProfile = await getOfficeProfileForAuthUser(loginResult.user);
 
-          if (officeProfile?.id) {
-            await updateDoc(doc(db, "offices", officeProfile.id), {
-              passwordChanged: true,
-              passwordChangedAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
+            if (officeProfile?.id) {
+              await updateDoc(doc(db, "offices", officeProfile.id), {
+                passwordChanged: true,
+                passwordChangedAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              });
+            }
+
+            await signOut(auth);
           }
-
-          await signOut(auth);
+        } catch (statusError) {
+          console.error("Password status sync error:", statusError);
         }
-      } catch (statusError) {
-        console.error("Password status sync error:", statusError);
       }
 
       setModal({
@@ -165,12 +206,23 @@ const ResetPassword = () => {
       console.error("Reset password error:", error);
       let message = "Failed to reset password. Please request a new link.";
 
-      if (error.code === "auth/expired-action-code") {
+      if (error.code === "TOKEN_EXPIRED" || error.code === "auth/expired-action-code") {
         message = "This reset link has expired. Please request a new one.";
-      } else if (error.code === "auth/invalid-action-code") {
+      } else if (
+        error.code === "INVALID_TOKEN" ||
+        error.code === "TOKEN_EMAIL_MISMATCH" ||
+        error.code === "auth/invalid-action-code"
+      ) {
         message = "This reset link is invalid. Please request a new one.";
+      } else if (error.code === "TOKEN_USED") {
+        message = "This reset link was already used. Please request a new one.";
       } else if (error.code === "auth/weak-password") {
         message = "The new password is too weak.";
+      } else if (error.code === "WEAK_PASSWORD") {
+        message =
+          "Password must be at least 10 characters with one uppercase and one number or special character.";
+      } else if (error.code === "HTTP_404") {
+        message = "Reset service route is missing. Contact administrator.";
       }
 
       setModal({
