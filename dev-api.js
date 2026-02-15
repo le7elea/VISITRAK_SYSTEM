@@ -5,6 +5,7 @@ import createOfficeAccount from "./api/create-office-account.js";
 import debugFirebase from "./api/debug-firebase.js";
 import deleteOfficeAccount from "./api/delete-office-account.js";
 import firestoreUsage from "./api/firestore-usage.js";
+import provisionAuthUser from "./api/provision-auth-user.js";
 import sendPasswordReset from "./api/send-password-reset.js";
 import testApi from "./api/test.js";
 import updateOfficeAccount from "./api/update-office-account.js";
@@ -15,6 +16,7 @@ const routes = {
   "/api/create-office-account": createOfficeAccount,
   "/api/update-office-account": updateOfficeAccount,
   "/api/delete-office-account": deleteOfficeAccount,
+  "/api/provision-auth-user": provisionAuthUser,
   "/api/send-password-reset": sendPasswordReset,
   "/api/cleanup-tokens": cleanupTokens,
   "/api/firestore-usage": firestoreUsage,

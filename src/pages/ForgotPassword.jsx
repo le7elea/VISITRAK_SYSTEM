@@ -39,6 +39,46 @@ const ForgotPassword = () => {
 
   const navigate = useNavigate();
 
+  const ensureAuthUserExists = async (normalizedEmail) => {
+    const response = await fetch("/api/provision-auth-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Ignore parse failures and fallback to generic error message.
+    }
+
+    if (!response.ok || payload.success === false) {
+      if (response.status === 404) {
+        if (
+          typeof payload.message === "string" &&
+          payload.message.toLowerCase().includes("route not found")
+        ) {
+          const error = new Error(
+            "Provision API route is missing. Restart your API server or deploy latest backend."
+          );
+          error.code = "api/route-not-found";
+          throw error;
+        }
+
+        const error = new Error("This email is not registered in our system.");
+        error.code = "auth/user-not-found";
+        throw error;
+      }
+
+      throw new Error(
+        payload.message || "Unable to prepare account for password reset."
+      );
+    }
+  };
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
@@ -70,7 +110,22 @@ const ForgotPassword = () => {
         handleCodeInApp: true,
       };
 
-      await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
+      try {
+        await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
+      } catch (error) {
+        if (error.code === "auth/user-not-found") {
+          await ensureAuthUserExists(normalizedEmail);
+          await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
+        } else if (
+          error.code === "auth/invalid-continue-uri" ||
+          error.code === "auth/unauthorized-continue-uri"
+        ) {
+          // Fallback to Firebase default reset page when custom redirect is not allowed.
+          await sendPasswordResetEmail(auth, normalizedEmail);
+        } else {
+          throw error;
+        }
+      }
 
       setModal({
         show: true,
@@ -90,9 +145,18 @@ const ForgotPassword = () => {
       if (error.code === "auth/user-not-found") {
         errorTitle = "Email Not Found";
         errorMessage = "This email is not registered in our system.";
+      } else if (error.code === "api/route-not-found") {
+        errorTitle = "Server Update Needed";
+        errorMessage = "Backend route missing. Start/restart API server with latest code.";
       } else if (error.code === "auth/invalid-email") {
         errorTitle = "Invalid Email";
         errorMessage = "Please enter a valid email address.";
+      } else if (error.code === "auth/invalid-continue-uri") {
+        errorTitle = "Configuration Error";
+        errorMessage = "Reset redirect URL is invalid. Contact administrator.";
+      } else if (error.code === "auth/unauthorized-continue-uri") {
+        errorTitle = "Configuration Error";
+        errorMessage = "Current domain is not authorized in Firebase Authentication.";
       } else if (error.code === "auth/too-many-requests") {
         errorTitle = "Too Many Requests";
         errorMessage = "Please wait a few minutes before trying again.";
@@ -205,7 +269,7 @@ const ForgotPassword = () => {
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="text-xs text-gray-400 text-center space-y-1">
               <p>Need help? Contact your system administrator</p>
-              <p>© LMT. All rights reserved.</p>
+              <p>(c) LMT. All rights reserved.</p>
             </div>
           </div>
         </div>
