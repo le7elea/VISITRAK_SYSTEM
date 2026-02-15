@@ -1,5 +1,5 @@
 // lib/info.services.js - COMPLETE FIXED VERSION WITH PROPER EXPIRATION
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import {
   collection,
   addDoc,
@@ -18,6 +18,42 @@ import {
 const officesCollection = collection(db, "offices");
 const activityLogsCollection = collection(db, "activityLogs");
 const passwordResetTokensCollection = collection(db, "passwordResetTokens");
+
+const callProtectedApi = async (url, method, body) => {
+  if (!auth.currentUser) {
+    throw new Error("You must be logged in to perform this action.");
+  }
+
+  const idToken = await auth.currentUser.getIdToken();
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let responseData = {};
+  try {
+    responseData = await response.json();
+  } catch {
+    // Ignore JSON parsing errors and use default message below.
+  }
+
+  if (!response.ok || responseData.success === false) {
+    if (response.status === 404) {
+      throw new Error(
+        "API route not found. Start local API server with `npm run dev:api`."
+      );
+    }
+    throw new Error(
+      responseData.message || `Request failed with status ${response.status}`
+    );
+  }
+
+  return responseData;
+};
 
 /**
  * Create an activity log
@@ -682,23 +718,22 @@ export const addOffice = async (office) => {
       throw new Error(`Office with email ${office.email} already exists`);
     }
     
-    const defaultPassword =
-      office.role === "super" ? "superadmin2025" : "officeadmin2025";
-
     const validatedOffice = validateOfficeData(office);
     
-    const officeWithPassword = {
+    const officePayload = {
       name: validatedOffice.name,
       officialName: validatedOffice.officialName,
       email: validatedOffice.email,
       role: validatedOffice.role,
-      password: defaultPassword,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit,
-      createdAt: serverTimestamp(),
     };
-
-    const docRef = await addDoc(officesCollection, officeWithPassword);
+    const apiResponse = await callProtectedApi(
+      "/api/create-office-account",
+      "POST",
+      officePayload
+    );
+    const createdOffice = apiResponse.data;
     
     const currentUser = getCurrentUser();
     await createActivityLog({
@@ -720,9 +755,9 @@ export const addOffice = async (office) => {
     console.log(`✅ Office "${office.name}" added successfully with activity log`);
     
     return { 
-      id: docRef.id, 
-      ...officeWithPassword,
-      createdAt: new Date()
+      id: createdOffice.id, 
+      ...createdOffice,
+      createdAt: createdOffice.createdAt ? new Date(createdOffice.createdAt) : new Date()
     };
   } catch (error) {
     console.error("Error adding office:", error);
@@ -826,23 +861,18 @@ export const updateOffice = async (office) => {
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit,
-      updatedAt: serverTimestamp(),
+      status: office.status || currentData.status || "active",
     };
-
-    if (office.password) {
-      updateData.password = office.password;
-    }
-
-    await updateDoc(officeRef, updateData);
+    await callProtectedApi("/api/update-office-account", "PUT", {
+      id: office.id,
+      ...updateData,
+    });
     
     const currentUser = getCurrentUser();
     
     let description = `Office "${office.name}" was updated`;
     let changes = [];
     
-    if (office.password && office.password !== currentData.password) {
-      changes.push("password changed");
-    }
     if (office.name !== currentData.name) {
       changes.push(`name changed from "${currentData.name}" to "${office.name}"`);
     }
@@ -935,7 +965,7 @@ export const deleteOffice = async (id) => {
       action: "delete"
     });
     
-    await deleteDoc(officeRef);
+    await callProtectedApi("/api/delete-office-account", "DELETE", { id });
     
     console.log(`✅ Office "${officeData.name}" deleted successfully with activity log`);
     return { 

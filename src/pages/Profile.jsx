@@ -4,7 +4,12 @@ import { useNavigate } from "react-router-dom";
 import ProfileCard from "../components/ProfileCard";
 import Tabs from "../components/Tabs";
 import InfoRow from "../components/InfoRow";
-import { fetchOffices, updateOffice, getOfficeByEmail, getOfficeById } from "../lib/info.services";
+import { fetchOffices, getOfficeByEmail, getOfficeById } from "../lib/info.services";
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+} from "firebase/auth";
 import { 
   collection, 
   query, 
@@ -15,7 +20,7 @@ import {
   serverTimestamp,
   limit 
 } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 import profileImg from "../assets/bisulogo.png";
 
 const Profile = () => {
@@ -167,7 +172,6 @@ const Profile = () => {
             role: userOffice.role,
             type: type,
             office: userOffice.name,
-            password: userOffice.password || (type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025"),
             createdAt: userOffice.createdAt,
             updatedAt: userOffice.updatedAt,
             isInDatabase: true
@@ -213,7 +217,6 @@ const Profile = () => {
               role: "super",
               type: "SuperAdmin",
               office: "System Administration",
-              password: "superadmin2025",
               createdAt: new Date(),
               isInDatabase: false,
               needsSetup: true,
@@ -231,7 +234,6 @@ const Profile = () => {
               role: parsedUser.role || "office",
               type: parsedUser.type || "OfficeAdmin",
               office: parsedUser.office || "Not Assigned",
-              password: parsedUser.type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025",
               createdAt: new Date(),
               isInDatabase: false,
               needsSetup: true
@@ -254,7 +256,6 @@ const Profile = () => {
             role: parsedUser.role || (parsedUser.type === "SuperAdmin" ? "super" : "office"),
             type: parsedUser.type || "OfficeAdmin",
             office: parsedUser.office || "Not Assigned",
-            password: parsedUser.type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025",
             createdAt: new Date(),
             isInDatabase: false,
             needsSetup: true
@@ -308,7 +309,6 @@ const Profile = () => {
           role: userOffice.role,
           type: type,
           office: userOffice.name,
-          password: userOffice.password || (type === "SuperAdmin" ? "superadmin2025" : "officeadmin2025"),
           createdAt: userOffice.createdAt,
           updatedAt: userOffice.updatedAt,
           isInDatabase: true
@@ -360,7 +360,6 @@ const Profile = () => {
           role: "super",
           type: "SuperAdmin",
           office: superAdminOffice.name,
-          password: superAdminOffice.password || "superadmin2025",
           createdAt: superAdminOffice.createdAt,
           updatedAt: superAdminOffice.updatedAt,
           isInDatabase: true
@@ -453,15 +452,8 @@ const Profile = () => {
     }
   };
 
-  const getDefaultPassword = () => {
-    if (!user) return "";
-    
-    if (user.password) {
-      return user.password;
-    }
-    
-    return user.role === "super" ? "superadmin2025" : "officeadmin2025";
-  };
+  const getPasswordHint = () =>
+    "Password is securely managed by Firebase Authentication.";
 
   // Filter logs by date range
   const filterByDateRange = (logs) => {
@@ -647,8 +639,8 @@ const Profile = () => {
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
     
-    if (!user || !user.id) {
-      alert("User information not available");
+    if (!user || !auth.currentUser) {
+      alert("User session not available. Please log in again.");
       return;
     }
     
@@ -662,39 +654,25 @@ const Profile = () => {
       return;
     }
     
-    if (!user.isInDatabase) {
-      alert("User not found in database. Click Refresh or log out and log back in.");
+    if (!currentPassword) {
+      alert("Please enter your current password.");
       return;
     }
-    
-    const currentStoredPassword = getDefaultPassword();
-    if (currentPassword !== currentStoredPassword) {
-      alert("Current password is incorrect!");
-      return;
-    }
-    
+
     setPasswordLoading(true);
     
     try {
-      await updateOffice({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        password: newPassword
-      });
-      
-      setUser(prev => ({ ...prev, password: newPassword }));
-      
-      // Update localStorage
-      const savedUser = localStorage.getItem("user");
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        localStorage.setItem("user", JSON.stringify({
-          ...parsedUser,
-          password: newPassword
-        }));
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser?.email) {
+        throw new Error("Authenticated email not found. Please log in again.");
       }
+
+      const credential = EmailAuthProvider.credential(
+        firebaseUser.email,
+        currentPassword
+      );
+      await reauthenticateWithCredential(firebaseUser, credential);
+      await updatePassword(firebaseUser, newPassword);
       
       // Log activity
       try {
@@ -721,7 +699,17 @@ const Profile = () => {
       
     } catch (error) {
       console.error("Error updating password:", error);
-      alert(`Failed to update password: ${error.message}`);
+      let message = error.message || "Failed to update password.";
+
+      if (error.code === "auth/invalid-credential") {
+        message = "Current password is incorrect.";
+      } else if (error.code === "auth/weak-password") {
+        message = "New password is too weak.";
+      } else if (error.code === "auth/requires-recent-login") {
+        message = "Please log in again, then retry password change.";
+      }
+
+      alert(`Failed to update password: ${message}`);
     } finally {
       setPasswordLoading(false);
     }
@@ -970,8 +958,8 @@ const Profile = () => {
               <div className="text-gray-600 text-sm">
                 <div className="space-y-4">
                   <div className="p-3 bg-gray-50 rounded">
-                    <p className="font-medium mb-1">Current Password:</p>
-                    <p className="font-mono text-lg">{getDefaultPassword()}</p>
+                    <p className="font-medium mb-1">Password Security:</p>
+                    <p className="text-sm text-gray-600">{getPasswordHint()}</p>
                   </div>
                   {/* <div className="p-3 bg-blue-50 border border-blue-100 rounded">
                     <p className="text-sm text-blue-700">

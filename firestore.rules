@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSuper() {
+      return signedIn() && (
+        request.auth.token.role == "super" ||
+        (
+          exists(/databases/$(database)/documents/offices/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/offices/$(request.auth.uid)).data.role == "super"
+        )
+      );
+    }
+
+    function isOwnOffice(officeId) {
+      return signedIn() && request.auth.uid == officeId;
+    }
+
+    // Offices directory for admin users.
+    match /offices/{officeId} {
+      allow read: if signedIn();
+
+      // Only super admins can create office accounts.
+      allow create: if isSuper() && !("password" in request.resource.data);
+
+      // Super admins can update any office. Users can update only their own office doc.
+      // If a legacy password field already exists, it must remain unchanged from clients.
+      allow update: if (isSuper() || isOwnOffice(officeId)) && (
+        !("password" in request.resource.data) ||
+        (
+          "password" in resource.data &&
+          request.resource.data.password == resource.data.password
+        )
+      );
+
+      // Protect super admin account from accidental deletion.
+      allow delete: if isSuper() && resource.data.role != "super";
+    }
+
+    // Visitor logs.
+    match /visits/{visitId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isSuper();
+    }
+
+    // Feedback entries.
+    match /feedbacks/{feedbackId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isSuper();
+    }
+
+    // Append-only audit logs.
+    match /activityLogs/{logId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    // Sensitive reset tokens must be handled by backend/Admin SDK only.
+    match /passwordResetTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    // Default deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

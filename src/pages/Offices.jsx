@@ -219,22 +219,6 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
           />
         )}
       </div>
-      
-      {/* Password Section */}
-      {office.password && (
-        <div className="mt-auto pt-4 border-t border-gray-100">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">Password:</span>
-            <code className={`text-xs font-mono px-2 py-1 rounded ${
-              office.role === "super" 
-                ? "bg-purple-100 text-purple-700" 
-                : "bg-gray-100 text-gray-700"
-            }`}>
-              {office.password}
-            </code>
-          </div>
-        </div>
-      )}
     </div>
   );
 });
@@ -473,7 +457,7 @@ const AddOfficeModal = memo(({
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Password:</span>
+                          <span className="text-gray-600">Initial Password:</span>
                           <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">officeadmin2025</code>
                         </div>
                         <p className="text-xs text-gray-500">Limited to specific office functions and data</p>
@@ -754,7 +738,6 @@ const Offices = () => {
     setAddError("");
     
     try {
-      const defaultPassword = "officeadmin2025"; // Fixed password for office admin
       const tempId = `temp_${Date.now()}`;
       
       const tempOffice = {
@@ -763,7 +746,6 @@ const Offices = () => {
         officialName: addData.officialName,
         email: addData.email,
         role: "office", // Always office admin
-        password: defaultPassword,
         purposes: addData.purposes,
         staffToVisit: addData.staffToVisit,
         createdAt: new Date()
@@ -792,8 +774,7 @@ const Offices = () => {
         try {
           const newOffice = await addOffice({
             ...addData,
-            role: "office", // Ensure it's office admin
-            password: defaultPassword
+            role: "office" // Ensure it's office admin
           });
           
           setOffices(prev => prev.map(office => 
@@ -946,8 +927,7 @@ const Offices = () => {
         role: editData.role, // Keep original role (super or office)
         purposes: editData.purposes,
         staffToVisit: editData.staffToVisit,
-        createdAt: originalOffice.createdAt,
-        password: originalOffice.password
+        createdAt: originalOffice.createdAt
       };
       
       // Update local state immediately
@@ -1328,14 +1308,8 @@ const Offices = () => {
                           </div>
                           <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Password:</span>
-                              <code className={`font-mono px-2 py-1 rounded ${
-                                editData.role === "super" 
-                                  ? "bg-purple-100 text-purple-700" 
-                                  : "bg-gray-100 text-gray-700"
-                              }`}>
-                                {editData.role === "super" ? "superadmin2025" : "officeadmin2025"}
-                              </code>
+                              <span className="text-gray-600">Credentials:</span>
+                              <span className="text-xs text-gray-500">Managed in Firebase Auth</span>
                             </div>
                             <p className="text-xs text-gray-500">
                               {editData.role === "super" 

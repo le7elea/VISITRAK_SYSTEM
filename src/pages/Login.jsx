@@ -1,8 +1,13 @@
 // pages/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth, db } from "../lib/firebase";
+import {
+  buildSessionUser,
+  getOfficeProfileForAuthUser,
+} from "../lib/userProfile.services";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/logo02.png";
 import emailIcon from "../assets/email.png";
@@ -22,182 +27,118 @@ const Login = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Load saved credentials
+  // Load remembered email only (never password).
   useEffect(() => {
+    const rememberedEmail = localStorage.getItem("rememberedEmail");
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberMe(true);
+      return;
+    }
+
+    // Backward compatibility for previous user storage.
     const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setEmail(parsed.email || "");
-        setPassword(parsed.password || "");
-        setRememberMe(true);
-      } catch (error) {
-        console.error("Error parsing saved user:", error);
-        localStorage.removeItem("user");
+    if (!savedUser) return;
+
+    try {
+      const parsed = JSON.parse(savedUser);
+      if (parsed?.email) {
+        setEmail(parsed.email);
       }
+    } catch (error) {
+      console.error("Error parsing saved user:", error);
+      localStorage.removeItem("user");
     }
   }, []);
 
-  // Function to create activity log
   const createActivityLog = async (userData, action) => {
     try {
       const logData = {
         title: "User Login",
         description: `${userData.name} logged into the system`,
         office: userData.office,
-        userId: userData.id,
+        userId: userData.uid || userData.id,
         userEmail: userData.email,
         userRole: userData.role,
-        action: action,
+        action,
         timestamp: serverTimestamp(),
-        type: "login"
+        type: "login",
       };
 
       await addDoc(collection(db, "activityLogs"), logData);
-      console.log("✅ Activity log created for office:", userData.office);
     } catch (error) {
-      console.error("❌ Error creating activity log:", error);
+      console.error("Error creating activity log:", error);
     }
   };
 
-  // Navigate to forgot password page
   const handleForgotPassword = () => {
     navigate("/forgot-password");
   };
 
   const handleLoginClick = async (e) => {
     e.preventDefault();
-    if (!email || !password) return alert("⚠️ Please enter email and password.");
-    
+    if (!email || !password) {
+      alert("Please enter email and password.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const officesRef = collection(db, "offices");
-      const q = query(officesRef, where("email", "==", email.toLowerCase()));
-      const snapshot = await getDocs(q);
+      const normalizedEmail = email.trim().toLowerCase();
+      const authResult = await signInWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        password
+      );
+      const authUser = authResult.user;
 
-      if (snapshot.empty) {
-        alert("❌ Email not found in database!");
-        setLoading(false);
-        return;
+      const officeProfile = await getOfficeProfileForAuthUser(authUser);
+      if (!officeProfile) {
+        await signOut(auth);
+        throw new Error(
+          "Account profile not found in Firestore. Contact your administrator."
+        );
       }
 
-      const userDoc = snapshot.docs[0].data();
-      const docId = snapshot.docs[0].id;
-
-      console.log("📄 Firestore office document:", userDoc);
-      console.log("🏢 Office name from Firestore:", userDoc.name);
-      console.log("📧 Office email:", userDoc.email);
-      console.log("🎭 User role:", userDoc.role);
-
-      // Debug: Check the exact value and type
-      console.log("🔍 Type of office name:", typeof userDoc.name);
-      console.log("🔍 Raw office name value:", JSON.stringify(userDoc.name));
-      console.log("🔍 Office name length:", userDoc.name.length);
-      
-      // Check for whitespace
-      const trimmedName = userDoc.name.trim();
-      console.log("🔍 Trimmed office name:", JSON.stringify(trimmedName));
-      console.log("🔍 Trimmed length:", trimmedName.length);
-
-      if (password !== userDoc.password) {
-        alert("❌ Invalid password!");
-        setLoading(false);
-        return;
+      if (officeProfile.status === "inactive") {
+        await signOut(auth);
+        throw new Error("Account is inactive. Please contact administrator.");
       }
 
-      // Create complete user data object with consistent office name
-      const officeName = userDoc.name.trim(); // Trim whitespace for consistency
-      
-      const userData = {
-        email: email.toLowerCase(),
-        name: officeName,
-        type: userDoc.role === "super" ? "SuperAdmin" : "OfficeAdmin",
-        office: officeName, // Use trimmed version for consistency
-        role: userDoc.role,
-        id: docId,
-        password: password,
-        isInDatabase: true,
-        officeName: officeName,
-        // Add normalized versions for comparison
-        normalizedOffice: officeName.toLowerCase(),
-        trimmedOffice: officeName
-      };
-
-      console.log("✅ Login successful!");
-      console.log("👤 User Type:", userData.type);
-      console.log("🏢 Office Name (trimmed):", userData.office);
-      console.log("🏢 Office Name (original):", userDoc.name);
-      console.log("📧 Email:", userData.email);
-      console.log("📦 Full User Data:", userData);
-
-      // 🔹 Create login activity log
+      const userData = buildSessionUser(authUser, officeProfile);
       await createActivityLog(userData, "login");
 
-      // Fetch sample visits to debug office name matching
-      try {
-        const visitsRef = collection(db, "visits");
-        const visitsQuery = query(visitsRef, limit(5));
-        const visitsSnapshot = await getDocs(visitsQuery);
-        
-        if (!visitsSnapshot.empty) {
-          console.log("🔍 SAMPLE VISITS FOR DEBUGGING:");
-          visitsSnapshot.docs.forEach((doc, index) => {
-            const visitData = doc.data();
-            console.log(`Visit ${index + 1}:`);
-            console.log(`  - Office field: "${visitData.office}"`);
-            console.log(`  - Type: ${typeof visitData.office}`);
-            console.log(`  - Length: ${visitData.office?.length || 0}`);
-            console.log(`  - Trimmed: "${visitData.office?.trim()}"`);
-            console.log(`  - Matches user office? ${visitData.office?.trim() === officeName}`);
-            console.log(`  - Case-insensitive match? ${visitData.office?.trim().toLowerCase() === officeName.toLowerCase()}`);
-          });
-        }
-      } catch (error) {
-        console.log("Note: Could not fetch sample visits for debugging");
-      }
-
-      // Store user data based on remember me preference
       if (rememberMe) {
-        const userToStore = { 
-          email, 
-          password, 
-          ...userData 
-        };
-        localStorage.setItem("user", JSON.stringify(userToStore));
-        console.log("💾 User data saved to localStorage (with password)");
+        localStorage.setItem("rememberedEmail", normalizedEmail);
       } else {
-        const userToStore = {
-          ...userData,
-          password: undefined // Don't save password if not remembering
-        };
-        localStorage.setItem("user", JSON.stringify(userToStore));
-        console.log("💾 User data saved to localStorage (without password)");
+        localStorage.removeItem("rememberedEmail");
       }
 
-      // Also save a separate copy for debugging
-      localStorage.setItem("last_login_debug", JSON.stringify({
-        timestamp: new Date().toISOString(),
-        officeName: officeName,
-        originalOfficeName: userDoc.name,
-        trimmedOfficeName: trimmedName,
-        email: email.toLowerCase()
-      }));
+      localStorage.setItem("user", JSON.stringify(userData));
 
-      console.log("💾 Debug info saved to localStorage");
-
-      // Call onLogin callback if provided
       if (onLogin) {
-        console.log("🔄 Calling onLogin callback with user data");
         onLogin(userData);
       }
 
-      // Navigate to profile
       navigate("/dashboard");
-
     } catch (error) {
-      console.error("❌ Login error:", error);
-      alert("❌ Login failed. Please try again.");
+      console.error("Login error:", error);
+
+      let errorMessage = "Login failed. Please try again.";
+      if (error.code === "auth/invalid-credential") {
+        errorMessage = "Invalid email or password.";
+      } else if (error.code === "auth/user-disabled") {
+        errorMessage = "This account is disabled.";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMessage = "Too many attempts. Please try again later.";
+      } else if (error.code === "auth/network-request-failed") {
+        errorMessage = "Network error. Check your connection.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,16 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword"; // ✅ ADD THIS
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import { auth } from "./lib/firebase";
+import {
+  buildSessionUser,
+  getOfficeProfileForAuthUser,
+} from "./lib/userProfile.services";
 
 import "./App.css";
 
@@ -13,15 +19,38 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
+    const unsub = onAuthStateChanged(auth, async (authUser) => {
       try {
-        setUser(JSON.parse(savedUser));
-      } catch {
+        if (!authUser) {
+          setUser(null);
+          localStorage.removeItem("user");
+          setIsLoading(false);
+          return;
+        }
+
+        const officeProfile = await getOfficeProfileForAuthUser(authUser);
+        if (!officeProfile) {
+          // Signed-in user without profile should not access dashboard.
+          await signOut(auth);
+          setUser(null);
+          localStorage.removeItem("user");
+          setIsLoading(false);
+          return;
+        }
+
+        const userData = buildSessionUser(authUser, officeProfile);
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+      } catch (error) {
+        console.error("Session restore error:", error);
+        setUser(null);
         localStorage.removeItem("user");
+      } finally {
+        setIsLoading(false);
       }
-    }
-    setTimeout(() => setIsLoading(false), 300);
+    });
+
+    return () => unsub();
   }, []);
 
   const handleLogin = (userData) => {
@@ -29,15 +58,21 @@ function App() {
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem("user");
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem("user");
+    }
   };
 
   if (isLoading) {
     return (
       <div className="loading-container">
-        <p>Loading…</p>
+        <p>Loading...</p>
       </div>
     );
   }
@@ -45,15 +80,17 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* ================= PUBLIC ROUTES ================= */}
-        <Route path="/" element={<Login onLogin={handleLogin} />} />
-        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route
+          path="/"
+          element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} />}
+        />
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />}
+        />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-
-        {/* ✅ ADD THIS ROUTE */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ================= PROTECTED ROUTES ================= */}
         <Route
           path="/dashboard"
           element={
@@ -65,7 +102,6 @@ function App() {
           }
         />
 
-        {/* ================= FALLBACK ================= */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
