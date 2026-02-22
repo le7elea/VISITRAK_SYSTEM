@@ -26,8 +26,8 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
 
         <div className="px-6 pt-6 pb-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800 break-words">
-            {visitor.name}{" "}
-            <span className="text-sm text-gray-500">({visitor.office})</span>
+            Feedback Details{" "}
+            <span className="text-sm text-gray-500">({visitor.office || "Unspecified"})</span>
           </h3>
           <p className="text-sm text-gray-500 mt-1">{visitor.date}</p>
           <p className="text-sm font-medium text-yellow-600 mt-2">

@@ -69,6 +69,7 @@ const normalizeQuestionRatings = (answers, questions = []) => {
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [date, setDate] = useState("");
+  const [dateMode, setDateMode] = useState("month");
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [offices, setOffices] = useState([]);
@@ -134,6 +135,12 @@ const Feedback = ({ user }) => {
     return "";
   };
 
+  const getSafeMonthString = (createdAt) => {
+    const dayString = getSafeDateString(createdAt);
+    if (!dayString) return "";
+    return dayString.slice(0, 7);
+  };
+
   // Get formatted display date
   const getDisplayDate = (createdAt) => {
     if (!createdAt) return "Date not available";
@@ -196,8 +203,11 @@ const Feedback = ({ user }) => {
           const matchesSearch = nameMatch || suggestionMatch || commendationMatch || visitIdMatch;
           
           // Handle date filter safely
-          const dateString = getSafeDateString(f.createdAt);
-          const matchesDate = !date || dateString === date;
+          const dayString = getSafeDateString(f.createdAt);
+          const monthString = getSafeMonthString(f.createdAt);
+          const matchesDate = !date || (
+            dateMode === "day" ? dayString === date : monthString === date
+          );
           
           // Handle office filter based on user role
           let matchesOffice = true;
@@ -240,29 +250,7 @@ const Feedback = ({ user }) => {
       console.error("Error filtering feedbacks:", err);
       return [];
     }
-  }, [feedbacks, search, date, office, user]);
-
-  // Calculate statistics for display
-  const stats = useMemo(() => {
-    try {
-      if (filteredFeedbacks.length === 0) {
-        return { averageRating: "0.0", total: 0 };
-      }
-      
-      const totalRating = filteredFeedbacks.reduce((sum, f) => {
-        const rating = parseFloat(f.satisfaction) || 0;
-        return sum + rating;
-      }, 0);
-      
-      return {
-        averageRating: (totalRating / filteredFeedbacks.length).toFixed(1),
-        total: filteredFeedbacks.length,
-      };
-    } catch (err) {
-      console.error("Error calculating stats:", err);
-      return { averageRating: "0.0", total: 0 };
-    }
-  }, [filteredFeedbacks]);
+  }, [feedbacks, search, date, dateMode, office, user]);
 
   // Generate unique office options
   const officeOptions = useMemo(() => {
@@ -370,6 +358,82 @@ const Feedback = ({ user }) => {
     return "Office of the College of Computing and Information Sciences";
   }, [user, office, offices]);
 
+  const printRows = useMemo(() => {
+    const rowsByOffice = new Map();
+
+    filteredFeedbacks.forEach((feedback) => {
+      const officeName = toTrimmedText(feedback?.office) || "Unspecified";
+
+      if (!rowsByOffice.has(officeName)) {
+        rowsByOffice.set(officeName, {
+          office: officeName,
+          commendations: [],
+          suggestions: [],
+        });
+      }
+
+      const row = rowsByOffice.get(officeName);
+      const commendation = toTrimmedText(feedback?.commendation);
+      const suggestion = toTrimmedText(feedback?.suggestion);
+
+      if (
+        commendation &&
+        commendation !== "No commendation provided." &&
+        !row.commendations.includes(commendation)
+      ) {
+        row.commendations.push(commendation);
+      }
+
+      if (
+        suggestion &&
+        suggestion !== "No suggestion provided." &&
+        !row.suggestions.includes(suggestion)
+      ) {
+        row.suggestions.push(suggestion);
+      }
+    });
+
+    const rows = [...rowsByOffice.values()].sort((a, b) =>
+      a.office.localeCompare(b.office)
+    );
+
+    return rows;
+  }, [filteredFeedbacks]);
+
+  const reportMonthLabel = useMemo(() => {
+    let sourceDate = null;
+
+    if (date) {
+      const [year, month] = date.split("-").map(Number);
+      if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
+        sourceDate = new Date(year, month - 1, 1);
+      }
+    }
+
+    if (!sourceDate && filteredFeedbacks.length > 0) {
+      const createdAt = filteredFeedbacks[0]?.createdAt;
+
+      if (createdAt?.toDate) {
+        sourceDate = createdAt.toDate();
+      } else if (createdAt instanceof Date) {
+        sourceDate = createdAt;
+      } else if (typeof createdAt === "string") {
+        const parsed = new Date(createdAt);
+        if (!Number.isNaN(parsed.getTime())) {
+          sourceDate = parsed;
+        }
+      }
+    }
+
+    if (!sourceDate) {
+      sourceDate = new Date();
+    }
+
+    return sourceDate
+      .toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      .toUpperCase();
+  }, [date, filteredFeedbacks]);
+
   // Show loading state
   if (loading) {
     return (
@@ -430,6 +494,8 @@ const Feedback = ({ user }) => {
             setSearch={setSearch}
             date={date}
             setDate={setDate}
+            dateMode={dateMode}
+            setDateMode={setDateMode}
             office={office}
             setOffice={setOffice}
             exportCSV={exportCSV}
@@ -467,124 +533,130 @@ const Feedback = ({ user }) => {
         )}
       </div>
 
-      {/* Print View Only - BISU Format */}
-      <div className="hidden print:block bg-white print-only-section">
+      {/* Print View Only - CSF Monthly Commendations & Suggestions */}
+      <div className="hidden print:block bg-white print-only-section text-black">
         {(() => {
-          const rowsPerPage = 15;
-          const totalPages = Math.ceil(filteredFeedbacks.length / rowsPerPage) || 1;
-          
+          const rowsPerPage = 6;
+          const totalPages = Math.ceil(printRows.length / rowsPerPage) || 1;
+
+          const renderList = (items = []) => {
+            if (!Array.isArray(items) || items.length === 0) {
+              return <span>N/A</span>;
+            }
+
+            return (
+              <ul className="list-disc pl-4 space-y-1">
+                {items.map((item, index) => (
+                  <li key={`${item}-${index}`} className="break-words">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            );
+          };
+
           return Array.from({ length: totalPages }).map((_, pageIndex) => {
             const startIndex = pageIndex * rowsPerPage;
-            const pageFeedbacks = filteredFeedbacks.slice(startIndex, startIndex + rowsPerPage);
-            const emptyRowsNeeded = rowsPerPage - pageFeedbacks.length;
-            
+            const pageRows = printRows.slice(startIndex, startIndex + rowsPerPage);
+            const isLastPage = pageIndex === totalPages - 1;
+
             return (
-              <div key={pageIndex} className="page-break p-6">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center">
-                    <div className="w-28 h-20 flex items-center justify-center">
-                      <img 
-                        src={bisuLogo} 
-                        alt="BISU Logo" 
-                        className="w-full h-full object-contain"
-                      />
+              <div key={pageIndex} className="page-break p-6 csf-page">
+                <div className="flex items-start justify-between mb-5 gap-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 flex items-center justify-center">
+                      <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                     </div>
-                    <div>
-                      <p className="text-[14px]">Republic of the Philippines</p>
-                      <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
-                      <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                      <p className="text-[14px]">{printOfficeName}</p>
-                      <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                    <div className="leading-tight">
+                      <p className="text-[12px]">Republic of the Philippines</p>
+                      <h1 className="text-[22px] font-bold tracking-wide">BOHOL ISLAND STATE UNIVERSITY</h1>
+                      <p className="text-[12px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                      <p className="text-[12px]">{printOfficeName}</p>
+                      <p className="text-[12px] italic">Balance | Integrity | Stewardship | Uprightness</p>
                     </div>
                   </div>
-                  
-                  <div className="flex gap-3">
-                    <div className="w-22 h-26 flex items-center justify-center">
-                      <img 
-                        src={bagongPilipinasLogo} 
-                        alt="Bagong Pilipinas Logo" 
+
+                  <div className="flex gap-3 items-center">
+                    <div className="w-24 h-16 flex items-center justify-center">
+                      <img
+                        src={bagongPilipinasLogo}
+                        alt="Bagong Pilipinas Logo"
                         className="w-full h-full object-contain"
                       />
                     </div>
-                    <div className="w-42 h-26 flex items-center justify-center">
-                      <img 
-                        src={tuvISOLogo} 
-                        alt="ISO 9001:2015 Certification" 
-                        className="w-full h-full object-contain"
-                      />
+                    <div className="w-32 h-16 flex items-center justify-center">
+                      <img src={tuvISOLogo} alt="ISO 9001:2015 Certification" className="w-full h-full object-contain" />
                     </div>
                   </div>
                 </div>
 
-                {/* Title and Stats */}
-                <div className="mb-3">
-                  <h2 className="text-center text-base font-bold uppercase">Feedback Report</h2>
-                  {/* <div className="text-center text-[11px] text-gray-600 mt-1">
-                    Generated on {new Date().toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </div>
-                  <div className="text-center text-[11px] mt-1">
-                    <span className="font-semibold">Total Feedback: {filteredFeedbacks.length}</span>
-                    <span className="mx-3">|</span>
-                    <span className="font-semibold">Average Rating: {stats.averageRating}</span>
-                  </div> */}
-                </div>
+                <h2 className="text-center text-[20px] tracking-wide uppercase mb-4">
+                  Monthly Customer Satisfaction Summary Form -{' '}
+                  <span className="underline">{reportMonthLabel}</span>
+                </h2>
 
-                {/* Table */}
-                <table className="w-full border-collapse border-1 border-black">
+                <p className="text-[18px] font-semibold mb-2">
+                  CSF Monthly Commendations &amp; Suggestions
+                </p>
+
+                <table className="w-full border-collapse csf-table">
                   <thead>
-                    <tr className="bg-white">
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[15%]">
-                        Date
-                      </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[20%]">
-                        Office
-                      </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[55%]">
-                        Feedback / Comments
-                      </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[10%]">
-                        Rating
-                      </th>
+                    <tr>
+                      <th rowSpan={2} className="w-[16%]">Office</th>
+                      <th rowSpan={2} className="w-[18%]">Commendation</th>
+                      <th rowSpan={2} className="w-[18%]">Detail of Suggestions</th>
+                      <th rowSpan={2} className="w-[7%]">Root Cause</th>
+                      <th rowSpan={2} className="w-[8%]">Action Plan</th>
+                      <th rowSpan={2} className="w-[9%]">Target of Implementation</th>
+                      <th colSpan={3} className="w-[24%]">Status of Implementation</th>
+                    </tr>
+                    <tr>
+                      <th className="w-[8%]">Implementation (Closed)</th>
+                      <th className="w-[8%]">On-going / To be Implemented (Open)</th>
+                      <th className="w-[8%]">Not Implemented</th>
                     </tr>
                   </thead>
-                  <tbody> 
-                    {pageFeedbacks.map((feedback) => (
-                      <tr key={feedback.id}>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">
-                          {feedback.date}
-                        </td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">
-                          {feedback.office}
-                        </td>
-                        <td className="border-2 border-black p-1 text-[10px]">
-                          {feedback.comment}
-                        </td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">
-                          {feedback.satisfaction.toFixed(1)} ★
-                        </td>
-                      </tr>
-                    ))}
-                    {/* Add empty rows to complete rows per page */}
-                    {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
-                      <tr key={`empty-${i}`}>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px]">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
+                  <tbody>
+                    {pageRows.map((row, rowIndex) => (
+                      <tr key={`${row.office}-${pageIndex}-${rowIndex}`}>
+                        <td>{row.office}</td>
+                        <td>{renderList(row.commendations)}</td>
+                        <td>{renderList(row.suggestions)}</td>
+                        <td className="text-center">N/A</td>
+                        <td className="text-center">N/A</td>
+                        <td className="text-center">N/A</td>
+                        <td className="text-center">N/A</td>
+                        <td className="text-center">N/A</td>
+                        <td className="text-center">N/A</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
 
-                {/* Footer */}
-                <div className="mt-3 text-center text-[10px] text-gray-600">
-                  Page {pageIndex + 1} of {totalPages}
-                </div>
+                {isLastPage && (
+                  <div className="mt-10 text-[13px]">
+                    <div className="grid grid-cols-2 gap-24 mb-6">
+                      <div className="text-center">
+                        <p className="text-left mb-3">Prepared:</p>
+                        <p className="font-semibold underline">MA. MAELITH L. BUCHAN</p>
+                        <p>Administrative Aide VI</p>
+                      </div>
+
+                      <div className="text-center">
+                        <p className="text-left mb-3">Verified:</p>
+                        <p className="font-semibold underline">HORONORIO O. UEHARA</p>
+                        <p>Human Resource Management Officer II</p>
+                      </div>
+                    </div>
+
+                    <div className="max-w-md mx-auto text-center">
+                      <p className="mb-3 text-left pl-10">Approved:</p>
+                      <p className="font-semibold underline">MARRIETA C. MACALOLOT, PhD</p>
+                      <p>Campus Director</p>
+                    </div>
+                  </div>
+                )}
+
               </div>
             );
           });
@@ -594,18 +666,15 @@ const Feedback = ({ user }) => {
       {/* Print-specific styles */}
       <style>{`
         @media print {
-          /* Hide everything except the print view */
           body * {
             visibility: hidden;
           }
           
-          /* Only show the print section and its children */
           .print-only-section,
           .print-only-section * {
             visibility: visible;
           }
           
-          /* Position print section at top of page */
           .print-only-section {
             position: absolute;
             left: 0;
@@ -624,6 +693,39 @@ const Feedback = ({ user }) => {
           
           body {
             margin: 0;
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+
+          .csf-page {
+            min-height: 7.2in;
+          }
+
+          .csf-table th,
+          .csf-table td {
+            border: 1px solid #000 !important;
+            vertical-align: top;
+          }
+
+          .csf-table th {
+            font-size: 10px;
+            font-weight: 700;
+            text-align: center;
+            padding: 6px 4px;
+          }
+
+          .csf-table td {
+            font-size: 10px;
+            padding: 6px 6px;
+          }
+
+          .csf-table ul {
+            margin: 0;
+            padding-left: 14px;
+          }
+
+          .csf-table li {
+            margin-bottom: 3px;
           }
           
           .page-break {
@@ -633,11 +735,6 @@ const Feedback = ({ user }) => {
           
           .page-break:last-child {
             page-break-after: auto;
-          }
-          
-          body {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
           }
           
           * {
@@ -651,4 +748,5 @@ const Feedback = ({ user }) => {
 };
 
 export default Feedback;
+
 

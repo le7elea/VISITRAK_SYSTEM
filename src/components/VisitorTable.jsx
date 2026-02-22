@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { db } from "../lib/firebase";
 import { doc, deleteDoc } from "firebase/firestore";
 
-const VisitorTable = ({ visitors = [], renderStars }) => {
+const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -153,7 +153,8 @@ const VisitorTable = ({ visitors = [], renderStars }) => {
                         {visitors.map((v, index) => (
                           <tr
                             key={v.id || index}
-                            className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                            onClick={() => onViewDetails?.(v)}
+                            className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer"
                           >
                             <td className="py-3 px-4 text-gray-800 dark:text-gray-100 font-medium sticky left-0 bg-white dark:bg-gray-900 z-10">
                               <div className="font-medium">{v.name}</div>
@@ -194,7 +195,10 @@ const VisitorTable = ({ visitors = [], renderStars }) => {
                             </td>
                             <td className="py-3 px-4">
                               <button
-                                onClick={() => handleDeleteClick(v)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteClick(v);
+                                }}
                                 className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Delete visitor permanently"
                               >

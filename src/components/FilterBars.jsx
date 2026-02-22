@@ -1,11 +1,13 @@
 import React from "react";
-import { Search, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
 const FilterBar = ({
   search,
   setSearch,
   date,
   setDate,
+  dateMode,
+  setDateMode,
   office,
   setOffice,
   exportCSV,
@@ -17,10 +19,6 @@ const FilterBar = ({
 }) => {
   // Check both 'type' and 'role' fields to match Login.jsx structure
   const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
-  
-  console.log("FilterBar - User type:", user?.type);
-  console.log("FilterBar - User role:", user?.role);
-  console.log("FilterBar - isOfficeAdmin:", isOfficeAdmin);
 
   return (
     <div className="border border-[#7400EA] rounded-xl bg-white shadow-sm dark:bg-gray-900 dark:text-gray-200">
@@ -64,13 +62,26 @@ const FilterBar = ({
           ))}
         </select>
 
-        {/* Date Filter */}
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full lg:w-135 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white dark:bg-gray-900 dark:text-gray-200"
-        />
+        <div className="w-full lg:w-135 grid grid-cols-3 gap-2">
+          <select
+            value={dateMode}
+            onChange={(e) => {
+              setDateMode(e.target.value);
+              setDate("");
+            }}
+            className="col-span-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white dark:bg-gray-900 dark:text-gray-200"
+          >
+            <option value="month">Month</option>
+            <option value="day">Day</option>
+          </select>
+
+          <input
+            type={dateMode === "day" ? "date" : "month"}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="col-span-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white dark:bg-gray-900 dark:text-gray-200"
+          />
+        </div>
       </div>
     </div>
   );

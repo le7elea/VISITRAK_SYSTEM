@@ -6,6 +6,239 @@ import bisuLogo from '../assets/bisulogo.png';
 import bagongPilipinasLogo from '../assets/bagong_pilipinas_logo.png';
 import tuvISOLogo from '../assets/tuvISO_logo.png';
 
+const toTrimmedText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const getNumericRating = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeQuestionRatings = (answers, questions = []) => {
+  if (!answers) return [];
+
+  if (Array.isArray(answers)) {
+    return answers.map((answer, index) => {
+      const fallbackQuestion = toTrimmedText(questions[index]) || `Question ${index + 1}`;
+
+      if (answer && typeof answer === 'object') {
+        const question = toTrimmedText(
+          answer.question ||
+            answer.label ||
+            answer.text ||
+            answer.title ||
+            answer.prompt ||
+            answer.item
+        );
+
+        const rating = getNumericRating(
+          answer.rating ??
+            answer.score ??
+            answer.value ??
+            answer.answer ??
+            answer.selected
+        );
+
+        return {
+          question: question || fallbackQuestion,
+          rating,
+        };
+      }
+
+      return {
+        question: fallbackQuestion,
+        rating: getNumericRating(answer),
+      };
+    });
+  }
+
+  if (typeof answers === 'object') {
+    return Object.entries(answers).map(([question, rating], index) => ({
+      question: toTrimmedText(question) || `Question ${index + 1}`,
+      rating: getNumericRating(rating),
+    }));
+  }
+
+  return [];
+};
+
+const getReadableValue = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+
+  if (typeof value === 'object') {
+    const candidate = value.value ?? value.label ?? value.name ?? value.text ?? value.selected ?? value.type;
+    if (candidate !== undefined && candidate !== null) {
+      return getReadableValue(candidate);
+    }
+  }
+
+  return '';
+};
+
+const findValueByKeyPattern = (obj, patterns = [], depth = 3) => {
+  if (!obj || typeof obj !== 'object' || depth < 0) return '';
+
+  for (const [key, value] of Object.entries(obj)) {
+    const matchesKey = patterns.some((pattern) => pattern.test(key));
+    if (matchesKey) {
+      const extracted = getReadableValue(value);
+      if (extracted) return extracted;
+    }
+
+    if (value && typeof value === 'object') {
+      const nested = findValueByKeyPattern(value, patterns, depth - 1);
+      if (nested) return nested;
+    }
+  }
+
+  return '';
+};
+
+const getVisitSexValue = (visitData = {}) => {
+  const directCandidates = [
+    visitData.sex,
+    visitData.gender,
+    visitData.clientSex,
+    visitData.client_gender,
+    visitData.visitorSex,
+    visitData.visitorGender,
+    visitData.sexAtBirth,
+    visitData.personalInfo?.sex,
+    visitData.personalInfo?.gender,
+    visitData.visitor?.sex,
+    visitData.visitor?.gender,
+    visitData.profile?.sex,
+    visitData.profile?.gender,
+  ];
+
+  for (const candidate of directCandidates) {
+    const value = getReadableValue(candidate);
+    if (value) return value;
+  }
+
+  return findValueByKeyPattern(
+    visitData,
+    [/^sex$/i, /^gender$/i, /visitor.*sex/i, /visitor.*gender/i, /client.*sex/i, /client.*gender/i],
+    3
+  );
+};
+
+const getVisitClientTypeValue = (visitData = {}) => {
+  const directCandidates = [
+    visitData.clientType,
+    visitData.client_type,
+    visitData.clientClassification,
+    visitData.customerType,
+    visitData.customer_type,
+    visitData.clientCategory,
+    visitData.typeOfClient,
+    visitData.clientClass,
+    visitData.client,
+    visitData.personalInfo?.clientType,
+    visitData.visitor?.clientType,
+    visitData.profile?.clientType,
+  ];
+
+  for (const candidate of directCandidates) {
+    const value = getReadableValue(candidate);
+    if (value) return value;
+  }
+
+  return findValueByKeyPattern(
+    visitData,
+    [
+      /client.*type/i,
+      /customer.*type/i,
+      /client.*classification/i,
+      /classification/i,
+      /client.*category/i,
+      /type.*client/i,
+    ],
+    3
+  );
+};
+
+const normalizeSex = (value) => {
+  const text = toTrimmedText(value).toLowerCase();
+  if (!text) return '';
+  if (text === 'm' || text === 'male' || text.startsWith('male') || text === 'man' || text === 'boy') return 'M';
+  if (text === 'f' || text === 'female' || text.startsWith('female') || text === 'woman' || text === 'girl') return 'F';
+  return '';
+};
+
+const normalizeClientType = (value) => {
+  const text = toTrimmedText(value).toLowerCase();
+  if (!text) return '';
+  if (
+    text.includes('citizen') ||
+    text.includes('individual') ||
+    text.includes('resident') ||
+    text.includes('student') ||
+    text.includes('faculty') ||
+    text.includes('employee') ||
+    text.includes('parent') ||
+    text.includes('alumni')
+  ) {
+    return 'citizens';
+  }
+  if (text.includes('business') || text.includes('company') || text.includes('corporate') || text.includes('enterprise')) {
+    return 'business';
+  }
+  if (
+    text.includes('government') ||
+    text.includes('govt') ||
+    text.includes('gov') ||
+    text.includes('agency') ||
+    text.includes('public')
+  ) {
+    return 'government';
+  }
+  return '';
+};
+
+const normalizeFourPointRating = (value) => {
+  const numeric = getNumericRating(value);
+  if (numeric === null) return null;
+
+  const rounded = Math.round(numeric);
+  if (rounded >= 1 && rounded <= 4) return rounded;
+  if (rounded === 5) return 4;
+  return null;
+};
+
+const normalizeFivePointRating = (value) => {
+  const numeric = getNumericRating(value);
+  if (numeric === null) return null;
+
+  const rounded = Math.round(numeric);
+  if (rounded >= 1 && rounded <= 5) return rounded;
+  return null;
+};
+
+const formatCountCell = (value, hasData = true) => {
+  if (!hasData) return '-';
+  return `${value || 0}`;
+};
+
+const formatScoreCell = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  return Number(value).toFixed(2);
+};
+
+const getSatisfactionDescription = (value) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  if (value >= 4.5) return 'Very Satisfied';
+  if (value >= 3.5) return 'Satisfied';
+  if (value >= 2.5) return 'Neutral';
+  if (value >= 1.5) return 'Unsatisfied';
+  return 'Very Unsatisfied';
+};
+
 const calculateSatisfactionRates = (feedbacks = []) => {
   const total = feedbacks.length;
   if (total === 0) return [];
@@ -308,6 +541,11 @@ const Analytics = () => {
           visitorId: d.visitorId,
           visitorName: d.visitorName,
           office: d.office,
+          sex: getVisitSexValue(d),
+          clientType: getVisitClientTypeValue(d),
+          cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
+          cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
+          cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
           checkInTime: d.checkInTime,
           checkOutTime: d.checkOutTime,
           purpose: d.purpose || '',
@@ -404,8 +642,16 @@ const Analytics = () => {
                 id: doc.id,
                 visitId: d.visitId,
                 name: d.name,
+                office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
+                sex: getVisitSexValue(d),
+                clientType: getVisitClientTypeValue(d),
+                cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
+                cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
+                cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
                 answers: d.answers || [],
+                questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
+                commendation: d.commendation || d.commendations || d.positiveFeedback || d.compliment || "",
                 suggestion: d.suggestion || "",
                 createdAt: d.createdAt,
               };
@@ -444,8 +690,16 @@ const Analytics = () => {
                 id: doc.id,
                 visitId: d.visitId,
                 name: d.name,
+                office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
+                sex: getVisitSexValue(d),
+                clientType: getVisitClientTypeValue(d),
+                cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
+                cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
+                cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
                 answers: d.answers || [],
+                questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
+                commendation: d.commendation || d.commendations || d.positiveFeedback || d.compliment || "",
                 suggestion: d.suggestion || "",
                 createdAt: d.createdAt,
               };
@@ -502,7 +756,7 @@ const Analytics = () => {
       if (isNaN(date.getTime())) return dateStr;
       const options = { month: 'short', day: '2-digit', year: 'numeric' };
       return date.toLocaleDateString('en-US', options);
-    } catch (error) {
+    } catch {
       return dateStr;
     }
   };
@@ -533,7 +787,7 @@ const Analytics = () => {
         endDate.setHours(23, 59, 59, 999);
         
         return checkInDate >= startDate && checkInDate <= endDate;
-      } catch (error) {
+      } catch {
         return false;
       }
     });
@@ -634,86 +888,389 @@ const Analytics = () => {
     );
   }, [currentUser, currentOfficeRecord]);
 
-  const topTrafficDay = useMemo(() => {
-    if (!trafficData || trafficData.length === 0) return null;
-    return trafficData.reduce((max, item) => (item.count > max.count ? item : max), trafficData[0]);
-  }, [trafficData]);
+  const reportDateRangeLabel = useMemo(() => {
+    const startDate = parseLocalDate(dateRange.start);
+    const endDate = parseLocalDate(dateRange.end);
 
-  const topSatisfactionBand = useMemo(() => {
-    if (!satisfactionRates || satisfactionRates.length === 0) return null;
-    return satisfactionRates.reduce((max, item) => (item.pct > max.pct ? item : max), satisfactionRates[0]);
-  }, [satisfactionRates]);
-
-  const feedbacksWithComments = useMemo(() => {
-    return feedbacksWithVisitDetails.filter(
-      f => f.comment && f.comment.trim() !== '' && f.comment !== 'No comment provided'
-    );
-  }, [feedbacksWithVisitDetails]);
-
-  const feedbackHighlights = useMemo(() => {
-    return feedbacksWithComments.slice(0, 8);
-  }, [feedbacksWithComments]);
-
-  const printSummaryParagraphs = useMemo(() => {
-    const officeLabel = currentUser && currentUser.type === "OfficeAdmin"
-      ? `the ${currentUser.originalOffice || currentUser.office} office`
-      : "all offices";
-    const visits = filteredVisits.length;
-    const feedbackCount = filteredFeedbacks.length;
-    const avgSat = avgSatisfaction;
-    const topDayText = topTrafficDay
-      ? `${topTrafficDay.day} had the highest traffic with ${topTrafficDay.count} visit${topTrafficDay.count !== 1 ? 's' : ''}`
-      : "no single peak traffic day was observed";
-    const topBandText = topSatisfactionBand
-      ? `${topSatisfactionBand.label.toLowerCase()} (${topSatisfactionBand.pct}%)`
-      : "no satisfaction distribution is available yet";
-    const commentsCount = feedbacksWithComments.length;
-
-    const p1 = `For the period ${formatDateDisplay(dateRange.start)} to ${formatDateDisplay(dateRange.end)}, ${officeLabel} recorded ${visits} visitor check-in${visits !== 1 ? 's' : ''} and received ${feedbackCount} feedback response${feedbackCount !== 1 ? 's' : ''}, including ${commentsCount} written comment${commentsCount !== 1 ? 's' : ''}. The average satisfaction rating for this period was ${avgSat} out of 5. ${topDayText}, and the most common satisfaction category was ${topBandText}.`;
-
-    const p2 = feedbackCount > 0
-      ? `Written feedback highlights are summarized from ${commentsCount} comment${commentsCount !== 1 ? 's' : ''} and reflect the most frequent themes observed during the reporting period.`
-      : `No written feedback was submitted during this period, so qualitative insights are not available.`;
-
-    return [p1, p2];
-  }, [
-    currentUser,
-    filteredVisits,
-    filteredFeedbacks,
-    avgSatisfaction,
-    topTrafficDay,
-    topSatisfactionBand,
-    feedbacksWithComments,
-    dateRange
-  ]);
-
-  const recommendationsText = useMemo(() => {
-    const avg = parseFloat(avgSatisfaction || "0");
-    if (filteredVisits.length === 0) {
-      return "No visits were recorded in this period. Consider promoting visitor check-ins and validating that the log process is active across all entry points.";
+    if (!startDate || !endDate) {
+      return `${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}`;
     }
-    if (filteredFeedbacks.length === 0) {
-      return "Encourage visitors to submit feedback to improve the quality of insights. Simple prompts and QR access points can increase response rates.";
-    }
-    if (avg >= 4.0) {
-      return "Overall satisfaction is strong. Maintain service quality and continue monitoring peak traffic days to sustain performance.";
-    }
-    if (avg >= 3.0) {
-      return "Satisfaction is moderate. Focus on recurring issues surfaced in comments and reinforce service consistency during peak traffic days.";
-    }
-    return "Satisfaction is below target. Prioritize immediate service improvements, review operational bottlenecks, and follow up on critical feedback.";
-  }, [avgSatisfaction, filteredVisits.length, filteredFeedbacks.length]);
 
-  const reportId = useMemo(() => {
-    const start = (dateRange.start || "").replace(/-/g, "");
-    const end = (dateRange.end || "").replace(/-/g, "");
-    if (!start || !end) return "VA-REPORT";
-    return `VA-${start}-${end}`;
+    const formatMonthDay = (date) =>
+      date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    if (startDate.getFullYear() === endDate.getFullYear()) {
+      return `${formatMonthDay(startDate)} - ${formatMonthDay(endDate)}, ${endDate.getFullYear()}`;
+    }
+
+    return `${formatMonthDay(startDate)}, ${startDate.getFullYear()} - ${formatMonthDay(endDate)}, ${endDate.getFullYear()}`;
   }, [dateRange]);
 
-  const preparedOn = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  }, []);
+  const reportPeriodLabel = useMemo(() => {
+    const startDate = parseLocalDate(dateRange.start);
+    const endDate = parseLocalDate(dateRange.end);
+
+    if (
+      startDate &&
+      endDate &&
+      startDate.getMonth() === endDate.getMonth() &&
+      startDate.getFullYear() === endDate.getFullYear()
+    ) {
+      return startDate
+        .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        .toUpperCase();
+    }
+
+    return reportDateRangeLabel.toUpperCase();
+  }, [dateRange, reportDateRangeLabel]);
+
+  const visitsById = useMemo(() => {
+    const map = new Map();
+    visits.forEach((visit) => {
+      if (visit?.id) {
+        map.set(visit.id, visit);
+      }
+    });
+    return map;
+  }, [visits]);
+
+  const feedbackRecordsForPrint = useMemo(() => {
+    return filteredFeedbacks.map((feedback) => {
+      const matchedVisit = visitsById.get(feedback?.visitId);
+
+      return {
+        ...feedback,
+        office:
+          matchedVisit?.office ||
+          feedback?.office ||
+          feedback?.unitOfficeVisited ||
+          feedback?.officeVisited ||
+          'Unspecified',
+        sex: getVisitSexValue(feedback),
+        clientType: getVisitClientTypeValue(feedback),
+        cc1Rating: feedback?.cc1Rating ?? feedback?.cc1 ?? null,
+        cc2Rating: feedback?.cc2Rating ?? feedback?.cc2 ?? null,
+        cc3Rating: feedback?.cc3Rating ?? feedback?.cc3 ?? null,
+        commendation: toTrimmedText(
+          feedback?.commendation ||
+            feedback?.commendations ||
+            feedback?.positiveFeedback ||
+            feedback?.compliment
+        ),
+        suggestion: toTrimmedText(feedback?.suggestion || feedback?.recommendation),
+        questionRatings: normalizeQuestionRatings(feedback?.answers, feedback?.questions),
+      };
+    });
+  }, [filteredFeedbacks, visitsById]);
+
+  const officeNamesForPrint = useMemo(() => {
+    const officeMap = new Map();
+
+    const addOfficeName = (value) => {
+      const normalized = normalizeOfficeName(value);
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (!officeMap.has(key)) {
+        officeMap.set(key, normalized);
+      }
+    };
+
+    if (currentUser?.type === "OfficeAdmin") {
+      addOfficeName(currentUser.originalOffice || currentUser.office);
+    } else {
+      offices
+        .filter((office) => (office?.role || '').toLowerCase() !== 'super')
+        .forEach((office) => addOfficeName(office?.name || office?.officialName));
+    }
+
+    filteredVisits.forEach((visit) => addOfficeName(visit?.office));
+    feedbackRecordsForPrint.forEach((feedback) => addOfficeName(feedback?.office));
+
+    return [...officeMap.values()].sort((a, b) => a.localeCompare(b));
+  }, [currentUser, offices, filteredVisits, feedbackRecordsForPrint]);
+
+  const officeAnalyticsRows = useMemo(() => {
+    return officeNamesForPrint.map((officeName) => {
+      const officeVisits = filteredVisits.filter((visit) =>
+        compareOfficeNames(visit?.office, officeName)
+      );
+
+      const officeFeedbacks = feedbackRecordsForPrint.filter((feedback) =>
+        compareOfficeNames(feedback?.office, officeName)
+      );
+
+      const hasVisitData = officeVisits.length > 0 || officeFeedbacks.length > 0;
+      const hasFeedbackData = officeFeedbacks.length > 0;
+
+      const visitMaleCount = officeVisits.filter((visit) => normalizeSex(visit?.sex) === 'M').length;
+      const visitFemaleCount = officeVisits.filter((visit) => normalizeSex(visit?.sex) === 'F').length;
+      const hasVisitSexData = visitMaleCount + visitFemaleCount > 0;
+
+      const feedbackMaleCount = officeFeedbacks.filter((feedback) => normalizeSex(feedback?.sex) === 'M').length;
+      const feedbackFemaleCount = officeFeedbacks.filter((feedback) => normalizeSex(feedback?.sex) === 'F').length;
+      const hasFeedbackSexData = feedbackMaleCount + feedbackFemaleCount > 0;
+
+      const maleCount = hasVisitSexData ? visitMaleCount : hasFeedbackSexData ? feedbackMaleCount : 0;
+      const femaleCount = hasVisitSexData ? visitFemaleCount : hasFeedbackSexData ? feedbackFemaleCount : 0;
+
+      const visitClientCounts = officeVisits.reduce(
+        (acc, visit) => {
+          const type = normalizeClientType(visit?.clientType);
+          if (type === 'citizens') acc.citizens += 1;
+          if (type === 'business') acc.business += 1;
+          if (type === 'government') acc.government += 1;
+          return acc;
+        },
+        { citizens: 0, business: 0, government: 0 }
+      );
+      const hasVisitClientTypeData =
+        visitClientCounts.citizens + visitClientCounts.business + visitClientCounts.government > 0;
+
+      const feedbackClientCounts = officeFeedbacks.reduce(
+        (acc, feedback) => {
+          const type = normalizeClientType(feedback?.clientType);
+          if (type === 'citizens') acc.citizens += 1;
+          if (type === 'business') acc.business += 1;
+          if (type === 'government') acc.government += 1;
+          return acc;
+        },
+        { citizens: 0, business: 0, government: 0 }
+      );
+      const hasFeedbackClientTypeData =
+        feedbackClientCounts.citizens +
+          feedbackClientCounts.business +
+          feedbackClientCounts.government >
+        0;
+
+      const clientCounts = hasVisitClientTypeData
+        ? visitClientCounts
+        : hasFeedbackClientTypeData
+          ? feedbackClientCounts
+          : { citizens: 0, business: 0, government: 0 };
+
+      const charterCounts = {
+        cc1: [0, 0, 0, 0],
+        cc2: [0, 0, 0, 0],
+        cc3: [0, 0, 0, 0],
+      };
+      let hasCharterData = false;
+
+      officeVisits.forEach((visit) => {
+        [visit?.cc1Rating, visit?.cc2Rating, visit?.cc3Rating].forEach((rating, idx) => {
+          const normalized = normalizeFourPointRating(rating);
+          if (!normalized) return;
+          charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
+          hasCharterData = true;
+        });
+      });
+
+      if (!hasCharterData) {
+        officeFeedbacks.forEach((feedback) => {
+          [feedback?.cc1Rating, feedback?.cc2Rating, feedback?.cc3Rating].forEach((rating, idx) => {
+            const normalized = normalizeFourPointRating(rating);
+            if (!normalized) return;
+            charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
+            hasCharterData = true;
+          });
+        });
+      }
+
+      if (!hasCharterData) {
+        officeFeedbacks.forEach((feedback) => {
+          [0, 1, 2].forEach((questionIndex) => {
+            const normalized = normalizeFourPointRating(
+              feedback?.questionRatings?.[questionIndex]?.rating
+            );
+            if (!normalized) return;
+            charterCounts[`cc${questionIndex + 1}`][normalized - 1] += 1;
+            hasCharterData = true;
+          });
+        });
+      }
+
+      const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
+        const ratings = officeFeedbacks
+          .map((feedback) => normalizeFivePointRating(feedback?.questionRatings?.[index]?.rating))
+          .filter((value) => value !== null);
+
+        if (!ratings.length) return null;
+        return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+      });
+
+      const meanSatisfaction = officeFeedbacks.length
+        ? officeFeedbacks.reduce((sum, feedback) => {
+            const rating = getNumericRating(feedback?.averageRating);
+            return sum + (rating || 0);
+          }, 0) / officeFeedbacks.length
+        : null;
+
+      const commendationSet = new Set();
+      const suggestionSet = new Set();
+
+      officeFeedbacks.forEach((feedback) => {
+        if (feedback?.commendation) {
+          commendationSet.add(feedback.commendation);
+        }
+        if (feedback?.suggestion) {
+          suggestionSet.add(feedback.suggestion);
+        }
+      });
+
+      return {
+        office: officeName,
+        hasVisitData,
+        hasFeedbackData,
+        customerCount: officeVisits.length > 0 ? officeVisits.length : officeFeedbacks.length,
+        maleCount,
+        femaleCount,
+        citizensCount: clientCounts.citizens,
+        businessCount: clientCounts.business,
+        governmentCount: clientCounts.government,
+        hasCharterData,
+        cc1Counts: charterCounts.cc1,
+        cc2Counts: charterCounts.cc2,
+        cc3Counts: charterCounts.cc3,
+        dimensionMeans,
+        meanSatisfaction,
+        satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
+        commendations: [...commendationSet],
+        suggestions: [...suggestionSet],
+      };
+    });
+  }, [officeNamesForPrint, filteredVisits, feedbackRecordsForPrint]);
+
+  const charterOverallTotals = useMemo(() => {
+    const totals = {
+      customerCount: 0,
+      maleCount: 0,
+      femaleCount: 0,
+      citizensCount: 0,
+      businessCount: 0,
+      governmentCount: 0,
+      cc1Counts: [0, 0, 0, 0],
+      cc2Counts: [0, 0, 0, 0],
+      cc3Counts: [0, 0, 0, 0],
+    };
+
+    officeAnalyticsRows.forEach((row) => {
+      totals.customerCount += row.customerCount;
+      totals.maleCount += row.maleCount;
+      totals.femaleCount += row.femaleCount;
+      totals.citizensCount += row.citizensCount;
+      totals.businessCount += row.businessCount;
+      totals.governmentCount += row.governmentCount;
+
+      [0, 1, 2, 3].forEach((index) => {
+        totals.cc1Counts[index] += row.cc1Counts[index];
+        totals.cc2Counts[index] += row.cc2Counts[index];
+        totals.cc3Counts[index] += row.cc3Counts[index];
+      });
+    });
+
+    return totals;
+  }, [officeAnalyticsRows]);
+
+  const summaryOverallRow = useMemo(() => {
+    const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
+      const ratings = feedbackRecordsForPrint
+        .map((feedback) => normalizeFivePointRating(feedback?.questionRatings?.[index]?.rating))
+        .filter((value) => value !== null);
+
+      if (!ratings.length) return null;
+      return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+    });
+
+    const meanSatisfaction = feedbackRecordsForPrint.length
+      ? feedbackRecordsForPrint.reduce((sum, feedback) => {
+          const rating = getNumericRating(feedback?.averageRating);
+          return sum + (rating || 0);
+        }, 0) / feedbackRecordsForPrint.length
+      : null;
+
+    return {
+      customerCount: filteredVisits.length,
+      dimensionMeans,
+      meanSatisfaction,
+      satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
+    };
+  }, [feedbackRecordsForPrint, filteredVisits.length]);
+
+  const summaryPages = useMemo(() => {
+    const rowsPerPage = 4;
+
+    if (!officeAnalyticsRows.length) {
+      return [[]];
+    }
+
+    const totalPages = Math.ceil(officeAnalyticsRows.length / rowsPerPage) || 1;
+
+    return Array.from({ length: totalPages }).map((_, pageIndex) =>
+      officeAnalyticsRows.slice(pageIndex * rowsPerPage, pageIndex * rowsPerPage + rowsPerPage)
+    );
+  }, [officeAnalyticsRows]);
+
+  const commendationSuggestionRows = useMemo(() => {
+    return officeAnalyticsRows.filter(
+      (row) => row.commendations.length > 0 || row.suggestions.length > 0
+    );
+  }, [officeAnalyticsRows]);
+
+  const firstPageCsfRowsCapacity = useMemo(() => {
+    if (summaryPages.length > 1) return 0;
+
+    const officeRowCount = officeAnalyticsRows.length;
+
+    // Conservative heuristic so first page does not overflow.
+    if (officeRowCount <= 1) return 2;
+    if (officeRowCount === 2) return 1;
+    return 0;
+  }, [officeAnalyticsRows.length, summaryPages.length]);
+
+  const firstPageCsfRows = useMemo(() => {
+    if (firstPageCsfRowsCapacity <= 0) return [];
+
+    if (!commendationSuggestionRows.length) {
+      return [
+        {
+          office: 'N/A',
+          commendations: [],
+          suggestions: [],
+        },
+      ];
+    }
+
+    return commendationSuggestionRows.slice(0, firstPageCsfRowsCapacity);
+  }, [commendationSuggestionRows, firstPageCsfRowsCapacity]);
+
+  const remainingCsfRows = useMemo(() => {
+    if (!commendationSuggestionRows.length) return [];
+    return commendationSuggestionRows.slice(firstPageCsfRows.length);
+  }, [commendationSuggestionRows, firstPageCsfRows.length]);
+
+  const showCsfOnFirstPage = firstPageCsfRows.length > 0;
+
+  const commendationSuggestionPages = useMemo(() => {
+    const rowsPerPage = 5;
+    const baseRows = remainingCsfRows.length
+      ? remainingCsfRows
+      : showCsfOnFirstPage
+        ? []
+        : [
+            {
+              office: 'N/A',
+              commendations: [],
+              suggestions: [],
+            },
+          ];
+
+    if (!baseRows.length) return [];
+
+    const totalPages = Math.ceil(baseRows.length / rowsPerPage) || 1;
+
+    return Array.from({ length: totalPages }).map((_, pageIndex) =>
+      baseRows.slice(pageIndex * rowsPerPage, pageIndex * rowsPerPage + rowsPerPage)
+    );
+  }, [remainingCsfRows, showCsfOnFirstPage]);
 
   // --- Export Functions ---
   const exportToCSV = () => {
@@ -939,7 +1496,6 @@ const Analytics = () => {
       const lowSat = filteredFeedbacks.filter(f => f.averageRating < 3.0);
       
       if (highSat.length > 0) {
-        const highestFeedback = highSat.sort((a, b) => b.averageRating - a.averageRating)[0];
         narrative += `**Positive Highlights:** ${highSat.length} feedback${highSat.length !== 1 ? 's' : ''} provided high satisfaction ratings (4.0+), representing ${Math.round((highSat.length / filteredFeedbacks.length) * 100)}% of all responses. `;
         if (feedbacksWithComments.length > 0) {
           const positiveComments = feedbacksWithComments.filter(f => f.averageRating >= 4.0);
@@ -948,7 +1504,6 @@ const Analytics = () => {
       }
       
       if (lowSat.length > 0) {
-        const lowestFeedback = lowSat.sort((a, b) => a.averageRating - b.averageRating)[0];
         narrative += `**Areas for Improvement:** ${lowSat.length} feedback${lowSat.length !== 1 ? 's' : ''} indicated lower satisfaction levels (below 3.0), representing ${Math.round((lowSat.length / filteredFeedbacks.length) * 100)}% of responses. `;
         if (feedbacksWithComments.length > 0) {
           const negativeComments = feedbacksWithComments.filter(f => f.averageRating < 3.0);
@@ -1034,7 +1589,8 @@ const Analytics = () => {
           body * {
             visibility: hidden;
           }
-          .print-only-section, .print-only-section * {
+          .print-only-section,
+          .print-only-section * {
             visibility: visible;
           }
           .print-only-section {
@@ -1042,171 +1598,494 @@ const Analytics = () => {
             left: 0;
             top: 0;
             width: 100%;
-            background: white;
-            padding: 20px;
+            background: #fff;
           }
           .no-print {
             display: none !important;
           }
           @page {
+            size: 13in 8.5in;
             margin: 0.5in;
           }
-          html, body {
+
+          html,
+          body {
             margin: 0;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .report-page {
+
+          .analytics-print-page {
+            min-height: 7.1in;
+            padding: 14px 18px;
             font-family: "Times New Roman", Times, serif;
             color: #111;
           }
-          .report-title {
-            letter-spacing: 0.12em;
+
+          .analytics-report-title {
+            font-size: 18px;
+            text-align: center;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
           }
-          .report-section-title {
+
+          .analytics-section-label {
             font-size: 12px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            border-bottom: 1px solid #000;
-            padding-bottom: 2px;
-            margin-bottom: 6px;
           }
-          .report-meta {
-            font-size: 11px;
+
+          .analytics-table th,
+          .analytics-table td {
+            border: 1px solid #000 !important;
+            vertical-align: top;
           }
-          .report-box {
-            border: 1px solid #000;
-            padding: 8px;
+
+          .analytics-table th {
+            font-size: 9px;
+            font-weight: 700;
+            text-align: center;
+            padding: 4px 3px;
+            vertical-align: middle;
+          }
+
+          .analytics-table td {
+            font-size: 9px;
+            padding: 4px;
+            text-align: center;
+          }
+
+          .analytics-table-a td:first-child,
+          .analytics-table-b td:first-child,
+          .analytics-table-c td:first-child {
+            text-align: center;
+          }
+
+          .analytics-table-c td {
+            text-align: left;
+          }
+
+          .analytics-table-c td.text-center {
+            text-align: center;
+          }
+
+          .analytics-table-c thead {
+            display: table-header-group;
+          }
+
+          .analytics-table-c tr {
+            page-break-inside: avoid;
+          }
+
+          .analytics-table ul {
+            margin: 0;
+            padding-left: 14px;
+          }
+
+          .analytics-table li {
+            margin-bottom: 3px;
+          }
+
+          .analytics-signatories {
+            margin-top: 24px;
+            font-size: 13px;
+          }
+
+          .page-break {
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+
+          .page-break:last-child {
+            page-break-after: auto;
+          }
+
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
       
       <main className="flex flex-col print-section">
         {/* Print-Only Summary */}
-        <div className="hidden print:block bg-white print-only-section">
-          <div className="max-w-6xl mx-auto report-page">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center">
-                <div className="w-28 h-20 flex items-center justify-center">
-                  <img
-                    src={bisuLogo}
-                    alt="BISU Logo"
-                    className="w-full h-full object-contain"
-                  />
+        <div className="hidden print:block bg-white print-only-section text-black">
+          {(() => {
+            const renderHeader = () => (
+              <div className="flex items-start justify-between mb-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-20 h-16 flex items-center justify-center">
+                    <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="leading-tight">
+                    <p className="text-[12px]">Republic of the Philippines</p>
+                    <h1 className="text-[30px] font-bold tracking-wide leading-none">BOHOL ISLAND STATE UNIVERSITY</h1>
+                    <p className="text-[12px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                    <p className="text-[12px]">{printOfficeName}</p>
+                    <p className="text-[12px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[14px]">Republic of the Philippines</p>
-                  <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
-                  <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                  <p className="text-[14px]">{printOfficeName}</p>
-                  <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+
+                <div className="flex gap-3 items-center">
+                  <div className="w-20 h-14 flex items-center justify-center">
+                    <img
+                      src={bagongPilipinasLogo}
+                      alt="Bagong Pilipinas Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="w-28 h-14 flex items-center justify-center">
+                    <img src={tuvISOLogo} alt="ISO 9001:2015 Certification" className="w-full h-full object-contain" />
+                  </div>
                 </div>
               </div>
+            );
 
-              <div className="flex gap-3">
-                <div className="w-22 h-26 flex items-center justify-center">
-                  <img
-                    src={bagongPilipinasLogo}
-                    alt="Bagong Pilipinas Logo"
-                    className="w-full h-full object-contain"
-                  />
+            const renderList = (items = []) => {
+              if (!Array.isArray(items) || items.length === 0) {
+                return <span>N/A</span>;
+              }
+
+              return (
+                <ul className="list-disc pl-4 space-y-1">
+                  {items.map((item, index) => (
+                    <li key={`${item}-${index}`} className="break-words">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              );
+            };
+
+            const totalCsfPages = commendationSuggestionPages.length;
+            const showSignatoriesOnFirstPage =
+              showCsfOnFirstPage && totalCsfPages === 0 && summaryPages.length === 1;
+
+            const renderSignatories = () => (
+              <div className="analytics-signatories">
+                <div className="grid grid-cols-2 gap-24 mb-6">
+                  <div className="text-center">
+                    <p className="text-left mb-3">Prepared:</p>
+                    <p className="font-semibold underline">MA. MAELITH L. BUCHAN</p>
+                    <p>Administrative Aide VI</p>
+                  </div>
+
+                  <div className="text-center">
+                    <p className="text-left mb-3">Verified:</p>
+                    <p className="font-semibold underline">HORONORIO O. UEHARA</p>
+                    <p>Human Resource Management Officer II</p>
+                  </div>
                 </div>
-                <div className="w-42 h-26 flex items-center justify-center">
-                  <img
-                    src={tuvISOLogo}
-                    alt="ISO 9001:2015 Certification"
-                    className="w-full h-full object-contain"
-                  />
+
+                <div className="max-w-md mx-auto text-center">
+                  <p className="mb-3 text-left pl-8">Approved:</p>
+                  <p className="font-semibold underline">MARRIETA C. MACALOLOT, PhD</p>
+                  <p>Campus Director</p>
                 </div>
               </div>
-            </div>
+            );
 
-            <div className="text-center">
-              <h2 className="text-sm font-bold uppercase report-title">Visitor Analytics Report</h2>
-              <p className="text-xs text-gray-700">
-                Reporting Period: {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
-              </p>
-            </div>
-            <div className="border-b border-black mt-3"></div>
+            const renderCsfTable = (rows, pageKey, showHeader = true) => (
+              <table className="w-full border-collapse analytics-table analytics-table-c">
+                <colgroup>
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '8%' }} />
+                </colgroup>
+                {showHeader && (
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} className="w-[16%]">Office</th>
+                      <th rowSpan={2} className="w-[18%]">Commendation</th>
+                      <th rowSpan={2} className="w-[18%]">Detail of Suggestions</th>
+                      <th rowSpan={2} className="w-[7%]">Root Cause</th>
+                      <th rowSpan={2} className="w-[8%]">Action Plan</th>
+                      <th rowSpan={2} className="w-[9%]">Target of Implementation</th>
+                      <th colSpan={3} className="w-[24%]">Status of Implementation</th>
+                    </tr>
+                    <tr>
+                      <th className="w-[8%]">Implementation (Closed)</th>
+                      <th className="w-[8%]">On-going / To be Implemented (Open)</th>
+                      <th className="w-[8%]">Not Implemented</th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {rows.map((row, rowIndex) => (
+                    <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
+                      <td>{row.office}</td>
+                      <td>{renderList(row.commendations)}</td>
+                      <td>{renderList(row.suggestions)}</td>
+                      <td className="text-center">N/A</td>
+                      <td className="text-center">N/A</td>
+                      <td className="text-center">N/A</td>
+                      <td className="text-center">N/A</td>
+                      <td className="text-center">N/A</td>
+                      <td className="text-center">N/A</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
 
-            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 report-meta">
-              <div><span className="font-bold">Report No.:</span> {reportId}</div>
-              <div><span className="font-bold">Prepared On:</span> {preparedOn}</div>
-              <div><span className="font-bold">Prepared By:</span> VisiTrak System</div>
-              <div>
-                <span className="font-bold">Office:</span>{" "}
-                {currentUser && currentUser.type === "OfficeAdmin"
-                  ? (currentUser.originalOffice || currentUser.office || "N/A")
-                  : "All Offices"}
-              </div>
-            </div>
-            <div className="border-b border-gray-300 mt-3"></div>
+            return (
+              <>
+                {summaryPages.map((summaryRows, summaryPageIndex) => {
+                  const isLastSummaryPage = summaryPageIndex === summaryPages.length - 1;
+                  const hasMorePages = !isLastSummaryPage || totalCsfPages > 0;
+                  const isSummaryContinuationPage = summaryPageIndex > 0;
+                  const showCsfOnThisPage = summaryPageIndex === 0 && showCsfOnFirstPage;
+                  const showSummaryOverallRows = isLastSummaryPage;
+                  const showSummarySignatories =
+                    !showSignatoriesOnFirstPage && totalCsfPages === 0 && isLastSummaryPage;
+                  const showSummarySectionTitles = !isSummaryContinuationPage;
+                  const showSummaryColumnHeaders = !isSummaryContinuationPage;
 
-            <div className="mt-4">
-              <h3 className="report-section-title">1. Executive Summary</h3>
-              {printSummaryParagraphs.map((p, idx) => (
-                <p key={idx} className="text-[12px] leading-relaxed text-gray-800 mb-3 text-justify">
-                  {p}
-                </p>
-              ))}
-            </div>
+                  return (
+                    <div
+                      key={`summary-page-${summaryPageIndex}`}
+                      className={hasMorePages ? "analytics-print-page page-break" : "analytics-print-page"}
+                    >
+                      {renderHeader()}
 
-            <div className="mt-4">
-              <h3 className="report-section-title">2. Key Figures</h3>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="report-box">
-                  <span className="font-bold">Office:</span> {currentUser && currentUser.type === "OfficeAdmin"
-                    ? (currentUser.originalOffice || currentUser.office || "N/A")
-                    : "All Offices"}
-                </div>
-                <div className="report-box">
-                  <span className="font-bold">Period:</span> {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
-                </div>
-                <div className="report-box">
-                  <span className="font-bold">Total Visitors:</span> {filteredVisits.length}
-                </div>
-                <div className="report-box">
-                  <span className="font-bold">Total Feedback Responses:</span> {filteredFeedbacks.length}
-                </div>
-                <div className="report-box">
-                  <span className="font-bold">Avg Satisfaction:</span> {avgSatisfaction}/5.0
-                </div>
-                <div className="report-box">
-                  <span className="font-bold">Top Traffic Day:</span> {topTrafficDay ? `${topTrafficDay.day} (${topTrafficDay.count})` : "N/A"}
-                </div>
-                <div className="report-box col-span-2">
-                  <span className="font-bold">Top Satisfaction Band:</span> {topSatisfactionBand ? `${topSatisfactionBand.label} (${topSatisfactionBand.pct}%)` : "N/A"}
-                </div>
-              </div>
-            </div>
+                      <h2 className="analytics-report-title">
+                        Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
+                      </h2>
 
-            <div className="mt-4">
-              <h3 className="report-section-title">3. Findings</h3>
-              <p className="text-[12px] leading-relaxed text-gray-800 mb-3 text-justify">
-                {topTrafficDay
-                  ? `Visitor traffic concentrated most on ${topTrafficDay.day}, indicating peak activity on that day. `
-                  : "Visitor traffic did not show a clear peak day for this period. "}
-                {topSatisfactionBand
-                  ? `The satisfaction distribution is led by the ${topSatisfactionBand.label.toLowerCase()} category at ${topSatisfactionBand.pct}%. `
-                  : "Satisfaction distribution is not yet available due to insufficient feedback. "}
-                {feedbacksWithComments.length > 0
-                  ? `Qualitative feedback provides additional context to these results.`
-                  : `No written feedback was captured to support qualitative analysis.`}
-              </p>
-            </div>
+                      {showSummarySectionTitles && (
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="analytics-section-label">A. Citizen&apos;s Charter Summary Result</p>
+                          <p className="analytics-section-label">
+                            Campus: <span className="underline">Balilihan Campus</span>
+                          </p>
+                        </div>
+                      )}
 
-            <div className="mt-4">
-              <h3 className="report-section-title">4. Recommendations</h3>
-              <p className="text-[12px] leading-relaxed text-gray-800 text-justify">
-                {recommendationsText}
-              </p>
-            </div>
-          </div>
+                      <table className="w-full border-collapse analytics-table analytics-table-a">
+                        <colgroup>
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
+                        </colgroup>
+                        {showSummaryColumnHeaders && (
+                          <thead>
+                            <tr>
+                              <th rowSpan={2} className="w-[18%]">Office</th>
+                              <th rowSpan={2} className="w-[6%]">Number of Customers(f)</th>
+                              <th colSpan={2} className="w-[8%]">Sex</th>
+                              <th colSpan={3} className="w-[12%]">Client Type</th>
+                              <th colSpan={4} className="w-[16%]">CC1</th>
+                              <th colSpan={4} className="w-[16%]">CC2</th>
+                              <th colSpan={4} className="w-[16%]">CC3</th>
+                            </tr>
+                            <tr>
+                              <th>M</th>
+                              <th>F</th>
+                              <th>Citizens</th>
+                              <th>Business</th>
+                              <th>Government</th>
+                              <th>CC 1-1</th>
+                              <th>CC 1-2</th>
+                              <th>CC 1-3</th>
+                              <th>CC 1-4</th>
+                              <th>CC 2-1</th>
+                              <th>CC 2-2</th>
+                              <th>CC 2-3</th>
+                              <th>CC 2-4</th>
+                              <th>CC 3-1</th>
+                              <th>CC 3-2</th>
+                              <th>CC 3-3</th>
+                              <th>CC 3-4</th>
+                            </tr>
+                          </thead>
+                        )}
+                        <tbody>
+                          {summaryRows.map((row) => (
+                            <tr key={`charter-${summaryPageIndex}-${row.office}`}>
+                              <td>{row.office}</td>
+                              <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.maleCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.femaleCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.citizensCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.businessCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.governmentCount, row.hasVisitData)}</td>
+                              <td>{formatCountCell(row.cc1Counts[0], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc1Counts[1], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc1Counts[2], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc1Counts[3], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc2Counts[0], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc2Counts[1], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc2Counts[2], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc2Counts[3], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc3Counts[0], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc3Counts[1], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc3Counts[2], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc3Counts[3], row.hasCharterData)}</td>
+                            </tr>
+                          ))}
+                          {showSummaryOverallRows && (
+                            <tr className="font-bold">
+                              <td>Overall Rating</td>
+                              <td>{charterOverallTotals.customerCount}</td>
+                              <td>{charterOverallTotals.maleCount}</td>
+                              <td>{charterOverallTotals.femaleCount}</td>
+                              <td>{charterOverallTotals.citizensCount}</td>
+                              <td>{charterOverallTotals.businessCount}</td>
+                              <td>{charterOverallTotals.governmentCount}</td>
+                              <td>{charterOverallTotals.cc1Counts[0]}</td>
+                              <td>{charterOverallTotals.cc1Counts[1]}</td>
+                              <td>{charterOverallTotals.cc1Counts[2]}</td>
+                              <td>{charterOverallTotals.cc1Counts[3]}</td>
+                              <td>{charterOverallTotals.cc2Counts[0]}</td>
+                              <td>{charterOverallTotals.cc2Counts[1]}</td>
+                              <td>{charterOverallTotals.cc2Counts[2]}</td>
+                              <td>{charterOverallTotals.cc2Counts[3]}</td>
+                              <td>{charterOverallTotals.cc3Counts[0]}</td>
+                              <td>{charterOverallTotals.cc3Counts[1]}</td>
+                              <td>{charterOverallTotals.cc3Counts[2]}</td>
+                              <td>{charterOverallTotals.cc3Counts[3]}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+
+                      {showSummarySectionTitles && (
+                        <p className="analytics-section-label mt-6 mb-2">B. CSF Monthly Summary Rating</p>
+                      )}
+                      <table className="w-full border-collapse analytics-table analytics-table-b">
+                        <colgroup>
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '6%' }} />
+                          <col style={{ width: '8%' }} />
+                        </colgroup>
+                        {showSummaryColumnHeaders && (
+                          <thead>
+                            <tr>
+                              <th className="w-[18%]">Office</th>
+                              <th className="w-[6%]">Number of Customer rs(f)</th>
+                              <th className="w-[7%]">Responsiveness</th>
+                              <th className="w-[7%]">Reliability (Quality)</th>
+                              <th className="w-[7%]">Access &amp; Facilities</th>
+                              <th className="w-[7%]">Communication</th>
+                              <th className="w-[6%]">Costs</th>
+                              <th className="w-[6%]">Integrity</th>
+                              <th className="w-[6%]">Assurance</th>
+                              <th className="w-[6%]">Outcome</th>
+                              <th className="w-[6%]">Mean Satisfaction</th>
+                              <th className="w-[8%]">Description</th>
+                            </tr>
+                          </thead>
+                        )}
+                        <tbody>
+                          {summaryRows.map((row) => (
+                            <tr key={`summary-${summaryPageIndex}-${row.office}`}>
+                              <td>{row.office}</td>
+                              <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[0])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[1])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[2])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[3])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[4])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[5])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[6])}</td>
+                              <td>{formatScoreCell(row.dimensionMeans[7])}</td>
+                              <td>{formatScoreCell(row.meanSatisfaction)}</td>
+                              <td>{row.satisfactionDescription}</td>
+                            </tr>
+                          ))}
+                          {showSummaryOverallRows && (
+                            <tr className="font-bold">
+                              <td>Overall Rating</td>
+                              <td>{summaryOverallRow.customerCount}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[0])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[1])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[2])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[3])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[4])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[5])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[6])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[7])}</td>
+                              <td>{formatScoreCell(summaryOverallRow.meanSatisfaction)}</td>
+                              <td>{summaryOverallRow.satisfactionDescription}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+
+                      {showCsfOnThisPage && (
+                        <>
+                          <p className="analytics-section-label mt-6 mb-2">
+                            C. CSF Monthly Commendations &amp; Suggestions
+                          </p>
+                          {renderCsfTable(firstPageCsfRows, 'first', true)}
+                        </>
+                      )}
+
+                      {(showSignatoriesOnFirstPage || showSummarySignatories) && renderSignatories()}
+                    </div>
+                  );
+                })}
+
+                {commendationSuggestionPages.map((pageRows, pageIndex) => {
+                  const isLastPage = pageIndex === totalCsfPages - 1;
+                  const isContinuationPage = showCsfOnFirstPage || pageIndex > 0;
+                  const showCsfTitle = !isContinuationPage;
+                  const showCsfHeader = !isContinuationPage;
+
+                  return (
+                    <div
+                      key={`commendation-page-${pageIndex}`}
+                      className={isLastPage ? "analytics-print-page" : "analytics-print-page page-break"}
+                    >
+                      {renderHeader()}
+                      <h2 className="analytics-report-title">
+                        Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
+                      </h2>
+                      {showCsfTitle && (
+                        <p className="analytics-section-label mb-2">
+                          C. CSF Monthly Commendations &amp; Suggestions
+                        </p>
+                      )}
+
+                      {renderCsfTable(pageRows, `next-${pageIndex}`, showCsfHeader)}
+                      {isLastPage && renderSignatories()}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
 
         <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto dark:bg-gray-900 print:hidden">

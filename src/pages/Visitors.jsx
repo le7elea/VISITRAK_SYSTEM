@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import FilterBar from "../components/FilterBar";
 import VisitorTable from "../components/VisitorTable";
+import VisitorInfoModal from "../components/VisitorInfoModal";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import ExcelJS from "exceljs";
@@ -9,14 +10,100 @@ import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
 
+const getNumericRating = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeQuestionRatings = (answers) => {
+  if (!answers) return [];
+
+  if (Array.isArray(answers)) {
+    return answers.map((answer, index) => {
+      if (answer && typeof answer === "object") {
+        return {
+          question:
+            answer.question ||
+            answer.label ||
+            answer.text ||
+            answer.title ||
+            answer.prompt ||
+            answer.item ||
+            `Question ${index + 1}`,
+          rating: getNumericRating(
+            answer.rating ??
+              answer.score ??
+              answer.value ??
+              answer.answer ??
+              answer.selected
+          ),
+        };
+      }
+
+      return {
+        question: `Question ${index + 1}`,
+        rating: getNumericRating(answer),
+      };
+    });
+  }
+
+  if (typeof answers === "object") {
+    return Object.entries(answers).map(([question, rating], index) => ({
+      question: question || `Question ${index + 1}`,
+      rating: getNumericRating(rating),
+    }));
+  }
+
+  return [];
+};
+
+const parseDateValue = (dateValue) => {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatRangeDate = (dateValue) => {
+  const parsed = parseDateValue(dateValue);
+  if (!parsed) return "";
+
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const formatMonthDay = (dateValue) => {
+  const parsed = parseDateValue(dateValue);
+  if (!parsed) return "";
+
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const formatYear = (dateValue) => {
+  const parsed = parseDateValue(dateValue);
+  if (!parsed) return "";
+  return parsed.getFullYear();
+};
+
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [search, setSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState("All Offices");
-  const [dateFilter, setDateFilter] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
   const [visits, setVisits] = useState([]);
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [offices, setOffices] = useState([]); 
+  const [selectedVisitor, setSelectedVisitor] = useState(null);
 
   // Fetch visits from Firestore
   useEffect(() => {
@@ -88,11 +175,13 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         const unsub = onSnapshot(q, (snapshot) => {
           const data = snapshot.docs.map((doc) => {
             const d = doc.data();
+            const rawAnswers = d.answers ?? d.questionRatings ?? d.ratings ?? [];
             return {
               id: doc.id,
               visitId: d.visitId,
               averageRating: d.averageRating || 0,
               createdAt: d.createdAt?.toDate() || new Date(),
+              questionRatings: normalizeQuestionRatings(rawAnswers),
             };
           });
           
@@ -151,6 +240,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
       return {
         ...visit,
         satisfaction: feedback?.averageRating || 0,
+        questionRatings: feedback?.questionRatings || [],
       };
     });
   }, [visits, feedbacks]);
@@ -184,6 +274,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     worksheet.getRow(4).height = 22;
     worksheet.getRow(5).height = 22;
     worksheet.getRow(7).height = 28;
+    worksheet.getRow(8).height = 20;
     worksheet.getRow(9).height = 28;
 
     // =========================
@@ -199,6 +290,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     worksheet.mergeCells("F1:F5"); // TUV ISO
 
     worksheet.mergeCells("A7:F7"); // Title
+    worksheet.mergeCells("A8:F8"); // Date range
 
     // =========================
     // HEADER TEXT
@@ -229,6 +321,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     worksheet.getCell("A7").value = "VISITORS' LOG SHEET";
     worksheet.getCell("A7").font = { size: 13, bold: true };
     worksheet.getCell("A7").alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getCell("A8").value = `Date: ${selectedDateRangeLabel}`;
+    worksheet.getCell("A8").font = { size: 11, italic: true };
+    worksheet.getCell("A8").alignment = { horizontal: "center", vertical: "middle" };
 
     // =========================
     // IMAGE HELPER
@@ -365,6 +460,10 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     }
   };
 
+  const handleViewVisitorDetails = (visitor) => {
+    setSelectedVisitor(visitor || null);
+  };
+
   // Render stars for satisfaction ratings
   const renderStars = (rating) => {
     const normalizedRating = Math.min(5, Math.max(0, Math.round(rating || 0)));
@@ -399,7 +498,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     return visitsWithRatings;
   }, [visitsWithRatings, user]);
 
-  // Apply search, office dropdown (if SuperAdmin), and date filters
+  // Apply search, office dropdown (if SuperAdmin), and date range filters
   const filteredVisitors = useMemo(() => {
     return officeFiltered.filter((v) => {
       const matchSearch = 
@@ -412,20 +511,25 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           ? officeFilter === "All Offices" || v.office === officeFilter
           : true;
       
-      let matchDate = true;
-      if (dateFilter) {
-        const filterDate = new Date(dateFilter);
-        filterDate.setHours(0, 0, 0, 0);
-        
-        const visitorDate = v.rawDate || new Date();
-        visitorDate.setHours(0, 0, 0, 0);
-        
-        matchDate = visitorDate.getTime() === filterDate.getTime();
+      const visitorDate = v.rawDate ? new Date(v.rawDate) : new Date();
+      let matchesStart = true;
+      let matchesEnd = true;
+
+      if (startDateFilter) {
+        const startDate = new Date(startDateFilter);
+        startDate.setHours(0, 0, 0, 0);
+        matchesStart = visitorDate >= startDate;
       }
 
-      return matchSearch && matchOffice && matchDate;
+      if (endDateFilter) {
+        const endDate = new Date(endDateFilter);
+        endDate.setHours(23, 59, 59, 999);
+        matchesEnd = visitorDate <= endDate;
+      }
+
+      return matchSearch && matchOffice && matchesStart && matchesEnd;
     });
-  }, [officeFiltered, search, officeFilter, dateFilter, user.type]);
+  }, [officeFiltered, search, officeFilter, startDateFilter, endDateFilter, user.type]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -493,6 +597,23 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     return fallbackOfficeName;
   }, [user, officeFilter, offices, currentOfficeRecord]);
 
+  const selectedDateRangeLabel = useMemo(() => {
+    const startLabel = formatRangeDate(startDateFilter);
+    const endLabel = formatRangeDate(endDateFilter);
+    const startYear = formatYear(startDateFilter);
+    const endYear = formatYear(endDateFilter);
+
+    if (startLabel && endLabel) {
+      if (startYear && endYear && startYear === endYear) {
+        return `${formatMonthDay(startDateFilter)} - ${formatMonthDay(endDateFilter)}, ${endYear}`;
+      }
+      return `${startLabel} - ${endLabel}`;
+    }
+    if (startLabel) return `From ${startLabel}`;
+    if (endLabel) return `Up to ${endLabel}`;
+    return "All Dates";
+  }, [startDateFilter, endDateFilter]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -514,15 +635,28 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           setSearch={setSearch}
           officeFilter={officeFilter}
           setOfficeFilter={setOfficeFilter}
-          dateFilter={dateFilter}
-          setDateFilter={setDateFilter}
+          startDateFilter={startDateFilter}
+          setStartDateFilter={setStartDateFilter}
+          endDateFilter={endDateFilter}
+          setEndDateFilter={setEndDateFilter}
           exportExcel={exportExcel}
           exportPDF={exportPDF}
           uniqueOffices={uniqueOffices}
         />
 
-        <VisitorTable visitors={filteredVisitors} renderStars={renderStars} />
+        <VisitorTable
+          visitors={filteredVisitors}
+          renderStars={renderStars}
+          onViewDetails={handleViewVisitorDetails}
+        />
       </div>
+
+      <VisitorInfoModal
+        isOpen={!!selectedVisitor}
+        onClose={() => setSelectedVisitor(null)}
+        visitorData={selectedVisitor}
+        ratingsOnly
+      />
 
       {/* Print View Only - BISU Format */}
       <div className="hidden print:block bg-white print-only-section">
@@ -577,6 +711,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
                 {/* Title */}
                 <h2 className="text-center text-base font-bold mb-3 uppercase">Visitors' Log Sheet</h2>
+                <p className="text-center text-[11px] mb-3">Date Range: {selectedDateRangeLabel}</p>
 
                 {/* Table */}
                 <table className="w-full border-collapse border-1 border-black">
