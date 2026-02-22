@@ -7,6 +7,65 @@ import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
 
+const toTrimmedText = (value) => (typeof value === "string" ? value.trim() : "");
+
+const getNumericRating = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeQuestionRatings = (answers, questions = []) => {
+  if (!answers) return [];
+
+  if (Array.isArray(answers)) {
+    return answers.map((answer, index) => {
+      const fallbackQuestion = toTrimmedText(questions[index]) || `Question ${index + 1}`;
+
+      if (answer && typeof answer === "object") {
+        const question = toTrimmedText(
+          answer.question ||
+            answer.label ||
+            answer.text ||
+            answer.title ||
+            answer.prompt ||
+            answer.item
+        );
+
+        const rating = getNumericRating(
+          answer.rating ??
+            answer.score ??
+            answer.value ??
+            answer.answer ??
+            answer.selected
+        );
+
+        return {
+          question: question || fallbackQuestion,
+          rating,
+        };
+      }
+
+      return {
+        question: fallbackQuestion,
+        rating: getNumericRating(answer),
+      };
+    });
+  }
+
+  if (typeof answers === "object") {
+    return Object.entries(answers).map(([question, rating], index) => ({
+      question: toTrimmedText(question) || `Question ${index + 1}`,
+      rating: getNumericRating(rating),
+    }));
+  }
+
+  return [];
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [date, setDate] = useState("");
@@ -111,24 +170,30 @@ const Feedback = ({ user }) => {
     
     try {
       return feedbacks
-        .filter((f) => {
+        .map((f, idx) => {
+          const suggestion = toTrimmedText(f?.suggestion);
+          const commendation = toTrimmedText(f?.commendation);
+          const questionRatings = normalizeQuestionRatings(f?.answers, f?.questions);
+
+          return { f, idx, suggestion, commendation, questionRatings };
+        })
+        .filter(({ f, suggestion, commendation, questionRatings }) => {
           if (!f) return false;
           
-          // IMPORTANT: Only show feedback that has a comment/suggestion
-          const hasSuggestion = f.suggestion && 
-                                typeof f.suggestion === 'string' && 
-                                f.suggestion.trim() !== "";
-          
-          if (!hasSuggestion) return false;
+          const hasWrittenFeedback = Boolean(commendation || suggestion);
+          const hasQuestionRatings = questionRatings.some((entry) => entry.rating !== null);
+
+          if (!hasWrittenFeedback && !hasQuestionRatings) return false;
           
           const feedbackOffice = f.office || "Unspecified";
           const searchLower = (search || "").toLowerCase();
           
           // Safe search across multiple fields
           const nameMatch = (f.name || "").toLowerCase().includes(searchLower);
-          const suggestionMatch = (f.suggestion || "").toLowerCase().includes(searchLower);
+          const suggestionMatch = suggestion.toLowerCase().includes(searchLower);
+          const commendationMatch = commendation.toLowerCase().includes(searchLower);
           const visitIdMatch = (f.visitId || "").toLowerCase().includes(searchLower);
-          const matchesSearch = nameMatch || suggestionMatch || visitIdMatch;
+          const matchesSearch = nameMatch || suggestionMatch || commendationMatch || visitIdMatch;
           
           // Handle date filter safely
           const dateString = getSafeDateString(f.createdAt);
@@ -144,18 +209,22 @@ const Feedback = ({ user }) => {
           
           return matchesSearch && matchesDate && matchesOffice;
         })
-        .map((f, idx) => {
+        .map(({ f, idx, suggestion, commendation, questionRatings }) => {
           const feedbackOffice = f.office || "Unspecified";
           const formattedDate = getDisplayDate(f.createdAt);
+          const previewComment = suggestion || commendation || "No written feedback provided.";
           
           return {
             // Data for FeedbackTable
             id: f.id || `feedback-${idx}`,
             alias: `Anonymous${String(idx + 1).padStart(3, "0")}`,
             office: feedbackOffice,
-            comment: f.suggestion || "No feedback given.",
+            comment: previewComment,
             date: formattedDate,
             satisfaction: parseFloat(f.averageRating) || 0,
+            commendation: commendation || "No commendation provided.",
+            suggestion: suggestion || "No suggestion provided.",
+            questionRatings,
             
             // Additional data for FeedbackModal
             name: f.name || "Anonymous",
@@ -224,14 +293,15 @@ const Feedback = ({ user }) => {
       }
 
       // Prepare CSV content
-      const headers = ["Alias", "Name", "Date", "Office", "Rating", "Feedback"];
+      const headers = ["Alias", "Name", "Date", "Office", "Rating", "Commendation", "Suggestion"];
       const csvRows = filteredFeedbacks.map(f => [
         f.alias,
         f.name,
         f.date,
         f.office || "Unspecified",
         f.satisfaction,
-        `"${(f.comment || "").replace(/"/g, '""')}"`
+        `"${(f.commendation || "").replace(/"/g, '""')}"`,
+        `"${(f.suggestion || "").replace(/"/g, '""')}"`
       ]);
       
       const csvContent = [
@@ -274,8 +344,11 @@ const Feedback = ({ user }) => {
         office: visitor.office || "Unspecified",
         date: visitor.date || "Date not available",
         comment: visitor.comment || "No feedback provided.",
+        commendation: visitor.commendation || "No commendation provided.",
+        suggestion: visitor.suggestion || "No suggestion provided.",
         satisfaction: visitor.satisfaction || 0,
         answers: visitor.answers || [],
+        questionRatings: visitor.questionRatings || [],
         visitId: visitor.visitId || "",
       };
       setSelectedVisitor(modalData);
@@ -283,20 +356,6 @@ const Feedback = ({ user }) => {
       console.error("Error opening modal:", err);
       alert("Failed to open feedback details. Please try again.");
     }
-  };
-
-  // Render stars for satisfaction ratings
-  const renderStars = (rating) => {
-    const normalizedRating = Math.min(5, Math.max(0, Math.round(rating || 0)));
-    return (
-      <div className="flex">
-        {[...Array(5)].map((_, i) => (
-          <span key={i} className={i < normalizedRating ? "text-yellow-400" : "text-gray-300"}>
-            ★
-          </span>
-        ))}
-      </div>
-    );
   };
 
   // Get the official office name for print header
@@ -493,7 +552,7 @@ const Feedback = ({ user }) => {
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody> 
                     {pageFeedbacks.map((feedback) => (
                       <tr key={feedback.id}>
                         <td className="border-2 border-black p-1 text-[10px] text-center">
@@ -592,3 +651,4 @@ const Feedback = ({ user }) => {
 };
 
 export default Feedback;
+

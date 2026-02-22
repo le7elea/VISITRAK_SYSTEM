@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
+const readTextField = (value) => (typeof value === "string" ? value.trim() : "");
+
 const useFeedbackRatings = () => {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,12 @@ const useFeedbackRatings = () => {
               const dataPromises = snapshot.docs.map(async (feedbackDoc) => {
                 const d = feedbackDoc.data() || {};
                 let officeFromVisit = d.office || "";
+                const rawAnswers = d.answers ?? d.questionRatings ?? d.ratings ?? [];
+                const parsedAnswers = Array.isArray(rawAnswers)
+                  ? rawAnswers
+                  : rawAnswers && typeof rawAnswers === "object"
+                    ? Object.entries(rawAnswers).map(([question, rating]) => ({ question, rating }))
+                    : [];
                 
                 // If visitId exists, fetch office from visits collection
                 if (d.visitId) {
@@ -56,9 +64,11 @@ const useFeedbackRatings = () => {
                   visitPurpose: d.visitPurpose || "",
                   
                   // Feedback-specific fields
-                  answers: Array.isArray(d.answers) ? d.answers : [],
+                  answers: parsedAnswers,
                   averageRating: typeof d.averageRating === 'number' ? d.averageRating : 0,
-                  suggestion: d.suggestion || "",
+                  commendation: readTextField(d.commendation || d.commendations || d.positiveFeedback || d.compliment),
+                  suggestion: readTextField(d.suggestion || d.recommendation),
+                  questions: Array.isArray(d.questions) ? d.questions : [],
                   
                   // Timestamp - handle Firestore Timestamp objects
                   createdAt: d.createdAt || new Date(),
