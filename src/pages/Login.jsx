@@ -9,7 +9,7 @@ import {
   getOfficeProfileForAuthUser,
 } from "../lib/userProfile.services";
 import bisuLogo from "../assets/bisulogo.png";
-import masidLogo from "../assets/logo02.png";
+import masidLogo from "../assets/visitrak_logoChar.png";
 import emailIcon from "../assets/email.png";
 import passwordIcon from "../assets/password.png";
 import eyeOpen from "../assets/eye_open.png";
@@ -76,7 +76,7 @@ const Login = ({ onLogin }) => {
   };
 
   const handleLoginClick = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (!email || !password) {
       alert("Please enter email and password.");
       return;
@@ -161,7 +161,10 @@ const Login = ({ onLogin }) => {
       {/* Login + Illustration */}
       <div className="relative flex flex-col lg:flex-row items-center justify-center gap-10 w-full px-6">
         {/* Login Card */}
-        <div className="bg-white shadow-xl rounded-2xl p-6 sm:p-8 w-[90%] sm:w-[400px] md:w-[450px] lg:w-[500px] text-center z-10 transition-all duration-300">
+        <form
+          onSubmit={handleLoginClick}
+          className="bg-white shadow-xl rounded-2xl p-6 sm:p-8 w-[90%] sm:w-[400px] md:w-[450px] lg:w-[500px] text-center z-10 transition-all duration-300"
+        >
           <h2 className="text-2xl font-bold text-purple-800 mb-2">LOGIN</h2>
           <p className="text-gray-500 mb-6 text-sm">
             Welcome back! Please login to admin dashboard
@@ -195,7 +198,7 @@ const Login = ({ onLogin }) => {
           />
 
           <button
-            onClick={handleLoginClick}
+            type="submit"
             disabled={loading}
             className="w-full bg-gradient-to-r from-purple-700 to-purple-900 text-white rounded-md h-12 mt-5 font-semibold hover:from-purple-800 hover:to-purple-950 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
@@ -207,7 +210,7 @@ const Login = ({ onLogin }) => {
             ) : "Login"}
           </button>
 
-        </div>
+        </form>
 
         {/* Illustration */}
         <div className="lg:absolute lg:right-60 lg:top-[-100px] flex justify-center mt-6 lg:mt-0">

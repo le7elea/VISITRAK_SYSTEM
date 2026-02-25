@@ -139,6 +139,9 @@ const getVisitClientTypeValue = (visitData = {}) => {
     visitData.typeOfClient,
     visitData.clientClass,
     visitData.client,
+    visitData.surveyDetails?.clientType,
+    visitData.surveyDetails?.client_type,
+    visitData.surveyDetails?.clientClassification,
     visitData.personalInfo?.clientType,
     visitData.visitor?.clientType,
     visitData.profile?.clientType,
@@ -161,6 +164,48 @@ const getVisitClientTypeValue = (visitData = {}) => {
     ],
     3
   );
+};
+
+const getCharterRatingValue = (recordData = {}, questionNumber) => {
+  if (!questionNumber) return null;
+
+  const ccKey = `cc${questionNumber}`;
+  const directCandidates = [
+    recordData?.[ccKey],
+    recordData?.[`${ccKey}Rating`],
+    recordData?.[`citizensCharter${questionNumber}`],
+    recordData?.[`charter${questionNumber}`],
+    recordData?.citizensCharter?.[ccKey],
+    recordData?.citizensCharter?.[`${questionNumber}`],
+    recordData?.surveyDetails?.[ccKey],
+    recordData?.surveyDetails?.[`${ccKey}Rating`],
+    recordData?.surveyDetails?.citizensCharter?.[ccKey],
+    recordData?.surveyDetails?.citizensCharter?.[`${questionNumber}`],
+    recordData?.surveyDetails?.citizenCharter?.[ccKey],
+    recordData?.surveyDetails?.citizenCharter?.[`${questionNumber}`],
+  ];
+
+  for (const candidate of directCandidates) {
+    const numeric = getNumericRating(candidate);
+    if (numeric !== null) return numeric;
+
+    const readable = getReadableValue(candidate);
+    const parsedReadable = getNumericRating(readable);
+    if (parsedReadable !== null) return parsedReadable;
+  }
+
+  const fallback = findValueByKeyPattern(
+    recordData,
+    [
+      new RegExp(`^cc[-_\\s]*${questionNumber}$`, 'i'),
+      new RegExp(`citizens?charter.*cc[-_\\s]*${questionNumber}`, 'i'),
+      new RegExp(`charter.*${questionNumber}$`, 'i'),
+    ],
+    5
+  );
+
+  const fallbackNumeric = getNumericRating(fallback);
+  return fallbackNumeric !== null ? fallbackNumeric : null;
 };
 
 const normalizeSex = (value) => {
@@ -201,11 +246,16 @@ const normalizeClientType = (value) => {
   return '';
 };
 
-const normalizeFourPointRating = (value) => {
+const normalizeCharterRating = (value, questionIndex) => {
   const numeric = getNumericRating(value);
   if (numeric === null) return null;
 
   const rounded = Math.round(numeric);
+  if (questionIndex === 1) {
+    if (rounded >= 1 && rounded <= 5) return rounded;
+    return null;
+  }
+
   if (rounded >= 1 && rounded <= 4) return rounded;
   if (rounded === 5) return 4;
   return null;
@@ -232,31 +282,41 @@ const formatScoreCell = (value) => {
 
 const getSatisfactionDescription = (value) => {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
-  if (value >= 4.5) return 'Very Satisfied';
-  if (value >= 3.5) return 'Satisfied';
-  if (value >= 2.5) return 'Neutral';
-  if (value >= 1.5) return 'Unsatisfied';
-  return 'Very Unsatisfied';
+  if (value < 0) return '-';
+  if (value < 1) return 'Very Unsatisfied';
+  if (value < 2) return 'Unsatisfied';
+  if (value < 3) return 'Neither Satisfied nor Dissatisfied';
+  if (value < 4) return 'Satisfied';
+  return 'Very Satisfied';
 };
 
 const calculateSatisfactionRates = (feedbacks = []) => {
-  const total = feedbacks.length;
+  const ratings = feedbacks
+    .map((feedback) => getNumericRating(feedback?.averageRating))
+    .filter((rating) => rating !== null && rating >= 0 && rating <= 5);
+
+  const total = ratings.length;
   if (total === 0) return [];
 
   const counts = {
-    verySatisfied: feedbacks.filter(f => (f.averageRating || 0) >= 4.5).length,
-    satisfied: feedbacks.filter(f => (f.averageRating || 0) >= 4.0 && (f.averageRating || 0) < 4.5).length,
-    neutral: feedbacks.filter(f => (f.averageRating || 0) >= 3.0 && (f.averageRating || 0) < 4.0).length,
-    unsatisfied: feedbacks.filter(f => (f.averageRating || 0) >= 2.0 && (f.averageRating || 0) < 3.0).length,
-    veryUnsatisfied: feedbacks.filter(f => (f.averageRating || 0) < 2.0).length,
+    verySatisfied: ratings.filter((rating) => rating >= 4 && rating <= 5).length,
+    satisfied: ratings.filter((rating) => rating >= 3 && rating < 4).length,
+    neitherSatisfiedNorDissatisfied: ratings.filter((rating) => rating >= 2 && rating < 3).length,
+    unsatisfied: ratings.filter((rating) => rating >= 1 && rating < 2).length,
+    veryUnsatisfied: ratings.filter((rating) => rating >= 0 && rating < 1).length,
   };
 
   return [
     { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '🤩', color: 'bg-yellow-400' },
     { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '😄', color: 'bg-yellow-400' },
-    { label: 'Neutral', pct: Math.round((counts.neutral / total) * 100), emoji: '😐', color: 'bg-yellow-400' },
+    {
+      label: 'Neither Satisfied nor Dissatisfied',
+      pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100),
+      emoji: '😐',
+      color: 'bg-yellow-400',
+    },
     { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '😟', color: 'bg-green-100' },
-    { label: 'Very unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '😡', color: 'bg-green-100' },
+    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '😡', color: 'bg-green-100' },
   ];
 };
 
@@ -543,9 +603,9 @@ const Analytics = () => {
           office: d.office,
           sex: getVisitSexValue(d),
           clientType: getVisitClientTypeValue(d),
-          cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
-          cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
-          cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
+          cc1Rating: getCharterRatingValue(d, 1),
+          cc2Rating: getCharterRatingValue(d, 2),
+          cc3Rating: getCharterRatingValue(d, 3),
           checkInTime: d.checkInTime,
           checkOutTime: d.checkOutTime,
           purpose: d.purpose || '',
@@ -645,9 +705,9 @@ const Analytics = () => {
                 office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
-                cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
-                cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
-                cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
+                cc1Rating: getCharterRatingValue(d, 1),
+                cc2Rating: getCharterRatingValue(d, 2),
+                cc3Rating: getCharterRatingValue(d, 3),
                 answers: d.answers || [],
                 questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
@@ -693,9 +753,9 @@ const Analytics = () => {
                 office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
-                cc1Rating: d.cc1 ?? d.cc1Rating ?? d.citizensCharter1 ?? d.charter1 ?? null,
-                cc2Rating: d.cc2 ?? d.cc2Rating ?? d.citizensCharter2 ?? d.charter2 ?? null,
-                cc3Rating: d.cc3 ?? d.cc3Rating ?? d.citizensCharter3 ?? d.charter3 ?? null,
+                cc1Rating: getCharterRatingValue(d, 1),
+                cc2Rating: getCharterRatingValue(d, 2),
+                cc3Rating: getCharterRatingValue(d, 3),
                 answers: d.answers || [],
                 questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
@@ -948,9 +1008,9 @@ const Analytics = () => {
           'Unspecified',
         sex: getVisitSexValue(feedback),
         clientType: getVisitClientTypeValue(feedback),
-        cc1Rating: feedback?.cc1Rating ?? feedback?.cc1 ?? null,
-        cc2Rating: feedback?.cc2Rating ?? feedback?.cc2 ?? null,
-        cc3Rating: feedback?.cc3Rating ?? feedback?.cc3 ?? null,
+        cc1Rating: getCharterRatingValue(feedback, 1) ?? getCharterRatingValue(matchedVisit, 1),
+        cc2Rating: getCharterRatingValue(feedback, 2) ?? getCharterRatingValue(matchedVisit, 2),
+        cc3Rating: getCharterRatingValue(feedback, 3) ?? getCharterRatingValue(matchedVisit, 3),
         commendation: toTrimmedText(
           feedback?.commendation ||
             feedback?.commendations ||
@@ -1050,14 +1110,14 @@ const Analytics = () => {
 
       const charterCounts = {
         cc1: [0, 0, 0, 0],
-        cc2: [0, 0, 0, 0],
+        cc2: [0, 0, 0, 0, 0],
         cc3: [0, 0, 0, 0],
       };
       let hasCharterData = false;
 
       officeVisits.forEach((visit) => {
         [visit?.cc1Rating, visit?.cc2Rating, visit?.cc3Rating].forEach((rating, idx) => {
-          const normalized = normalizeFourPointRating(rating);
+          const normalized = normalizeCharterRating(rating, idx);
           if (!normalized) return;
           charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
           hasCharterData = true;
@@ -1067,7 +1127,7 @@ const Analytics = () => {
       if (!hasCharterData) {
         officeFeedbacks.forEach((feedback) => {
           [feedback?.cc1Rating, feedback?.cc2Rating, feedback?.cc3Rating].forEach((rating, idx) => {
-            const normalized = normalizeFourPointRating(rating);
+            const normalized = normalizeCharterRating(rating, idx);
             if (!normalized) return;
             charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
             hasCharterData = true;
@@ -1078,8 +1138,9 @@ const Analytics = () => {
       if (!hasCharterData) {
         officeFeedbacks.forEach((feedback) => {
           [0, 1, 2].forEach((questionIndex) => {
-            const normalized = normalizeFourPointRating(
-              feedback?.questionRatings?.[questionIndex]?.rating
+            const normalized = normalizeCharterRating(
+              feedback?.questionRatings?.[questionIndex]?.rating,
+              questionIndex
             );
             if (!normalized) return;
             charterCounts[`cc${questionIndex + 1}`][normalized - 1] += 1;
@@ -1148,7 +1209,7 @@ const Analytics = () => {
       businessCount: 0,
       governmentCount: 0,
       cc1Counts: [0, 0, 0, 0],
-      cc2Counts: [0, 0, 0, 0],
+      cc2Counts: [0, 0, 0, 0, 0],
       cc3Counts: [0, 0, 0, 0],
     };
 
@@ -1162,8 +1223,11 @@ const Analytics = () => {
 
       [0, 1, 2, 3].forEach((index) => {
         totals.cc1Counts[index] += row.cc1Counts[index];
-        totals.cc2Counts[index] += row.cc2Counts[index];
         totals.cc3Counts[index] += row.cc3Counts[index];
+      });
+
+      [0, 1, 2, 3, 4].forEach((index) => {
+        totals.cc2Counts[index] += row.cc2Counts[index];
       });
     });
 
@@ -1369,19 +1433,19 @@ const Analytics = () => {
       narrative += `The feedback received reveals valuable insights into visitor experiences${currentUser && currentUser.type === "OfficeAdmin" ? ' at this office' : ' across different offices'}. `;
       
       const highSat = filteredFeedbacks.filter(f => f.averageRating >= 4.0);
-      const mediumSat = filteredFeedbacks.filter(f => f.averageRating >= 3.0 && f.averageRating < 4.0);
-      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 3.0);
+      const mediumSat = filteredFeedbacks.filter(f => f.averageRating >= 2.0 && f.averageRating < 3.0);
+      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 2.0);
       
       if (highSat.length > 0) {
         narrative += `${highSat.length} feedback${highSat.length !== 1 ? 's' : ''} expressed high satisfaction (4.0+), highlighting positive experiences. `;
       }
       
       if (mediumSat.length > 0) {
-        narrative += `${mediumSat.length} provided neutral feedback (3.0-3.9), suggesting room for improvement. `;
+        narrative += `${mediumSat.length} provided neither satisfied nor dissatisfied feedback (2.0-2.9), suggesting room for improvement. `;
       }
       
       if (lowSat.length > 0) {
-        narrative += `${lowSat.length} indicated concerns with lower satisfaction scores (below 3.0), requiring attention. `;
+        narrative += `${lowSat.length} indicated concerns with lower satisfaction scores (below 2.0), requiring attention. `;
       }
       
       narrative += `\n\nKey observations from feedback analysis:\n\n`;
@@ -1453,9 +1517,9 @@ const Analytics = () => {
     
     const verySatisfied = satisfactionRates.find(r => r.label === 'Very Satisfied');
     const satisfied = satisfactionRates.find(r => r.label === 'Satisfied');
-    const neutral = satisfactionRates.find(r => r.label === 'Neutral');
+    const neutral = satisfactionRates.find(r => r.label === 'Neither Satisfied nor Dissatisfied');
     const unsatisfied = satisfactionRates.find(r => r.label === 'Unsatisfied');
-    const veryUnsatisfied = satisfactionRates.find(r => r.label === 'Very unsatisfied');
+    const veryUnsatisfied = satisfactionRates.find(r => r.label === 'Very Unsatisfied');
     
     const positivePct = (verySatisfied?.pct || 0) + (satisfied?.pct || 0);
     const negativePct = (unsatisfied?.pct || 0) + (veryUnsatisfied?.pct || 0);
@@ -1467,7 +1531,7 @@ const Analytics = () => {
     }
     
     if (neutral?.pct > 0) {
-      narrative += `${neutral.pct}% remained neutral, `;
+      narrative += `${neutral.pct}% were neither satisfied nor dissatisfied, `;
     }
     
     if (negativePct > 0) {
@@ -1493,7 +1557,7 @@ const Analytics = () => {
       narrative += `## Key Insights from Feedback\n\n`;
       
       const highSat = filteredFeedbacks.filter(f => f.averageRating >= 4.0);
-      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 3.0);
+      const lowSat = filteredFeedbacks.filter(f => f.averageRating < 2.0);
       
       if (highSat.length > 0) {
         narrative += `**Positive Highlights:** ${highSat.length} feedback${highSat.length !== 1 ? 's' : ''} provided high satisfaction ratings (4.0+), representing ${Math.round((highSat.length / filteredFeedbacks.length) * 100)}% of all responses. `;
@@ -1504,9 +1568,9 @@ const Analytics = () => {
       }
       
       if (lowSat.length > 0) {
-        narrative += `**Areas for Improvement:** ${lowSat.length} feedback${lowSat.length !== 1 ? 's' : ''} indicated lower satisfaction levels (below 3.0), representing ${Math.round((lowSat.length / filteredFeedbacks.length) * 100)}% of responses. `;
+        narrative += `**Areas for Improvement:** ${lowSat.length} feedback${lowSat.length !== 1 ? 's' : ''} indicated lower satisfaction levels (below 2.0), representing ${Math.round((lowSat.length / filteredFeedbacks.length) * 100)}% of responses. `;
         if (feedbacksWithComments.length > 0) {
-          const negativeComments = feedbacksWithComments.filter(f => f.averageRating < 3.0);
+          const negativeComments = feedbacksWithComments.filter(f => f.averageRating < 2.0);
           narrative += `${negativeComments.length} included specific suggestions for improvement.\n\n`;
         }
       }
@@ -1524,7 +1588,7 @@ const Analytics = () => {
     }
     
     if (neutral?.pct > 25) {
-      narrative += `- **Enhancement Opportunities:** The ${neutral.pct}% neutral feedback suggests opportunities to elevate the visitor experience from satisfactory to excellent.\n`;
+      narrative += `- **Enhancement Opportunities:** The ${neutral.pct}% neither satisfied nor dissatisfied feedback suggests opportunities to elevate the visitor experience from satisfactory to excellent.\n`;
     }
     
     if (maxTrafficDay.count > minTrafficDay.count * 2) {
@@ -1888,6 +1952,7 @@ const Analytics = () => {
                           <col style={{ width: '4%' }} />
                           <col style={{ width: '4%' }} />
                           <col style={{ width: '4%' }} />
+                          <col style={{ width: '4%' }} />
                         </colgroup>
                         {showSummaryColumnHeaders && (
                           <thead>
@@ -1897,7 +1962,7 @@ const Analytics = () => {
                               <th colSpan={2} className="w-[8%]">Sex</th>
                               <th colSpan={3} className="w-[12%]">Client Type</th>
                               <th colSpan={4} className="w-[16%]">CC1</th>
-                              <th colSpan={4} className="w-[16%]">CC2</th>
+                              <th colSpan={5} className="w-[20%]">CC2</th>
                               <th colSpan={4} className="w-[16%]">CC3</th>
                             </tr>
                             <tr>
@@ -1914,6 +1979,7 @@ const Analytics = () => {
                               <th>CC 2-2</th>
                               <th>CC 2-3</th>
                               <th>CC 2-4</th>
+                              <th>CC 2-5</th>
                               <th>CC 3-1</th>
                               <th>CC 3-2</th>
                               <th>CC 3-3</th>
@@ -1939,6 +2005,7 @@ const Analytics = () => {
                               <td>{formatCountCell(row.cc2Counts[1], row.hasCharterData)}</td>
                               <td>{formatCountCell(row.cc2Counts[2], row.hasCharterData)}</td>
                               <td>{formatCountCell(row.cc2Counts[3], row.hasCharterData)}</td>
+                              <td>{formatCountCell(row.cc2Counts[4], row.hasCharterData)}</td>
                               <td>{formatCountCell(row.cc3Counts[0], row.hasCharterData)}</td>
                               <td>{formatCountCell(row.cc3Counts[1], row.hasCharterData)}</td>
                               <td>{formatCountCell(row.cc3Counts[2], row.hasCharterData)}</td>
@@ -1962,6 +2029,7 @@ const Analytics = () => {
                               <td>{charterOverallTotals.cc2Counts[1]}</td>
                               <td>{charterOverallTotals.cc2Counts[2]}</td>
                               <td>{charterOverallTotals.cc2Counts[3]}</td>
+                              <td>{charterOverallTotals.cc2Counts[4]}</td>
                               <td>{charterOverallTotals.cc3Counts[0]}</td>
                               <td>{charterOverallTotals.cc3Counts[1]}</td>
                               <td>{charterOverallTotals.cc3Counts[2]}</td>
