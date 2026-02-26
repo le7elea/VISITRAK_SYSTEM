@@ -25,7 +25,16 @@ const Login = ({ onLogin }) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+  });
+  const navigate = useNavigate(); 
+
+  const showModal = (title, message) => {
+    setModalState({ isOpen: true, title, message });
+  };
 
   // Load remembered email only (never password).
   useEffect(() => {
@@ -78,7 +87,7 @@ const Login = ({ onLogin }) => {
   const handleLoginClick = async (e) => {
     e?.preventDefault();
     if (!email || !password) {
-      alert("Please enter email and password.");
+      showModal("Missing information", "Please enter email and password.");
       return;
     }
 
@@ -138,7 +147,7 @@ const Login = ({ onLogin }) => {
         errorMessage = error.message;
       }
 
-      alert(errorMessage);
+      showModal("Login failed", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -221,6 +230,26 @@ const Login = ({ onLogin }) => {
           />
         </div>
       </div>
+
+      {modalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-xl font-semibold text-purple-800">
+              {modalState.title}
+            </h3>
+            <p className="mt-3 text-gray-700">{modalState.message}</p>
+            <button
+              type="button"
+              onClick={() =>
+                setModalState({ isOpen: false, title: "", message: "" })
+              }
+              className="mt-5 w-full rounded-md bg-purple-800 px-4 py-2 font-semibold text-white transition hover:bg-purple-900"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

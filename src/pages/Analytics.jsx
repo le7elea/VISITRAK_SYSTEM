@@ -280,6 +280,15 @@ const formatScoreCell = (value) => {
   return Number(value).toFixed(2);
 };
 
+const calculateMeanSatisfaction = (feedbacks = []) => {
+  const ratings = feedbacks
+    .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+    .filter((value) => value !== null);
+
+  if (!ratings.length) return null;
+  return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+};
+
 const getSatisfactionDescription = (value) => {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   if (value < 0) return '-';
@@ -902,9 +911,13 @@ const Analytics = () => {
 
   // Calculate average satisfaction from feedbacks
   const avgSatisfaction = useMemo(() => {
-    if (filteredFeedbacks.length === 0) return "0.0";
-    const total = filteredFeedbacks.reduce((sum, f) => sum + (f.averageRating || 0), 0);
-    return (total / filteredFeedbacks.length).toFixed(1);
+    const validRatings = filteredFeedbacks
+      .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+      .filter((value) => value !== null);
+
+    if (!validRatings.length) return "0.0";
+    const total = validRatings.reduce((sum, value) => sum + value, 0);
+    return (total / validRatings.length).toFixed(1);
   }, [filteredFeedbacks]);
 
   const currentOfficeRecord = useMemo(() => {
@@ -1158,12 +1171,7 @@ const Analytics = () => {
         return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
       });
 
-      const meanSatisfaction = officeFeedbacks.length
-        ? officeFeedbacks.reduce((sum, feedback) => {
-            const rating = getNumericRating(feedback?.averageRating);
-            return sum + (rating || 0);
-          }, 0) / officeFeedbacks.length
-        : null;
+      const meanSatisfaction = calculateMeanSatisfaction(officeFeedbacks);
 
       const commendationSet = new Set();
       const suggestionSet = new Set();
@@ -1244,12 +1252,7 @@ const Analytics = () => {
       return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
     });
 
-    const meanSatisfaction = feedbackRecordsForPrint.length
-      ? feedbackRecordsForPrint.reduce((sum, feedback) => {
-          const rating = getNumericRating(feedback?.averageRating);
-          return sum + (rating || 0);
-        }, 0) / feedbackRecordsForPrint.length
-      : null;
+    const meanSatisfaction = calculateMeanSatisfaction(feedbackRecordsForPrint);
 
     return {
       customerCount: filteredVisits.length,
