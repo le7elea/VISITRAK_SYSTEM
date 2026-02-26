@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BarChart2, ChevronDown, MoreHorizontal, Download, MessageSquare, Calendar, FileText, Printer } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -818,6 +818,25 @@ const Analytics = () => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
+  const datePickerRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideDatePickerClick = (event) => {
+      if (!showDatePicker) return;
+
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
+        setShowDatePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideDatePickerClick);
+    document.addEventListener('touchstart', handleOutsideDatePickerClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideDatePickerClick);
+      document.removeEventListener('touchstart', handleOutsideDatePickerClick);
+    };
+  }, [showDatePicker]);
 
   const formatDateDisplay = (dateStr) => {
     try {
@@ -2231,7 +2250,7 @@ const Analytics = () => {
                    )}
                  </div>
 
-                 <div className="relative">
+                 <div className="relative" ref={datePickerRef}>
                  <button 
                    onClick={() => setShowDatePicker(!showDatePicker)}
                    className="flex gap-3 items-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"

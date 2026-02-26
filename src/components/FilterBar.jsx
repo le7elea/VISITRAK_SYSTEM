@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronDown, Download, Search } from "lucide-react";
 
 const formatDisplayDate = (value) => {
@@ -31,11 +31,30 @@ const FilterBar = ({
   const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
   const [draftStartDate, setDraftStartDate] = useState(startDateFilter || "");
   const [draftEndDate, setDraftEndDate] = useState(endDateFilter || "");
+  const dateMenuRef = useRef(null);
 
   useEffect(() => {
     setDraftStartDate(startDateFilter || "");
     setDraftEndDate(endDateFilter || "");
   }, [startDateFilter, endDateFilter]);
+
+  useEffect(() => {
+    const handleOutsideDateMenuClick = (event) => {
+      if (!isDateMenuOpen) return;
+
+      if (dateMenuRef.current && !dateMenuRef.current.contains(event.target)) {
+        setIsDateMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideDateMenuClick);
+    document.addEventListener("touchstart", handleOutsideDateMenuClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideDateMenuClick);
+      document.removeEventListener("touchstart", handleOutsideDateMenuClick);
+    };
+  }, [isDateMenuOpen]);
 
   const dateRangeLabel = useMemo(() => {
     const startLabel = formatDisplayDate(startDateFilter);
@@ -104,7 +123,7 @@ const FilterBar = ({
           </select>
         )}
 
-        <div className="relative w-full md:w-[300px]">
+        <div className="relative w-full md:w-[300px]" ref={dateMenuRef}>
           <button
             type="button"
             onClick={() => setIsDateMenuOpen((open) => !open)}
