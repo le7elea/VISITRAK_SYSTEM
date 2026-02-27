@@ -74,6 +74,7 @@ const ForgotPassword = () => {
 
   const elapsedMs = Math.max(0, currentTimeMs - getRequestAnchor());
   const remainingMsBeforeResend = Math.max(0, RESEND_COOLDOWN_MS - elapsedMs);
+  const isApprovedStatus = statusData?.status === "approved";
   const isPendingStatus =
     !statusData?.status || statusData.status === "pending" || statusData.status === "none";
   const canResend =
@@ -116,12 +117,12 @@ const ForgotPassword = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!trackedUsername) {
+    if (!trackedUsername || isApprovedStatus) {
       localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
       return;
     }
     localStorage.setItem(RESET_TRACK_USERNAME_KEY, trackedUsername);
-  }, [trackedUsername]);
+  }, [trackedUsername, isApprovedStatus]);
 
   useEffect(() => {
     if (!trackedUsername) return;
@@ -236,6 +237,16 @@ const ForgotPassword = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUseResetLink = () => {
+    setTrackedUsername("");
+    setStatusData(null);
+    setRequestAnchorTime(null);
+    setWatchModalOpen(false);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
     }
   };
 
@@ -375,6 +386,7 @@ const ForgotPassword = () => {
             {statusData?.status === "approved" && statusData?.resetLink ? (
               <a
                 href={statusData.resetLink}
+                onClick={handleUseResetLink}
                 className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#5B3886] to-[#8B5AA8] text-sm font-semibold text-white hover:from-[#4A2D6B] hover:to-[#7A4998]"
               >
                 RESET PASSWORD NOW
