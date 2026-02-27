@@ -16,6 +16,7 @@ const isValidEmail = (email) =>
 const isValidUsername = (username) =>
   /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/.test((username || "").trim().toLowerCase());
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const RESET_REQUEST_POLL_INTERVAL_MS = 5000;
 
 // ==================== MEMOIZED COMPONENTS ====================
 
@@ -675,15 +676,20 @@ const Offices = () => {
   // ðŸ”¹ Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
 
-  const loadPendingResetRequests = useCallback(async () => {
+  const loadPendingResetRequests = useCallback(async (options = {}) => {
+    const showLoader = options?.showLoader === true;
     try {
-      setResetRequestsLoading(true);
+      if (showLoader) {
+        setResetRequestsLoading(true);
+      }
       const pendingRequests = await getOfficePasswordResetRequests("pending");
       setResetRequests(pendingRequests);
     } catch (error) {
       console.error("Error loading reset requests:", error);
     } finally {
-      setResetRequestsLoading(false);
+      if (showLoader) {
+        setResetRequestsLoading(false);
+      }
     }
   }, []);
   // Load offices first; reset requests are best-effort so they never block page load.
@@ -695,13 +701,7 @@ const Offices = () => {
         const officeData = await fetchOffices();
         setOffices(officeData);
 
-        try {
-          const pendingRequests = await getOfficePasswordResetRequests("pending");
-          setResetRequests(pendingRequests);
-        } catch (resetError) {
-          console.error("Error loading reset requests:", resetError);
-          setResetRequests([]);
-        }
+        await loadPendingResetRequests({ showLoader: true });
       } catch (err) {
         console.error("Error loading offices:", err);
         setError(`Failed to load offices: ${err.message}`);
@@ -710,7 +710,42 @@ const Offices = () => {
       }
     };
     loadInitialData();
-  }, []);
+  }, [loadPendingResetRequests]);
+
+  // Keep reset requests list fresh without manual page refresh.
+  useEffect(() => {
+    let isPolling = false;
+
+    const pollResetRequests = async () => {
+      if (document.visibilityState === "hidden") return;
+      if (resetRequestActionId || isPolling) return;
+
+      try {
+        isPolling = true;
+        await loadPendingResetRequests();
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    const intervalId = setInterval(
+      pollResetRequests,
+      RESET_REQUEST_POLL_INTERVAL_MS
+    );
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        pollResetRequests();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadPendingResetRequests, resetRequestActionId]);
 
   // ðŸ”¹ Reset delete confirmation when modal closes
   useEffect(() => {
@@ -1216,7 +1251,7 @@ const Offices = () => {
           </div>
           <button
             type="button"
-            onClick={loadPendingResetRequests}
+            onClick={() => loadPendingResetRequests({ showLoader: true })}
             className="px-3 py-2 rounded-lg bg-purple-100 text-purple-800 hover:bg-purple-200 text-sm font-semibold transition"
             disabled={resetRequestsLoading}
           >
