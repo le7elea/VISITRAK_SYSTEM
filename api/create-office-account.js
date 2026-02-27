@@ -1,5 +1,5 @@
-import { getAdmin } from "./_firebaseAdmin.js";
-import { hashOfficePassword } from "./_officeCredentials.js";
+import { getAdmin } from "../server/firebaseAdmin.js";
+import { hashOfficePassword } from "../server/officeCredentials.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");

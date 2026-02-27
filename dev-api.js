@@ -4,17 +4,12 @@ import cleanupTokens from "./api/cleanup-tokens.js";
 import completePasswordReset from "./api/complete-password-reset.js";
 import adminResetOfficePassword from "./api/admin-reset-office-password.js";
 import createOfficeAccount from "./api/create-office-account.js";
-import debugFirebase from "./api/debug-firebase.js";
 import deleteOfficeAccount from "./api/delete-office-account.js";
 import firestoreUsage from "./api/firestore-usage.js";
 import officePasswordResetRequests from "./api/office-password-reset-requests.js";
 import officeChangePassword from "./api/office-change-password.js";
 import officeLogin from "./api/office-login.js";
-import provisionAuthUser from "./api/provision-auth-user.js";
-import resolveLoginIdentifier from "./api/resolve-login-identifier.js";
 import resolveOfficePasswordResetRequest from "./api/resolve-office-password-reset-request.js";
-import sendPasswordReset from "./api/send-password-reset.js";
-import testApi from "./api/test.js";
 import updateOfficeAccount from "./api/update-office-account.js";
 
 const PORT = Number(process.env.PORT || 5001);
@@ -26,16 +21,11 @@ const routes = {
   "/api/delete-office-account": deleteOfficeAccount,
   "/api/office-login": officeLogin,
   "/api/office-change-password": officeChangePassword,
-  "/api/resolve-login-identifier": resolveLoginIdentifier,
   "/api/office-password-reset-requests": officePasswordResetRequests,
   "/api/resolve-office-password-reset-request": resolveOfficePasswordResetRequest,
-  "/api/provision-auth-user": provisionAuthUser,
-  "/api/send-password-reset": sendPasswordReset,
   "/api/complete-password-reset": completePasswordReset,
   "/api/cleanup-tokens": cleanupTokens,
   "/api/firestore-usage": firestoreUsage,
-  "/api/debug-firebase": debugFirebase,
-  "/api/test": testApi,
 };
 
 const readBody = async (req) =>

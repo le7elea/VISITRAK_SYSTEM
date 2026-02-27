@@ -1,5 +1,5 @@
 import sgMail from "@sendgrid/mail";
-import { getAdmin } from "./_firebaseAdmin.js";
+import { getAdmin } from "../server/firebaseAdmin.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
