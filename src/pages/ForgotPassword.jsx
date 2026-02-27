@@ -13,6 +13,7 @@ import fgIllustrator from "../assets/fg_illustrator.png";
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 const RESET_STATUS_POLL_INTERVAL_MS = 5000;
 const RESET_TRACK_USERNAME_KEY = "office_reset_tracking_username";
+const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 
 const Modal = ({ show, title, message, onClose }) => {
   if (!show) return null;
@@ -36,8 +37,12 @@ const Modal = ({ show, title, message, onClose }) => {
 const ForgotPassword = () => {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusData, setStatusData] = useState(null);
+  const [watchModalOpen, setWatchModalOpen] = useState(false);
+  const [requestAnchorTime, setRequestAnchorTime] = useState(null);
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const [trackedUsername, setTrackedUsername] = useState(() => {
     if (typeof window === "undefined") return "";
     return (localStorage.getItem(RESET_TRACK_USERNAME_KEY) || "")
@@ -51,6 +56,36 @@ const ForgotPassword = () => {
   });
 
   const navigate = useNavigate();
+
+  const getRequestAnchor = useCallback(() => {
+    if (statusData?.requestedAt) {
+      const parsed = new Date(statusData.requestedAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.getTime();
+      }
+    }
+
+    if (requestAnchorTime) {
+      return requestAnchorTime;
+    }
+
+    return Date.now();
+  }, [statusData?.requestedAt, requestAnchorTime]);
+
+  const elapsedMs = Math.max(0, currentTimeMs - getRequestAnchor());
+  const remainingMsBeforeResend = Math.max(0, RESEND_COOLDOWN_MS - elapsedMs);
+  const isPendingStatus =
+    !statusData?.status || statusData.status === "pending" || statusData.status === "none";
+  const canResend =
+    (statusData?.status === "rejected" || statusData?.status === "expired") ||
+    (isPendingStatus && remainingMsBeforeResend <= 0);
+
+  const formatCountdown = (ms) => {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
 
   const loadRequestStatus = useCallback(
     async (targetUsername, options = {}) => {
@@ -94,6 +129,14 @@ const ForgotPassword = () => {
   }, [trackedUsername, loadRequestStatus]);
 
   useEffect(() => {
+    if (!trackedUsername) {
+      setWatchModalOpen(false);
+      return;
+    }
+    setWatchModalOpen(true);
+  }, [trackedUsername]);
+
+  useEffect(() => {
     if (!trackedUsername) return;
 
     let disposed = false;
@@ -123,6 +166,34 @@ const ForgotPassword = () => {
     };
   }, [trackedUsername, loadRequestStatus]);
 
+  useEffect(() => {
+    if (!watchModalOpen) return;
+    const timerId = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, [watchModalOpen]);
+
+  const handleResendRequest = async () => {
+    if (!trackedUsername || !canResend) return;
+    setResending(true);
+    try {
+      await requestOfficePasswordReset(trackedUsername);
+      setRequestAnchorTime(Date.now());
+      await loadRequestStatus(trackedUsername, { showLoader: true });
+    } catch (error) {
+      console.error("Resend request error:", error);
+      setModal({
+        show: true,
+        title: "Resend Failed",
+        message:
+          error.message || "Unable to resend request right now. Please try again.",
+      });
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
@@ -151,14 +222,10 @@ const ForgotPassword = () => {
     try {
       await requestOfficePasswordReset(cleanUsername);
       setTrackedUsername(cleanUsername);
+      setRequestAnchorTime(Date.now());
+      setCurrentTimeMs(Date.now());
+      setWatchModalOpen(true);
       await loadRequestStatus(cleanUsername);
-      setModal({
-        show: true,
-        title: "Request Submitted",
-        message:
-          `If "${cleanUsername}" exists, the super admin has been notified.\n\n` +
-          "Keep this page open. Once approved, your reset link will appear automatically below.",
-      });
       setUsername("");
     } catch (error) {
       console.error("Forgot password error:", error);
@@ -248,47 +315,6 @@ const ForgotPassword = () => {
               </button>
             </form>
 
-            {trackedUsername && (
-              <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-purple-800">
-                    Request Status: {trackedUsername}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      loadRequestStatus(trackedUsername, { showLoader: true })
-                    }
-                    disabled={statusLoading}
-                    className="text-xs font-semibold text-purple-700 hover:text-purple-900 disabled:opacity-50"
-                  >
-                    {statusLoading ? "Checking..." : "Check now"}
-                  </button>
-                </div>
-
-                <p className="mt-2 text-sm text-purple-900">
-                  {statusData?.status === "approved" &&
-                    "Approved. You can reset your password now."}
-                  {statusData?.status === "pending" &&
-                    "Pending super admin approval. This updates automatically."}
-                  {statusData?.status === "rejected" &&
-                    "Rejected. Contact your super admin for assistance."}
-                  {statusData?.status === "expired" &&
-                    "Reset link expired. Submit a new request."}
-                  {!statusData?.status && "Checking request status..."}
-                </p>
-
-                {statusData?.status === "approved" && statusData?.resetLink && (
-                  <a
-                    href={statusData.resetLink}
-                    className="mt-3 inline-flex h-11 items-center justify-center rounded-lg bg-gradient-to-r from-[#5B3886] to-[#8B5AA8] px-5 text-sm font-semibold text-white hover:from-[#4A2D6B] hover:to-[#7A4998]"
-                  >
-                    RESET PASSWORD NOW
-                  </a>
-                )}
-              </div>
-            )}
-
             <div className="mt-8 pt-6 border-t border-gray-100">
               <button
                 onClick={() => navigate("/login")}
@@ -318,6 +344,76 @@ const ForgotPassword = () => {
         message={modal.message}
         onClose={() => setModal((prev) => ({ ...prev, show: false }))}
       />
+
+      {watchModalOpen && trackedUsername && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 backdrop-blur-sm px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-[0_30px_70px_rgba(91,56,134,0.45)]">
+            <h3 className="text-2xl font-bold text-gray-900 text-center">
+              Password Reset Request
+            </h3>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Username: <span className="font-semibold text-purple-800">{trackedUsername}</span>
+            </p>
+
+            <div className="mt-5 rounded-xl border border-purple-200 bg-purple-50 p-4">
+              <p className="text-sm font-semibold text-purple-800">Live Status</p>
+              <p className="mt-2 text-sm text-purple-900">
+                {statusData?.status === "approved" &&
+                  "Approved. Click the button below to reset your password."}
+                {statusData?.status === "pending" &&
+                  "Waiting for super admin approval. Do not close this modal."}
+                {statusData?.status === "rejected" &&
+                  "Request was rejected. You can send a new request."}
+                {statusData?.status === "expired" &&
+                  "Previous reset link expired. You can request a new one."}
+                {statusData?.status === "none" &&
+                  "Request is being checked. Please wait for approval."}
+                {!statusData?.status && "Checking request status..."}
+              </p>
+            </div>
+
+            {statusData?.status === "approved" && statusData?.resetLink ? (
+              <a
+                href={statusData.resetLink}
+                className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#5B3886] to-[#8B5AA8] text-sm font-semibold text-white hover:from-[#4A2D6B] hover:to-[#7A4998]"
+              >
+                RESET PASSWORD NOW
+              </a>
+            ) : (
+              <div className="mt-5 space-y-3">
+                {isPendingStatus && !canResend && (
+                  <p className="text-center text-sm text-gray-600">
+                    Resend available in{" "}
+                    <span className="font-semibold text-purple-700">
+                      {formatCountdown(remainingMsBeforeResend)}
+                    </span>
+                  </p>
+                )}
+
+                {canResend && (
+                  <button
+                    type="button"
+                    onClick={handleResendRequest}
+                    disabled={resending || loading}
+                    className="h-12 w-full rounded-lg border border-purple-300 bg-white text-sm font-semibold text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+                  >
+                    {resending ? "Sending..." : "RESEND REQUEST"}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => loadRequestStatus(trackedUsername, { showLoader: true })}
+                  disabled={statusLoading}
+                  className="h-11 w-full rounded-lg bg-purple-100 text-sm font-semibold text-purple-800 hover:bg-purple-200 disabled:opacity-50"
+                >
+                  {statusLoading ? "Checking..." : "CHECK STATUS NOW"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
