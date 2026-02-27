@@ -1283,8 +1283,6 @@ const Analytics = () => {
       const numericValues = values.filter(
         (value) => value !== null && value !== undefined && !Number.isNaN(value)
       );
-
-<<<<<<< HEAD
       if (!numericValues.length) return null;
       return numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
     };
@@ -1294,9 +1292,6 @@ const Analytics = () => {
     );
 
     const meanSatisfaction = averageValues(rowsWithFeedback.map((row) => row.meanSatisfaction));
-=======
-    const meanSatisfaction = calculateMeanSatisfaction(feedbackRecordsForPrint);
->>>>>>> 1c94d5441a900cb989a69ea264ced77e5da23e74
 
     return {
       customerCount: filteredVisits.length,
