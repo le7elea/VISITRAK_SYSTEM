@@ -1,5 +1,6 @@
 // lib/info.services.js - COMPLETE FIXED VERSION WITH PROPER EXPIRATION
 import { auth, db } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   addDoc,
@@ -22,12 +23,47 @@ const normalizeEmail = (email = "") => email.trim().toLowerCase();
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 
+const waitForAuthUser = (timeoutMs = 3000) =>
+  new Promise((resolve) => {
+    if (auth.currentUser) {
+      resolve(auth.currentUser);
+      return;
+    }
+
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      resolve(auth.currentUser || null);
+    }, timeoutMs);
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (settled || !user) return;
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(user);
+    });
+  });
+
 const callProtectedApi = async (url, method, body) => {
-  if (!auth.currentUser) {
-    throw new Error("You must be logged in to perform this action.");
+  let currentUser = auth.currentUser || (await waitForAuthUser());
+  if (!currentUser) {
+    throw new Error("Your session has expired. Please log in again.");
   }
 
-  const idToken = await auth.currentUser.getIdToken();
+  let idToken = "";
+  try {
+    idToken = await currentUser.getIdToken();
+  } catch {
+    currentUser = auth.currentUser || (await waitForAuthUser(1500));
+    if (!currentUser) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+    idToken = await currentUser.getIdToken();
+  }
+
   const response = await fetch(url, {
     method,
     headers: {
