@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BarChart2, ChevronDown, MoreHorizontal, Download, MessageSquare, Calendar, FileText, Printer } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -278,6 +278,15 @@ const formatCountCell = (value, hasData = true) => {
 const formatScoreCell = (value) => {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return Number(value).toFixed(2);
+};
+
+const calculateMeanSatisfaction = (feedbacks = []) => {
+  const ratings = feedbacks
+    .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+    .filter((value) => value !== null);
+
+  if (!ratings.length) return null;
+  return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
 };
 
 const getSatisfactionDescription = (value) => {
@@ -809,6 +818,25 @@ const Analytics = () => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
+  const datePickerRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideDatePickerClick = (event) => {
+      if (!showDatePicker) return;
+
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
+        setShowDatePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideDatePickerClick);
+    document.addEventListener('touchstart', handleOutsideDatePickerClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideDatePickerClick);
+      document.removeEventListener('touchstart', handleOutsideDatePickerClick);
+    };
+  }, [showDatePicker]);
 
   const formatDateDisplay = (dateStr) => {
     try {
@@ -902,9 +930,13 @@ const Analytics = () => {
 
   // Calculate average satisfaction from feedbacks
   const avgSatisfaction = useMemo(() => {
-    if (filteredFeedbacks.length === 0) return "0.0";
-    const total = filteredFeedbacks.reduce((sum, f) => sum + (f.averageRating || 0), 0);
-    return (total / filteredFeedbacks.length).toFixed(1);
+    const validRatings = filteredFeedbacks
+      .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+      .filter((value) => value !== null);
+
+    if (!validRatings.length) return "0.0";
+    const total = validRatings.reduce((sum, value) => sum + value, 0);
+    return (total / validRatings.length).toFixed(1);
   }, [filteredFeedbacks]);
 
   const currentOfficeRecord = useMemo(() => {
@@ -1173,12 +1205,7 @@ const Analytics = () => {
         return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
       });
 
-      const meanSatisfaction = officeFeedbacks.length
-        ? officeFeedbacks.reduce((sum, feedback) => {
-            const rating = getNumericRating(feedback?.averageRating);
-            return sum + (rating || 0);
-          }, 0) / officeFeedbacks.length
-        : null;
+      const meanSatisfaction = calculateMeanSatisfaction(officeFeedbacks);
 
       const commendationSet = new Set();
       const suggestionSet = new Set();
@@ -1257,6 +1284,7 @@ const Analytics = () => {
         (value) => value !== null && value !== undefined && !Number.isNaN(value)
       );
 
+<<<<<<< HEAD
       if (!numericValues.length) return null;
       return numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
     };
@@ -1266,6 +1294,9 @@ const Analytics = () => {
     );
 
     const meanSatisfaction = averageValues(rowsWithFeedback.map((row) => row.meanSatisfaction));
+=======
+    const meanSatisfaction = calculateMeanSatisfaction(feedbackRecordsForPrint);
+>>>>>>> 1c94d5441a900cb989a69ea264ced77e5da23e74
 
     return {
       customerCount: filteredVisits.length,
@@ -2248,7 +2279,7 @@ const Analytics = () => {
                    )}
                  </div>
 
-                 <div className="relative">
+                 <div className="relative" ref={datePickerRef}>
                  <button 
                    onClick={() => setShowDatePicker(!showDatePicker)}
                    className="flex gap-3 items-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
