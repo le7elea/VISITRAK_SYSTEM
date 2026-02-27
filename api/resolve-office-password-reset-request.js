@@ -16,6 +16,9 @@ const getBearerToken = (req) => {
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
+const REQUEST_EXPIRATION_MS = 15 * 60 * 1000;
+const REQUEST_EXPIRY_REASON =
+  "Request expired after 15 minutes without super admin action.";
 
 const resolveAppUrl = (req) => {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
@@ -40,6 +43,44 @@ const toDate = (value) => {
 const toIso = (value) => {
   const d = toDate(value);
   return d ? d.toISOString() : null;
+};
+
+const isPendingRequestExpired = (requestData) => {
+  const status = requestData?.status || "pending";
+  if (status !== "pending") return false;
+
+  const requestedAt = toDate(requestData?.requestedAt);
+  if (!requestedAt) return false;
+
+  return Date.now() - requestedAt.getTime() >= REQUEST_EXPIRATION_MS;
+};
+
+const archivePendingResetNotifications = async (db, admin, requestId, status) => {
+  if (!requestId) return;
+
+  const notificationsSnapshot = await db
+    .collection("adminNotifications")
+    .where("requestId", "==", requestId)
+    .where("type", "==", "password_reset_request")
+    .limit(30)
+    .get();
+
+  if (notificationsSnapshot.empty) return;
+
+  const batch = db.batch();
+  notificationsSnapshot.docs.forEach((doc) => {
+    batch.set(
+      doc.ref,
+      {
+        status,
+        archived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+  await batch.commit();
 };
 
 const ensureSuperRequester = async (admin, db, req) => {
@@ -130,6 +171,27 @@ export default async function handler(req, res) {
       });
     }
 
+    if (isPendingRequestExpired(requestData)) {
+      await requestRef.set(
+        {
+          status: "expired",
+          reason: requestData.reason || REQUEST_EXPIRY_REASON,
+          resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          resolvedByUid: null,
+          resolvedByEmail: "",
+          lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await archivePendingResetNotifications(db, admin, requestId, "expired");
+
+      return res.status(409).json({
+        success: false,
+        message:
+          "Reset request expired after 15 minutes without action. Ask the office admin to resend.",
+      });
+    }
+
     if (action === "reject") {
       const rejectedPayload = {
         status: "rejected",
@@ -141,6 +203,7 @@ export default async function handler(req, res) {
       };
 
       await requestRef.set(rejectedPayload, { merge: true });
+      await archivePendingResetNotifications(db, admin, requestId, "resolved");
       await db.collection("adminNotifications").add({
         type: "password_reset_request_rejected",
         status: "unread",
@@ -232,6 +295,7 @@ export default async function handler(req, res) {
       },
       { merge: true }
     );
+    await archivePendingResetNotifications(db, admin, requestId, "resolved");
 
     await db.collection("adminNotifications").add({
       type: "password_reset_request_approved",

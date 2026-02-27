@@ -20,6 +20,9 @@ const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REQUEST_DEDUPE_MS = 5 * 60 * 1000;
 const PUBLIC_COOLDOWN_MS = 10 * 1000;
+const REQUEST_EXPIRATION_MS = 15 * 60 * 1000;
+const REQUEST_EXPIRY_REASON =
+  "Request expired after 15 minutes without super admin action.";
 
 const requesterLastSeen = new Map();
 
@@ -33,6 +36,82 @@ const toDate = (value) => {
 const toIso = (value) => {
   const d = toDate(value);
   return d ? d.toISOString() : null;
+};
+
+const isPendingRequestExpired = (requestData, nowMs = Date.now()) => {
+  const status = requestData?.status || "pending";
+  if (status !== "pending") return false;
+
+  const requestedAt = toDate(requestData?.requestedAt);
+  if (!requestedAt) return false;
+
+  return nowMs - requestedAt.getTime() >= REQUEST_EXPIRATION_MS;
+};
+
+const archivePendingResetNotifications = async (db, admin, requestId) => {
+  if (!requestId) return;
+
+  const notificationsSnapshot = await db
+    .collection("adminNotifications")
+    .where("requestId", "==", requestId)
+    .where("type", "==", "password_reset_request")
+    .limit(30)
+    .get();
+
+  if (notificationsSnapshot.empty) return;
+
+  const batch = db.batch();
+  notificationsSnapshot.docs.forEach((doc) => {
+    batch.set(
+      doc.ref,
+      {
+        status: "expired",
+        archived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  await batch.commit();
+};
+
+const markResetRequestExpired = async (db, admin, requestId, existingData = {}) => {
+  if (!requestId) {
+    return {
+      ...(existingData || {}),
+      status: "expired",
+      reason: existingData?.reason || REQUEST_EXPIRY_REASON,
+    };
+  }
+
+  const reason = existingData?.reason || REQUEST_EXPIRY_REASON;
+  const requestRef = db.collection("passwordResetRequests").doc(requestId);
+  await requestRef.set(
+    {
+      status: "expired",
+      reason,
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedByUid: null,
+      resolvedByEmail: "",
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await archivePendingResetNotifications(db, admin, requestId);
+
+  const now = new Date();
+  return {
+    ...(existingData || {}),
+    status: "expired",
+    reason,
+    resolvedAt: now,
+    resolvedByUid: null,
+    resolvedByEmail: "",
+    lastUpdatedAt: now,
+  };
 };
 
 const findOfficeByIdentifier = async (db, identifier) => {
@@ -228,9 +307,15 @@ const listRequests = async (req, res, admin, db) => {
     .limit(200)
     .get();
 
-  const requests = requestsSnapshot.docs
-    .map((doc) => {
-      const data = doc.data() || {};
+  const nowMs = Date.now();
+  const requests = await Promise.all(
+    requestsSnapshot.docs.map(async (doc) => {
+      let data = doc.data() || {};
+
+      if (isPendingRequestExpired(data, nowMs)) {
+        data = await markResetRequestExpired(db, admin, doc.id, data);
+      }
+
       return {
         id: doc.id,
         officeId: data.officeId || null,
@@ -251,13 +336,15 @@ const listRequests = async (req, res, admin, db) => {
         lastUpdatedAt: toIso(data.lastUpdatedAt),
       };
     })
-    .filter((request) =>
-      statusFilter === "all" ? true : request.status === statusFilter
-    );
+  );
+
+  const filteredRequests = requests.filter((request) =>
+    statusFilter === "all" ? true : request.status === statusFilter
+  );
 
   return res.status(200).json({
     success: true,
-    requests,
+    requests: filteredRequests,
   });
 };
 
@@ -448,13 +535,22 @@ const getRequestStatus = async (req, res, admin, db) => {
   }
 
   const officeDoc = lookup.officeDoc;
-  const latestRequest = await getLatestResetRequestForOffice(db, officeDoc.id);
+  let latestRequest = await getLatestResetRequestForOffice(db, officeDoc.id);
   if (!latestRequest) {
     return res.status(200).json({
       success: true,
       status: "none",
       message: "No password reset request found.",
     });
+  }
+
+  if (isPendingRequestExpired(latestRequest)) {
+    latestRequest = await markResetRequestExpired(
+      db,
+      admin,
+      latestRequest.id,
+      latestRequest
+    );
   }
 
   const baseResponse = {
@@ -520,8 +616,11 @@ const getRequestStatus = async (req, res, admin, db) => {
 
   return res.status(200).json({
     ...baseResponse,
-    status: "pending",
-    message: "Your request is pending super admin approval.",
+    status: baseResponse.status === "expired" ? "expired" : "pending",
+    message:
+      baseResponse.status === "expired"
+        ? "Request expired. Please submit a new request."
+        : "Your request is pending super admin approval.",
   });
 };
 

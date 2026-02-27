@@ -1000,6 +1000,7 @@ const Offices = () => {
           alert("Request rejected.");
         }
       } catch (error) {
+        await loadPendingResetRequests();
         alert(`Failed to resolve request: ${error.message}`);
       } finally {
         setResetRequestActionId("");
@@ -1246,7 +1247,8 @@ const Offices = () => {
           <div>
             <h4 className="text-xl font-bold">Pending Password Reset Requests</h4>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Office admins submit username-based requests here for super admin approval.
+              Office admins submit username-based requests here for super admin approval. Unapproved
+              requests auto-expire after 15 minutes and are archived from active notifications.
             </p>
           </div>
           <button
