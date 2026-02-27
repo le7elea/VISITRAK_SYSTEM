@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import {
   getOfficePasswordResetRequestStatus,
+  lookupOfficePasswordResetAccount,
   requestOfficePasswordReset,
 } from "../lib/info.services";
 import bgImage from "../assets/patternBG.png";
@@ -11,6 +12,7 @@ import masidLogo from "../assets/bisulogo01.png";
 import fgIllustrator from "../assets/fg_illustrator.png";
 
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESET_STATUS_POLL_INTERVAL_MS = 5000;
 const RESET_TRACK_USERNAME_KEY = "office_reset_tracking_username";
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
@@ -35,7 +37,7 @@ const Modal = ({ show, title, message, onClose }) => {
 };
 
 const ForgotPassword = () => {
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -189,22 +191,29 @@ const ForgotPassword = () => {
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
-    const cleanUsername = username.trim().toLowerCase();
-    if (!cleanUsername) {
+    const cleanIdentifier = identifier.trim().toLowerCase();
+    if (!cleanIdentifier) {
       setModal({
         show: true,
-        title: "Missing Username",
-        message: "Please enter your username.",
+        title: "Missing Account",
+        message: "Please enter your username or email.",
       });
       return;
     }
 
-    if (!USERNAME_REGEX.test(cleanUsername)) {
+    const isEmailIdentifier = cleanIdentifier.includes("@");
+    const isValidIdentifier = isEmailIdentifier
+      ? EMAIL_REGEX.test(cleanIdentifier)
+      : USERNAME_REGEX.test(cleanIdentifier);
+
+    if (!isValidIdentifier) {
       setModal({
         show: true,
-        title: "Invalid Username",
+        title: "Invalid Account",
         message:
-          "Username must be 4-32 characters and can use lowercase letters, numbers, dot, underscore, and hyphen.",
+          isEmailIdentifier
+            ? "Please enter a valid email address."
+            : "Username must be 4-32 characters and can use lowercase letters, numbers, dot, underscore, and hyphen.",
       });
       return;
     }
@@ -212,13 +221,24 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      await requestOfficePasswordReset(cleanUsername);
-      setTrackedUsername(cleanUsername);
+      const lookup = await lookupOfficePasswordResetAccount(cleanIdentifier);
+      if (!lookup?.exists || !lookup?.usernameNormalized) {
+        setModal({
+          show: true,
+          title: "Account Not Found",
+          message: "No office account matched that username or email.",
+        });
+        return;
+      }
+
+      const resolvedUsername = lookup.usernameNormalized;
+      await requestOfficePasswordReset(resolvedUsername);
+      setTrackedUsername(resolvedUsername);
       setRequestAnchorTime(Date.now());
       setCurrentTimeMs(Date.now());
       setWatchModalOpen(true);
-      await loadRequestStatus(cleanUsername);
-      setUsername("");
+      await loadRequestStatus(resolvedUsername);
+      setIdentifier("");
     } catch (error) {
       console.error("Forgot password error:", error);
       setModal({
@@ -268,7 +288,7 @@ const ForgotPassword = () => {
             </div>
 
             <p className="text-gray-500 text-sm mb-10">
-              Enter your registered username below and we will send a secure reset request to the super admin.
+              Enter your registered username or email below and we will send a secure reset request to the super admin.
               Once approved, you can continue password reset using the one-time link.
             </p>
 
@@ -278,16 +298,16 @@ const ForgotPassword = () => {
                   htmlFor="username"
                   className="absolute -top-2.5 left-4 bg-white px-2 text-xs font-medium text-purple-700 z-10"
                 >
-                  Username *
+                  Username or Email *
                 </label>
 
                 <input
                   id="username"
                   type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
                   disabled={loading}
-                  placeholder={loading ? "Processing..." : "Enter your office username"}
+                  placeholder={loading ? "Processing..." : "Enter your office username or email"}
                   className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   required
                 />

@@ -15,6 +15,7 @@ const getBearerToken = (req) => {
 
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const normalizeIdentifier = (value = "") => value.trim().toLowerCase();
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REQUEST_DEDUPE_MS = 5 * 60 * 1000;
@@ -32,6 +33,76 @@ const toDate = (value) => {
 const toIso = (value) => {
   const d = toDate(value);
   return d ? d.toISOString() : null;
+};
+
+const findOfficeByIdentifier = async (db, identifier) => {
+  const normalizedIdentifier = normalizeIdentifier(identifier);
+  if (!normalizedIdentifier) {
+    return {
+      officeDoc: null,
+      usernameNormalized: "",
+    };
+  }
+
+  let officeDoc = null;
+
+  if (EMAIL_REGEX.test(normalizedIdentifier)) {
+    const byEmail = await db
+      .collection("offices")
+      .where("email", "==", normalizedIdentifier)
+      .where("role", "==", "office")
+      .limit(1)
+      .get();
+
+    if (!byEmail.empty) {
+      officeDoc = byEmail.docs[0];
+    }
+  }
+
+  if (!officeDoc) {
+    const usernameCandidate = normalizeUsername(normalizedIdentifier);
+    if (!USERNAME_REGEX.test(usernameCandidate)) {
+      return {
+        officeDoc: null,
+        usernameNormalized: "",
+      };
+    }
+
+    const byUsername = await db
+      .collection("offices")
+      .where("usernameNormalized", "==", usernameCandidate)
+      .where("role", "==", "office")
+      .limit(1)
+      .get();
+
+    if (!byUsername.empty) {
+      officeDoc = byUsername.docs[0];
+    }
+  }
+
+  if (!officeDoc) {
+    return {
+      officeDoc: null,
+      usernameNormalized: "",
+    };
+  }
+
+  const officeData = officeDoc.data() || {};
+  const resolvedUsername = normalizeUsername(
+    officeData.usernameNormalized || officeData.username || ""
+  );
+
+  if (!USERNAME_REGEX.test(resolvedUsername)) {
+    return {
+      officeDoc: null,
+      usernameNormalized: "",
+    };
+  }
+
+  return {
+    officeDoc,
+    usernameNormalized: resolvedUsername,
+  };
 };
 
 const getRequesterAddress = (req) => {
@@ -191,7 +262,9 @@ const listRequests = async (req, res, admin, db) => {
 };
 
 const createRequest = async (req, res, admin, db) => {
-  const usernameNormalized = normalizeUsername(req.body?.username || "");
+  const identifier = normalizeIdentifier(
+    req.body?.identifier || req.body?.username || ""
+  );
   const requesterAddress = getRequesterAddress(req);
 
   // Always return generic success to avoid username enumeration.
@@ -199,29 +272,24 @@ const createRequest = async (req, res, admin, db) => {
     res.status(200).json({
       success: true,
       message:
-        "If the username exists, a password reset request has been sent to the super admin.",
+        "If the account exists, a password reset request has been sent to the super admin.",
     });
 
-  if (!USERNAME_REGEX.test(usernameNormalized)) {
+  if (!identifier) {
     return genericResponse();
   }
 
-  if (!canCreatePublicRequest(`${requesterAddress}:${usernameNormalized}`)) {
+  if (!canCreatePublicRequest(`${requesterAddress}:${identifier}`)) {
     return genericResponse();
   }
 
-  const officeSnapshot = await db
-    .collection("offices")
-    .where("usernameNormalized", "==", usernameNormalized)
-    .where("role", "==", "office")
-    .limit(1)
-    .get();
-
-  if (officeSnapshot.empty) {
+  const lookup = await findOfficeByIdentifier(db, identifier);
+  if (!lookup.officeDoc || !lookup.usernameNormalized) {
     return genericResponse();
   }
 
-  const officeDoc = officeSnapshot.docs[0];
+  const officeDoc = lookup.officeDoc;
+  const usernameNormalized = lookup.usernameNormalized;
   const officeData = officeDoc.data() || {};
   const officeId = officeDoc.id;
 
@@ -289,6 +357,52 @@ const createRequest = async (req, res, admin, db) => {
   return genericResponse();
 };
 
+const lookupAccount = async (req, res, db) => {
+  const identifier = normalizeIdentifier(
+    req.body?.identifier || req.body?.username || ""
+  );
+
+  if (!identifier) {
+    return res.status(200).json({
+      success: true,
+      exists: false,
+      username: null,
+      usernameNormalized: null,
+      message: "No matching office account found.",
+    });
+  }
+
+  const lookup = await findOfficeByIdentifier(db, identifier);
+  if (!lookup.officeDoc || !lookup.usernameNormalized) {
+    return res.status(200).json({
+      success: true,
+      exists: false,
+      username: null,
+      usernameNormalized: null,
+      message: "No matching office account found.",
+    });
+  }
+
+  const officeData = lookup.officeDoc.data() || {};
+  if (officeData.status === "inactive") {
+    return res.status(200).json({
+      success: true,
+      exists: false,
+      username: null,
+      usernameNormalized: null,
+      message: "This office account is inactive.",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    exists: true,
+    username: officeData.username || lookup.usernameNormalized,
+    usernameNormalized: lookup.usernameNormalized,
+    message: "Office account found.",
+  });
+};
+
 const getLatestResetRequestForOffice = async (db, officeId) => {
   const requestsSnapshot = await db
     .collection("passwordResetRequests")
@@ -313,8 +427,10 @@ const getLatestResetRequestForOffice = async (db, officeId) => {
 };
 
 const getRequestStatus = async (req, res, admin, db) => {
-  const usernameNormalized = normalizeUsername(req.body?.username || "");
-  if (!USERNAME_REGEX.test(usernameNormalized)) {
+  const identifier = normalizeIdentifier(
+    req.body?.identifier || req.body?.username || ""
+  );
+  if (!identifier) {
     return res.status(200).json({
       success: true,
       status: "none",
@@ -322,14 +438,8 @@ const getRequestStatus = async (req, res, admin, db) => {
     });
   }
 
-  const officeSnapshot = await db
-    .collection("offices")
-    .where("usernameNormalized", "==", usernameNormalized)
-    .where("role", "==", "office")
-    .limit(1)
-    .get();
-
-  if (officeSnapshot.empty) {
+  const lookup = await findOfficeByIdentifier(db, identifier);
+  if (!lookup.officeDoc) {
     return res.status(200).json({
       success: true,
       status: "none",
@@ -337,7 +447,7 @@ const getRequestStatus = async (req, res, admin, db) => {
     });
   }
 
-  const officeDoc = officeSnapshot.docs[0];
+  const officeDoc = lookup.officeDoc;
   const latestRequest = await getLatestResetRequestForOffice(db, officeDoc.id);
   if (!latestRequest) {
     return res.status(200).json({
@@ -429,6 +539,9 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const intent = String(req.body?.intent || "").trim().toLowerCase();
+      if (intent === "lookup") {
+        return await lookupAccount(req, res, db);
+      }
       if (intent === "status") {
         return await getRequestStatus(req, res, admin, db);
       }

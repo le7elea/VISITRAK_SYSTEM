@@ -1576,6 +1576,46 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Public endpoint: check whether an office account exists by username or email.
+ */
+export const lookupOfficePasswordResetAccount = async (identifier) => {
+  const cleanIdentifier = String(identifier || "").trim().toLowerCase();
+  if (!cleanIdentifier) {
+    throw new Error("Username or email is required.");
+  }
+
+  const response = await fetch("/api/office-password-reset-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      intent: "lookup",
+      identifier: cleanIdentifier,
+    }),
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    // Ignore JSON parse errors and use fallback below.
+  }
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.message || "Failed to validate account.");
+  }
+
+  return {
+    success: true,
+    exists: payload.exists === true,
+    username: payload.username || "",
+    usernameNormalized: payload.usernameNormalized || "",
+    message: payload.message || "",
+  };
+};
+
+/**
  * Public endpoint: office admin submits a password reset request using username.
  */
 export const requestOfficePasswordReset = async (username) => {
