@@ -1607,6 +1607,47 @@ export const requestOfficePasswordReset = async (username) => {
 };
 
 /**
+ * Public endpoint: check the latest password reset request status by username.
+ */
+export const getOfficePasswordResetRequestStatus = async (username) => {
+  const cleanUsername = normalizeUsername(username);
+  if (!cleanUsername || !USERNAME_REGEX.test(cleanUsername)) {
+    return {
+      success: true,
+      status: "none",
+      message: "No password reset request found.",
+      resetLink: null,
+    };
+  }
+
+  const response = await fetch("/api/office-password-reset-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      intent: "status",
+      username: cleanUsername,
+    }),
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    // Ignore JSON parse errors and use fallback below.
+  }
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(
+      payload.message || "Failed to check password reset request status."
+    );
+  }
+
+  return payload;
+};
+
+/**
  * Super admin endpoint: list office password reset requests.
  */
 export const getOfficePasswordResetRequests = async (status = "all") => {

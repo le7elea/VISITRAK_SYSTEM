@@ -289,6 +289,132 @@ const createRequest = async (req, res, admin, db) => {
   return genericResponse();
 };
 
+const getLatestResetRequestForOffice = async (db, officeId) => {
+  const requestsSnapshot = await db
+    .collection("passwordResetRequests")
+    .where("officeId", "==", officeId)
+    .limit(30)
+    .get();
+
+  if (requestsSnapshot.empty) return null;
+
+  const requests = requestsSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() || {}),
+  }));
+
+  requests.sort((a, b) => {
+    const aDate = toDate(a.lastUpdatedAt) || toDate(a.requestedAt) || new Date(0);
+    const bDate = toDate(b.lastUpdatedAt) || toDate(b.requestedAt) || new Date(0);
+    return bDate.getTime() - aDate.getTime();
+  });
+
+  return requests[0] || null;
+};
+
+const getRequestStatus = async (req, res, admin, db) => {
+  const usernameNormalized = normalizeUsername(req.body?.username || "");
+  if (!USERNAME_REGEX.test(usernameNormalized)) {
+    return res.status(200).json({
+      success: true,
+      status: "none",
+      message: "No password reset request found.",
+    });
+  }
+
+  const officeSnapshot = await db
+    .collection("offices")
+    .where("usernameNormalized", "==", usernameNormalized)
+    .where("role", "==", "office")
+    .limit(1)
+    .get();
+
+  if (officeSnapshot.empty) {
+    return res.status(200).json({
+      success: true,
+      status: "none",
+      message: "No password reset request found.",
+    });
+  }
+
+  const officeDoc = officeSnapshot.docs[0];
+  const latestRequest = await getLatestResetRequestForOffice(db, officeDoc.id);
+  if (!latestRequest) {
+    return res.status(200).json({
+      success: true,
+      status: "none",
+      message: "No password reset request found.",
+    });
+  }
+
+  const baseResponse = {
+    success: true,
+    requestId: latestRequest.id || null,
+    requestedAt: toIso(latestRequest.requestedAt),
+    resolvedAt: toIso(latestRequest.resolvedAt),
+    status: latestRequest.status || "pending",
+    message: "Password reset request status fetched.",
+    resetLink: null,
+    expiresAt: null,
+  };
+
+  if (baseResponse.status === "approved") {
+    if (!latestRequest.resetLink) {
+      return res.status(200).json({
+        ...baseResponse,
+        status: "pending",
+        message: "Request approved. Finalizing reset link, please wait.",
+      });
+    }
+
+    const expiresAt = toDate(latestRequest.resetTokenExpiresAt);
+    const tokenExpired = !expiresAt || expiresAt.getTime() <= Date.now();
+    let tokenUsed = false;
+
+    if (!tokenExpired && latestRequest.resetTokenId) {
+      try {
+        const tokenDoc = await db
+          .collection("passwordResetTokens")
+          .doc(String(latestRequest.resetTokenId))
+          .get();
+        tokenUsed = tokenDoc.exists ? tokenDoc.data()?.used === true : true;
+      } catch {
+        tokenUsed = true;
+      }
+    }
+
+    if (tokenExpired || tokenUsed) {
+      return res.status(200).json({
+        ...baseResponse,
+        status: "expired",
+        message: "Reset link has expired. Please submit a new request.",
+      });
+    }
+
+    return res.status(200).json({
+      ...baseResponse,
+      status: "approved",
+      message: "Your request was approved. You can reset your password now.",
+      resetLink: latestRequest.resetLink || null,
+      expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    });
+  }
+
+  if (baseResponse.status === "rejected") {
+    return res.status(200).json({
+      ...baseResponse,
+      status: "rejected",
+      message: "Your request was rejected. Contact your super admin.",
+    });
+  }
+
+  return res.status(200).json({
+    ...baseResponse,
+    status: "pending",
+    message: "Your request is pending super admin approval.",
+  });
+};
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -302,6 +428,10 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "POST") {
+      const intent = String(req.body?.intent || "").trim().toLowerCase();
+      if (intent === "status") {
+        return await getRequestStatus(req, res, admin, db);
+      }
       return await createRequest(req, res, admin, db);
     }
 

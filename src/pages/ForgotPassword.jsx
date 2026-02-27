@@ -1,13 +1,18 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { requestOfficePasswordReset } from "../lib/info.services";
+import {
+  getOfficePasswordResetRequestStatus,
+  requestOfficePasswordReset,
+} from "../lib/info.services";
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/bisulogo01.png";
 import fgIllustrator from "../assets/fg_illustrator.png";
 
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
+const RESET_STATUS_POLL_INTERVAL_MS = 5000;
+const RESET_TRACK_USERNAME_KEY = "office_reset_tracking_username";
 
 const Modal = ({ show, title, message, onClose }) => {
   if (!show) return null;
@@ -31,6 +36,14 @@ const Modal = ({ show, title, message, onClose }) => {
 const ForgotPassword = () => {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusData, setStatusData] = useState(null);
+  const [trackedUsername, setTrackedUsername] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return (localStorage.getItem(RESET_TRACK_USERNAME_KEY) || "")
+      .trim()
+      .toLowerCase();
+  });
   const [modal, setModal] = useState({
     show: false,
     title: "",
@@ -38,6 +51,77 @@ const ForgotPassword = () => {
   });
 
   const navigate = useNavigate();
+
+  const loadRequestStatus = useCallback(
+    async (targetUsername, options = {}) => {
+      const cleanUsername = String(targetUsername || "").trim().toLowerCase();
+      if (!cleanUsername || !USERNAME_REGEX.test(cleanUsername)) {
+        setStatusData(null);
+        return;
+      }
+
+      const showLoader = options?.showLoader === true;
+      if (showLoader) {
+        setStatusLoading(true);
+      }
+
+      try {
+        const payload = await getOfficePasswordResetRequestStatus(cleanUsername);
+        setStatusData(payload || null);
+      } catch (error) {
+        console.error("Status check error:", error);
+      } finally {
+        if (showLoader) {
+          setStatusLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!trackedUsername) {
+      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
+      return;
+    }
+    localStorage.setItem(RESET_TRACK_USERNAME_KEY, trackedUsername);
+  }, [trackedUsername]);
+
+  useEffect(() => {
+    if (!trackedUsername) return;
+    loadRequestStatus(trackedUsername, { showLoader: true });
+  }, [trackedUsername, loadRequestStatus]);
+
+  useEffect(() => {
+    if (!trackedUsername) return;
+
+    let disposed = false;
+    const pollStatus = async () => {
+      if (document.visibilityState === "hidden") return;
+      if (disposed) return;
+      await loadRequestStatus(trackedUsername);
+    };
+
+    const intervalId = setInterval(
+      pollStatus,
+      RESET_STATUS_POLL_INTERVAL_MS
+    );
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        pollStatus();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      disposed = true;
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [trackedUsername, loadRequestStatus]);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -66,12 +150,14 @@ const ForgotPassword = () => {
 
     try {
       await requestOfficePasswordReset(cleanUsername);
+      setTrackedUsername(cleanUsername);
+      await loadRequestStatus(cleanUsername);
       setModal({
         show: true,
         title: "Request Submitted",
         message:
           `If "${cleanUsername}" exists, the super admin has been notified.\n\n` +
-          "Please wait for approval. Once approved, your super admin will provide your one-time reset link.",
+          "Keep this page open. Once approved, your reset link will appear automatically below.",
       });
       setUsername("");
     } catch (error) {
@@ -161,6 +247,47 @@ const ForgotPassword = () => {
                 )}
               </button>
             </form>
+
+            {trackedUsername && (
+              <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-purple-800">
+                    Request Status: {trackedUsername}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      loadRequestStatus(trackedUsername, { showLoader: true })
+                    }
+                    disabled={statusLoading}
+                    className="text-xs font-semibold text-purple-700 hover:text-purple-900 disabled:opacity-50"
+                  >
+                    {statusLoading ? "Checking..." : "Check now"}
+                  </button>
+                </div>
+
+                <p className="mt-2 text-sm text-purple-900">
+                  {statusData?.status === "approved" &&
+                    "Approved. You can reset your password now."}
+                  {statusData?.status === "pending" &&
+                    "Pending super admin approval. This updates automatically."}
+                  {statusData?.status === "rejected" &&
+                    "Rejected. Contact your super admin for assistance."}
+                  {statusData?.status === "expired" &&
+                    "Reset link expired. Submit a new request."}
+                  {!statusData?.status && "Checking request status..."}
+                </p>
+
+                {statusData?.status === "approved" && statusData?.resetLink && (
+                  <a
+                    href={statusData.resetLink}
+                    className="mt-3 inline-flex h-11 items-center justify-center rounded-lg bg-gradient-to-r from-[#5B3886] to-[#8B5AA8] px-5 text-sm font-semibold text-white hover:from-[#4A2D6B] hover:to-[#7A4998]"
+                  >
+                    RESET PASSWORD NOW
+                  </a>
+                )}
+              </div>
+            )}
 
             <div className="mt-8 pt-6 border-t border-gray-100">
               <button
