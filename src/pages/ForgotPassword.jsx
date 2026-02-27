@@ -230,6 +230,7 @@ const ForgotPassword = () => {
 
             <p className="text-gray-500 text-sm mb-10">
               Enter your registered email address below and we will send you a secure link to reset your password.
+              If your account uses a non-real/system email, contact the Super Admin to set a temporary password.
             </p>
 
             <form onSubmit={handleResetPassword} className="space-y-6">

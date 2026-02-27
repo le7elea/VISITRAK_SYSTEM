@@ -1113,41 +1113,56 @@ const Analytics = () => {
         cc2: [0, 0, 0, 0, 0],
         cc3: [0, 0, 0, 0],
       };
-      let hasCharterData = false;
 
-      officeVisits.forEach((visit) => {
-        [visit?.cc1Rating, visit?.cc2Rating, visit?.cc3Rating].forEach((rating, idx) => {
+      // Merge charter ratings per visit so missing CC fields can be filled
+      // from feedback/question ratings without double-counting the same visit.
+      const charterRatingsByVisit = new Map();
+
+      officeVisits.forEach((visit, visitIndex) => {
+        const key = visit?.id || `visit-${visitIndex}`;
+        charterRatingsByVisit.set(key, {
+          cc1Rating: visit?.cc1Rating ?? null,
+          cc2Rating: visit?.cc2Rating ?? null,
+          cc3Rating: visit?.cc3Rating ?? null,
+        });
+      });
+
+      officeFeedbacks.forEach((feedback, feedbackIndex) => {
+        const key = feedback?.visitId || feedback?.id || `feedback-${feedbackIndex}`;
+        const existingRatings = charterRatingsByVisit.get(key) || {
+          cc1Rating: null,
+          cc2Rating: null,
+          cc3Rating: null,
+        };
+
+        charterRatingsByVisit.set(key, {
+          cc1Rating:
+            existingRatings.cc1Rating ??
+            feedback?.cc1Rating ??
+            feedback?.questionRatings?.[0]?.rating ??
+            null,
+          cc2Rating:
+            existingRatings.cc2Rating ??
+            feedback?.cc2Rating ??
+            feedback?.questionRatings?.[1]?.rating ??
+            null,
+          cc3Rating:
+            existingRatings.cc3Rating ??
+            feedback?.cc3Rating ??
+            feedback?.questionRatings?.[2]?.rating ??
+            null,
+        });
+      });
+
+      let hasCharterData = false;
+      charterRatingsByVisit.forEach((ratings) => {
+        [ratings.cc1Rating, ratings.cc2Rating, ratings.cc3Rating].forEach((rating, idx) => {
           const normalized = normalizeCharterRating(rating, idx);
           if (!normalized) return;
           charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
           hasCharterData = true;
         });
       });
-
-      if (!hasCharterData) {
-        officeFeedbacks.forEach((feedback) => {
-          [feedback?.cc1Rating, feedback?.cc2Rating, feedback?.cc3Rating].forEach((rating, idx) => {
-            const normalized = normalizeCharterRating(rating, idx);
-            if (!normalized) return;
-            charterCounts[`cc${idx + 1}`][normalized - 1] += 1;
-            hasCharterData = true;
-          });
-        });
-      }
-
-      if (!hasCharterData) {
-        officeFeedbacks.forEach((feedback) => {
-          [0, 1, 2].forEach((questionIndex) => {
-            const normalized = normalizeCharterRating(
-              feedback?.questionRatings?.[questionIndex]?.rating,
-              questionIndex
-            );
-            if (!normalized) return;
-            charterCounts[`cc${questionIndex + 1}`][normalized - 1] += 1;
-            hasCharterData = true;
-          });
-        });
-      }
 
       const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
         const ratings = officeFeedbacks
@@ -1235,21 +1250,22 @@ const Analytics = () => {
   }, [officeAnalyticsRows]);
 
   const summaryOverallRow = useMemo(() => {
-    const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
-      const ratings = feedbackRecordsForPrint
-        .map((feedback) => normalizeFivePointRating(feedback?.questionRatings?.[index]?.rating))
-        .filter((value) => value !== null);
+    const rowsWithFeedback = officeAnalyticsRows.filter((row) => row.hasFeedbackData);
 
-      if (!ratings.length) return null;
-      return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
-    });
+    const averageValues = (values = []) => {
+      const numericValues = values.filter(
+        (value) => value !== null && value !== undefined && !Number.isNaN(value)
+      );
 
-    const meanSatisfaction = feedbackRecordsForPrint.length
-      ? feedbackRecordsForPrint.reduce((sum, feedback) => {
-          const rating = getNumericRating(feedback?.averageRating);
-          return sum + (rating || 0);
-        }, 0) / feedbackRecordsForPrint.length
-      : null;
+      if (!numericValues.length) return null;
+      return numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+    };
+
+    const dimensionMeans = Array.from({ length: 8 }, (_, index) =>
+      averageValues(rowsWithFeedback.map((row) => row.dimensionMeans[index]))
+    );
+
+    const meanSatisfaction = averageValues(rowsWithFeedback.map((row) => row.meanSatisfaction));
 
     return {
       customerCount: filteredVisits.length,
@@ -1257,7 +1273,7 @@ const Analytics = () => {
       meanSatisfaction,
       satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
     };
-  }, [feedbackRecordsForPrint, filteredVisits.length]);
+  }, [officeAnalyticsRows, filteredVisits.length]);
 
   const summaryPages = useMemo(() => {
     const rowsPerPage = 4;
@@ -1849,8 +1865,11 @@ const Analytics = () => {
               </div>
             );
 
-            const renderCsfTable = (rows, pageKey, showHeader = true) => (
-              <table className="w-full border-collapse analytics-table analytics-table-c">
+            const renderCsfTable = (rows, pageKey, showHeader = true) => {
+              const placeholderText = showHeader ? 'N/A' : '';
+
+              return (
+                <table className="w-full border-collapse analytics-table analytics-table-c">
                 <colgroup>
                   <col style={{ width: '16%' }} />
                   <col style={{ width: '18%' }} />
@@ -1886,17 +1905,18 @@ const Analytics = () => {
                       <td>{row.office}</td>
                       <td>{renderList(row.commendations)}</td>
                       <td>{renderList(row.suggestions)}</td>
-                      <td className="text-center">N/A</td>
-                      <td className="text-center">N/A</td>
-                      <td className="text-center">N/A</td>
-                      <td className="text-center">N/A</td>
-                      <td className="text-center">N/A</td>
-                      <td className="text-center">N/A</td>
+                      <td className="text-center">{placeholderText}</td>
+                      <td className="text-center">{placeholderText}</td>
+                      <td className="text-center">{placeholderText}</td>
+                      <td className="text-center">{placeholderText}</td>
+                      <td className="text-center">{placeholderText}</td>
+                      <td className="text-center">{placeholderText}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            );
+                </table>
+              );
+            };
 
             return (
               <>

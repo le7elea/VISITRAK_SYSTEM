@@ -1,7 +1,13 @@
 // pages/Offices.jsx
 import React, { useState, useEffect, useCallback, memo } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock } from "lucide-react";
-import { fetchOffices, addOffice, updateOffice, deleteOffice } from "../lib/info.services";
+import {
+  fetchOffices,
+  addOffice,
+  updateOffice,
+  deleteOffice,
+  adminResetOfficePassword,
+} from "../lib/info.services";
 
 const isValidEmail = (email) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -640,6 +646,7 @@ const Offices = () => {
   const [editNewStaff, setEditNewStaff] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
 
   // 🔹 Delete Modal
   const [deleteIndex, setDeleteIndex] = useState(null);
@@ -846,6 +853,72 @@ const Offices = () => {
   const handleEditStaffInput = useCallback((value) => {
     setEditNewStaff(toUppercase(value));
   }, [toUppercase]);
+
+  const generateTemporaryPassword = useCallback(() => {
+    const token = Math.random().toString(36).slice(-8).toUpperCase();
+    return `VisiTrak!${token}`;
+  }, []);
+
+  const handleAdminPasswordReset = useCallback(async () => {
+    if (!editData?.id) return;
+
+    if (editData.role === "super") {
+      alert("Super Admin passwords cannot be reset from this action.");
+      return;
+    }
+
+    const shouldProceed = window.confirm(
+      `Change password for "${editData.name}"?\n\nUse this when the account cannot receive a password reset email.`
+    );
+    if (!shouldProceed) return;
+
+    const suggestedPassword = generateTemporaryPassword();
+    const enteredPassword = window.prompt(
+      `Enter a new password for "${editData.name}" (minimum 8 characters):`,
+      suggestedPassword
+    );
+
+    if (enteredPassword === null) return;
+
+    const nextPassword = enteredPassword.trim();
+    if (nextPassword.length < 8) {
+      alert("Password must be at least 8 characters.");
+      return;
+    }
+
+    setResetPasswordLoading(true);
+
+    try {
+      const response = await adminResetOfficePassword(editData.id, nextPassword);
+
+      setOffices((prev) =>
+        prev.map((office) =>
+          office.id === editData.id
+            ? {
+                ...office,
+                passwordChanged: false,
+                passwordChangedAt: null,
+              }
+            : office
+        )
+      );
+
+      setEditData((prev) => ({
+        ...prev,
+        passwordChanged: false,
+        passwordChangedAt: null,
+      }));
+
+      const loginEmail = response?.data?.email || editData.email;
+      alert(
+        `Password updated successfully.\n\nOffice: ${editData.name}\nLogin Email: ${loginEmail}\nNew Password: ${nextPassword}\n\nShare this securely with the office admin.`
+      );
+    } catch (error) {
+      alert(`Failed to reset password: ${error.message}`);
+    } finally {
+      setResetPasswordLoading(false);
+    }
+  }, [editData, generateTemporaryPassword]);
 
   // 🔹 Add purpose to edit list
   const addPurposeToEditList = useCallback(() => {
@@ -1234,6 +1307,25 @@ const Offices = () => {
                           disabled={editLoading}
                         />
                       </div>
+
+                      {editData.role !== "super" && (
+                        <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50">
+                          <p className="text-sm font-medium text-amber-900">
+                            Password Recovery (No Real Email)
+                          </p>
+                          <p className="text-xs text-amber-800 mt-1">
+                            If this office account cannot receive reset emails, Super Admin can set a new password directly.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleAdminPasswordReset}
+                            disabled={editLoading || resetPasswordLoading}
+                            className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {resetPasswordLoading ? "Updating..." : "Change Password"}
+                          </button>
+                        </div>
+                      )}
 
                     </div>
                     

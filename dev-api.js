@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 
 import cleanupTokens from "./api/cleanup-tokens.js";
 import completePasswordReset from "./api/complete-password-reset.js";
+import adminResetOfficePassword from "./api/admin-reset-office-password.js";
 import createOfficeAccount from "./api/create-office-account.js";
 import debugFirebase from "./api/debug-firebase.js";
 import deleteOfficeAccount from "./api/delete-office-account.js";
@@ -14,6 +15,7 @@ import updateOfficeAccount from "./api/update-office-account.js";
 const PORT = Number(process.env.PORT || 5001);
 
 const routes = {
+  "/api/admin-reset-office-password": adminResetOfficePassword,
   "/api/create-office-account": createOfficeAccount,
   "/api/update-office-account": updateOfficeAccount,
   "/api/delete-office-account": deleteOfficeAccount,

@@ -1434,3 +1434,40 @@ export const deleteOfficeWithLog = async (id) => {
 export const addOfficeWithLog = async (office) => {
   return addOffice(office);
 };
+
+/**
+ * Super admin: set a temporary password for an office account.
+ */
+export const adminResetOfficePassword = async (officeId, newPassword) => {
+  if (!officeId) {
+    throw new Error("Office id is required.");
+  }
+
+  if (!newPassword || newPassword.trim().length < 8) {
+    throw new Error("Temporary password must be at least 8 characters.");
+  }
+
+  const response = await callProtectedApi("/api/admin-reset-office-password", "POST", {
+    id: officeId,
+    newPassword: newPassword.trim(),
+  });
+
+  const currentUser = getCurrentUser();
+  const officeName = response?.data?.name || "Office";
+  const officeEmail = response?.data?.email || "";
+
+  await createActivityLog({
+    title: "Office Password Reset",
+    description: `Super admin manually reset password for "${officeName}" (${officeEmail || "no email"})`,
+    office: officeName,
+    type: "password_reset",
+    userEmail: currentUser.email,
+    userName: currentUser.name,
+    userRole: currentUser.role,
+    resetOfficeId: officeId,
+    resetOfficeEmail: officeEmail,
+    action: "reset",
+  });
+
+  return response;
+};
