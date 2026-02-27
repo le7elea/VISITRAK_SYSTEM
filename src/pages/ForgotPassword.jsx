@@ -49,6 +49,10 @@ const ForgotPassword = () => {
       .trim()
       .toLowerCase();
   });
+  const [isRestoredTracking, setIsRestoredTracking] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean((localStorage.getItem(RESET_TRACK_USERNAME_KEY) || "").trim());
+  });
   const [modal, setModal] = useState({
     show: false,
     title: "",
@@ -134,8 +138,31 @@ const ForgotPassword = () => {
       setWatchModalOpen(false);
       return;
     }
+    if (isRestoredTracking && !statusData?.status) {
+      setWatchModalOpen(false);
+      return;
+    }
+    if (isRestoredTracking && statusData?.status === "approved") {
+      setWatchModalOpen(false);
+      return;
+    }
     setWatchModalOpen(true);
-  }, [trackedUsername]);
+  }, [trackedUsername, isRestoredTracking, statusData?.status]);
+
+  useEffect(() => {
+    if (!trackedUsername || !isRestoredTracking) return;
+    if (statusData?.status !== "approved") return;
+
+    setTrackedUsername("");
+    setStatusData(null);
+    setRequestAnchorTime(null);
+    setWatchModalOpen(false);
+    setIsRestoredTracking(false);
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
+    }
+  }, [trackedUsername, isRestoredTracking, statusData?.status]);
 
   useEffect(() => {
     if (!trackedUsername) return;
@@ -223,6 +250,7 @@ const ForgotPassword = () => {
     try {
       await requestOfficePasswordReset(cleanUsername);
       setTrackedUsername(cleanUsername);
+      setIsRestoredTracking(false);
       setRequestAnchorTime(Date.now());
       setCurrentTimeMs(Date.now());
       setWatchModalOpen(true);
@@ -242,6 +270,7 @@ const ForgotPassword = () => {
 
   const handleUseResetLink = () => {
     setTrackedUsername("");
+    setIsRestoredTracking(false);
     setStatusData(null);
     setRequestAnchorTime(null);
     setWatchModalOpen(false);
