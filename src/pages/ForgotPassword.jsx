@@ -43,16 +43,7 @@ const ForgotPassword = () => {
   const [watchModalOpen, setWatchModalOpen] = useState(false);
   const [requestAnchorTime, setRequestAnchorTime] = useState(null);
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
-  const [trackedUsername, setTrackedUsername] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return (localStorage.getItem(RESET_TRACK_USERNAME_KEY) || "")
-      .trim()
-      .toLowerCase();
-  });
-  const [isRestoredTracking, setIsRestoredTracking] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean((localStorage.getItem(RESET_TRACK_USERNAME_KEY) || "").trim());
-  });
+  const [trackedUsername, setTrackedUsername] = useState("");
   const [modal, setModal] = useState({
     show: false,
     title: "",
@@ -78,7 +69,6 @@ const ForgotPassword = () => {
 
   const elapsedMs = Math.max(0, currentTimeMs - getRequestAnchor());
   const remainingMsBeforeResend = Math.max(0, RESEND_COOLDOWN_MS - elapsedMs);
-  const isApprovedStatus = statusData?.status === "approved";
   const isPendingStatus =
     !statusData?.status || statusData.status === "pending" || statusData.status === "none";
   const canResend =
@@ -121,12 +111,9 @@ const ForgotPassword = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!trackedUsername || isApprovedStatus) {
-      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
-      return;
-    }
-    localStorage.setItem(RESET_TRACK_USERNAME_KEY, trackedUsername);
-  }, [trackedUsername, isApprovedStatus]);
+    // Clear legacy stored tracking to avoid reopening modal on page revisit.
+    localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
+  }, []);
 
   useEffect(() => {
     if (!trackedUsername) return;
@@ -138,31 +125,8 @@ const ForgotPassword = () => {
       setWatchModalOpen(false);
       return;
     }
-    if (isRestoredTracking && !statusData?.status) {
-      setWatchModalOpen(false);
-      return;
-    }
-    if (isRestoredTracking && statusData?.status === "approved") {
-      setWatchModalOpen(false);
-      return;
-    }
     setWatchModalOpen(true);
-  }, [trackedUsername, isRestoredTracking, statusData?.status]);
-
-  useEffect(() => {
-    if (!trackedUsername || !isRestoredTracking) return;
-    if (statusData?.status !== "approved") return;
-
-    setTrackedUsername("");
-    setStatusData(null);
-    setRequestAnchorTime(null);
-    setWatchModalOpen(false);
-    setIsRestoredTracking(false);
-
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
-    }
-  }, [trackedUsername, isRestoredTracking, statusData?.status]);
+  }, [trackedUsername]);
 
   useEffect(() => {
     if (!trackedUsername) return;
@@ -250,7 +214,6 @@ const ForgotPassword = () => {
     try {
       await requestOfficePasswordReset(cleanUsername);
       setTrackedUsername(cleanUsername);
-      setIsRestoredTracking(false);
       setRequestAnchorTime(Date.now());
       setCurrentTimeMs(Date.now());
       setWatchModalOpen(true);
@@ -270,7 +233,6 @@ const ForgotPassword = () => {
 
   const handleUseResetLink = () => {
     setTrackedUsername("");
-    setIsRestoredTracking(false);
     setStatusData(null);
     setRequestAnchorTime(null);
     setWatchModalOpen(false);
