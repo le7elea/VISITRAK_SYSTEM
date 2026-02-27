@@ -2,7 +2,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import {
+  signInWithCustomToken,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import {
   buildSessionUser,
@@ -20,7 +24,7 @@ import InputField from "../components/InputField";
 import RememberForgot from "../components/RememberForgot";
 
 const Login = ({ onLogin }) => {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -36,11 +40,14 @@ const Login = ({ onLogin }) => {
     setModalState({ isOpen: true, title, message });
   };
 
-  // Load remembered email only (never password).
+  // Load remembered identifier only (never password).
   useEffect(() => {
-    const rememberedEmail = localStorage.getItem("rememberedEmail");
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
+    const rememberedIdentifier =
+      localStorage.getItem("rememberedIdentifier") ||
+      localStorage.getItem("rememberedEmail");
+
+    if (rememberedIdentifier) {
+      setIdentifier(rememberedIdentifier);
       setRememberMe(true);
       return;
     }
@@ -51,8 +58,12 @@ const Login = ({ onLogin }) => {
 
     try {
       const parsed = JSON.parse(savedUser);
-      if (parsed?.email) {
-        setEmail(parsed.email);
+      if (parsed?.loginIdentifier) {
+        setIdentifier(parsed.loginIdentifier);
+      } else if (parsed?.username) {
+        setIdentifier(parsed.username);
+      } else if (parsed?.email) {
+        setIdentifier(parsed.email);
       }
     } catch (error) {
       console.error("Error parsing saved user:", error);
@@ -86,20 +97,57 @@ const Login = ({ onLogin }) => {
 
   const handleLoginClick = async (e) => {
     e?.preventDefault();
-    if (!email || !password) {
-      showModal("Missing information", "Please enter email and password.");
+    if (!identifier || !password) {
+      showModal("Missing information", "Please enter username/email and password.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const normalizedEmail = email.trim().toLowerCase();
-      const authResult = await signInWithEmailAndPassword(
-        auth,
-        normalizedEmail,
-        password
-      );
+      const normalizedIdentifier = identifier.trim().toLowerCase();
+      const isEmailLogin = normalizedIdentifier.includes("@");
+
+      let authResult = null;
+      if (isEmailLogin) {
+        authResult = await signInWithEmailAndPassword(
+          auth,
+          normalizedIdentifier,
+          password
+        );
+      } else {
+        const officeLoginResponse = await fetch("/api/office-login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: normalizedIdentifier,
+            password,
+          }),
+        });
+
+        let officeLoginPayload = {};
+        try {
+          officeLoginPayload = await officeLoginResponse.json();
+        } catch {
+          // Ignore parse failures and use fallback below.
+        }
+
+        if (!officeLoginResponse.ok || officeLoginPayload.success === false) {
+          throw new Error(
+            officeLoginPayload.message || "Invalid username/email or password."
+          );
+        }
+
+        const customToken = String(officeLoginPayload.customToken || "");
+        if (!customToken) {
+          throw new Error("Invalid username/email or password.");
+        }
+
+        authResult = await signInWithCustomToken(auth, customToken);
+      }
+
       const authUser = authResult.user;
 
       const officeProfile = await getOfficeProfileForAuthUser(authUser);
@@ -115,12 +163,19 @@ const Login = ({ onLogin }) => {
         throw new Error("Account is inactive. Please contact administrator.");
       }
 
+      if (isEmailLogin && officeProfile.role === "office") {
+        await signOut(auth);
+        throw new Error("Office admins must log in using username.");
+      }
+
       const userData = buildSessionUser(authUser, officeProfile);
       await createActivityLog(userData, "login");
 
       if (rememberMe) {
-        localStorage.setItem("rememberedEmail", normalizedEmail);
+        localStorage.setItem("rememberedIdentifier", normalizedIdentifier);
+        localStorage.removeItem("rememberedEmail");
       } else {
+        localStorage.removeItem("rememberedIdentifier");
         localStorage.removeItem("rememberedEmail");
       }
 
@@ -136,7 +191,7 @@ const Login = ({ onLogin }) => {
 
       let errorMessage = "Login failed. Please try again.";
       if (error.code === "auth/invalid-credential") {
-        errorMessage = "Invalid email or password.";
+        errorMessage = "Invalid username/email or password.";
       } else if (error.code === "auth/user-disabled") {
         errorMessage = "This account is disabled.";
       } else if (error.code === "auth/too-many-requests") {
@@ -181,10 +236,10 @@ const Login = ({ onLogin }) => {
 
           <InputField
             icon={emailIcon}
-            type="email"
+            type="text"
             placeholder="Email / Username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             disabled={loading}
           />
 

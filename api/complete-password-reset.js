@@ -1,4 +1,8 @@
 import { getAdmin } from "./_firebaseAdmin.js";
+import {
+  ensureAuthUser,
+  hashOfficePassword,
+} from "./_officeCredentials.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -7,6 +11,7 @@ const setCors = (res) => {
 };
 
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
 
 const isStrongPassword = (password = "") =>
   password.length >= 10 &&
@@ -27,15 +32,37 @@ const getOfficeDocRef = async (db, tokenData, email, uid) => {
     if (directDoc.exists) return directRef;
   }
 
+  const usernameNormalized = normalizeUsername(
+    tokenData?.usernameNormalized || tokenData?.username || ""
+  );
+  if (usernameNormalized) {
+    const byUsername = await db
+      .collection("offices")
+      .where("usernameNormalized", "==", usernameNormalized)
+      .limit(1)
+      .get();
+    if (!byUsername.empty) return byUsername.docs[0].ref;
+  }
+
   if (uid) {
     const byUidRef = db.collection("offices").doc(uid);
     const byUidDoc = await byUidRef.get();
     if (byUidDoc.exists) return byUidRef;
+
+    const byUidQuery = await db
+      .collection("offices")
+      .where("uid", "==", uid)
+      .limit(1)
+      .get();
+    if (!byUidQuery.empty) return byUidQuery.docs[0].ref;
   }
+
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) return null;
 
   const byEmail = await db
     .collection("offices")
-    .where("email", "==", normalizeEmail(email))
+    .where("email", "==", cleanEmail)
     .limit(1)
     .get();
 
@@ -61,10 +88,10 @@ export default async function handler(req, res) {
     const email = normalizeEmail(req.body?.email || "");
     const newPassword = String(req.body?.newPassword || "");
 
-    if (!token || !email || !newPassword) {
+    if (!token || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: "Token, email, and newPassword are required.",
+        message: "Token and newPassword are required.",
         error: "INVALID_INPUT",
       });
     }
@@ -99,7 +126,7 @@ export default async function handler(req, res) {
     const tokenData = tokenDoc.data() || {};
     const tokenEmail = normalizeEmail(tokenData.email || "");
 
-    if (!tokenEmail || tokenEmail !== email) {
+    if (email && tokenEmail && tokenEmail !== email) {
       return res.status(400).json({
         success: false,
         message: "Reset token does not match this email.",
@@ -124,71 +151,97 @@ export default async function handler(req, res) {
       });
     }
 
-    let userRecord = null;
-    try {
-      userRecord = await admin.auth().getUserByEmail(email);
-      await admin.auth().updateUser(userRecord.uid, { password: newPassword });
-    } catch (error) {
-      if (error.code !== "auth/user-not-found") {
-        throw error;
-      }
+    const officeRef = await getOfficeDocRef(
+      db,
+      tokenData,
+      email || tokenEmail,
+      tokenData?.uid || ""
+    );
+    const officeSnap = officeRef ? await officeRef.get() : null;
+    const officeData = officeSnap?.data() || null;
+    const officeRole = officeData?.role === "super" ? "super" : "office";
 
-      const officeRef = await getOfficeDocRef(db, tokenData, email, null);
-      const officeDoc = officeRef ? await officeRef.get() : null;
-      const officeData = officeDoc?.data() || {};
-      const role = officeData.role === "super" ? "super" : "office";
+    let usedByUid = null;
 
-      userRecord = await admin.auth().createUser({
-        email,
-        password: newPassword,
+    if (officeRef && officeData && officeRole === "office") {
+      const uid = String(officeData.uid || officeSnap.id);
+
+      await ensureAuthUser({
+        admin,
+        uid,
+        role: "office",
         displayName: officeData.name || officeData.officialName || "Office User",
         disabled: officeData.status === "inactive",
+        email: null,
       });
-      await admin.auth().setCustomUserClaims(userRecord.uid, { role });
 
-      if (officeRef) {
-        await officeRef.set(
+      await officeRef.set(
+        {
+          uid,
+          ...hashOfficePassword(newPassword),
+          credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          passwordChanged: true,
+          passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          password: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
+      );
+
+      usedByUid = uid;
+    } else {
+      const fallbackEmail = normalizeEmail(email || tokenEmail || "");
+      if (!fallbackEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Token is missing account context.",
+          error: "TOKEN_CONTEXT_MISSING",
+        });
+      }
+
+      let userRecord = null;
+      try {
+        userRecord = await admin.auth().getUserByEmail(fallbackEmail);
+      } catch (lookupError) {
+        if (lookupError.code === "auth/user-not-found") {
+          return res.status(404).json({
+            success: false,
+            message: "Account not found for this reset link.",
+            error: "ACCOUNT_NOT_FOUND",
+          });
+        }
+        throw lookupError;
+      }
+
+      await admin.auth().updateUser(userRecord.uid, { password: newPassword });
+      usedByUid = userRecord.uid;
+
+      const legacyOfficeRef =
+        officeRef || (await getOfficeDocRef(db, tokenData, fallbackEmail, userRecord.uid));
+      if (legacyOfficeRef) {
+        await legacyOfficeRef.set(
           {
             uid: userRecord.uid,
-            email,
-            role,
+            email: fallbackEmail,
+            passwordChanged: true,
+            passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            password: admin.firestore.FieldValue.delete(),
           },
           { merge: true }
         );
       }
     }
 
-    const officeRef = await getOfficeDocRef(db, tokenData, email, userRecord.uid);
-
-    const writes = [
-      tokenDoc.ref.set(
-        {
-          used: true,
-          usedAt: admin.firestore.FieldValue.serverTimestamp(),
-          usedByUid: userRecord.uid,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      ),
-    ];
-
-    if (officeRef) {
-      writes.push(
-        officeRef.set(
-          {
-            uid: userRecord.uid,
-            email,
-            passwordChanged: true,
-            passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        )
-      );
-    }
-
-    await Promise.all(writes);
+    await tokenDoc.ref.set(
+      {
+        used: true,
+        usedAt: admin.firestore.FieldValue.serverTimestamp(),
+        usedByUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     return res.status(200).json({
       success: true,
@@ -203,4 +256,3 @@ export default async function handler(req, res) {
     });
   }
 }
-

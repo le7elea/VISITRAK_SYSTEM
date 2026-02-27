@@ -7,10 +7,15 @@ import {
   updateOffice,
   deleteOffice,
   adminResetOfficePassword,
+  getOfficePasswordResetRequests,
+  resolveOfficePasswordResetRequest,
 } from "../lib/info.services";
 
 const isValidEmail = (email) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidUsername = (username) =>
+  /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/.test((username || "").trim().toLowerCase());
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
 
 // ==================== MEMOIZED COMPONENTS ====================
 
@@ -52,7 +57,8 @@ const EmailDisplay = memo(({ email }) => {
 });
 EmailDisplay.displayName = 'EmailDisplay';
 
-const StatItem = memo(({ icon: Icon, label, value, color = "gray" }) => {
+const StatItem = memo(({ icon, label, value, color = "gray" }) => {
+  const IconComponent = icon;
   const colorClasses = {
     gray: "bg-gray-50 text-gray-600",
     purple: "bg-purple-50 text-purple-600",
@@ -64,7 +70,7 @@ const StatItem = memo(({ icon: Icon, label, value, color = "gray" }) => {
   return (
     <div className="flex items-center gap-2">
       <div className={`p-1.5 rounded-md ${colorClasses[color]}`}>
-        <Icon size={14} />
+        <IconComponent size={14} />
       </div>
       <div>
         <p className="text-xs text-gray-500">{label}</p>
@@ -76,9 +82,6 @@ const StatItem = memo(({ icon: Icon, label, value, color = "gray" }) => {
 StatItem.displayName = 'StatItem';
 
 const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
-  // Helper function to convert to uppercase
-  const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
-
   // Smart date formatter
   const formatDate = useCallback((timestamp) => {
     if (!timestamp) return "Just now";
@@ -105,7 +108,7 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
         month: 'short',
         day: 'numeric'
       });
-    } catch (error) {
+    } catch {
       return "Just now";
     }
   }, []);
@@ -123,9 +126,6 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
       </span>
     );
   }, []);
-
-  const defaultPassword = office.role === "super" ? "superadmin2025" : "officeadmin2025";
-  const passwordAlreadyChanged = office.passwordChanged === true;
 
   return (
     <div className={`bg-white rounded-2xl border p-6 transition-all duration-300 hover:shadow-xl group flex flex-col dark:bg-gray-800 ${
@@ -200,9 +200,9 @@ const OfficeCard = memo(({ office, index, onEdit, onDelete }) => {
       {/* Office Info Stats - Minimal Grid */}
       <div className="grid grid-cols-2 gap-4 mb-6 dark:text-white">
         <StatItem 
-          icon={Mail} 
-          label="Email" 
-          value={office.email ? office.email.split('@')[0] : "N/A"} 
+          icon={office.role === "super" ? Mail : Hash} 
+          label={office.role === "super" ? "Email" : "Username"} 
+          value={office.role === "super" ? (office.email || "N/A") : (office.username || "N/A")} 
           color={office.role === "super" ? "purple" : "purple"}
         />
         <StatItem 
@@ -245,6 +245,7 @@ const AddOfficeModal = memo(({
   onNewPurposeChange,
   newStaff,
   onNewStaffChange,
+  error,
   loading
 }) => {
   if (!show) return null;
@@ -368,6 +369,14 @@ const AddOfficeModal = memo(({
         </div>
         
         <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="text-red-500" size={20} />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            </div>
+          )}
           <div className="space-y-8">
             {/* Basic Information */}
             <div className="bg-gray-50 rounded-2xl p-6">
@@ -395,21 +404,26 @@ const AddOfficeModal = memo(({
                     
                   </div>
                   <div className="mt-4">
-  <label className="text-sm font-medium text-gray-700 block mb-2">
-    Office Email <span className="text-red-500">*</span>
-  </label>
-
-  <input
-    type="email"
-    value={data.email}
-    onChange={(e) =>
-      onDataChange({ ...data, email: e.target.value.toLowerCase() })
-    }
-    className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-    placeholder="office@example.com"
-    disabled={loading}
-  />
-</div>
+                    <label className="text-sm font-medium text-gray-700 block mb-2">
+                      Username <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={data.username || ""}
+                      onChange={(e) =>
+                        onDataChange({ ...data, username: normalizeUsername(e.target.value) })
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                      placeholder="office.username"
+                      disabled={loading}
+                    />
+                    <p className="mt-2 text-xs text-gray-500">
+                      Login identifier for this office admin.
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Login uses username only. No email is required for office admins.
+                    </p>
+                  </div>
 
                 </div>
                 
@@ -471,7 +485,7 @@ const AddOfficeModal = memo(({
                         </div>
                         <p className="text-xs text-gray-500">Limited to specific office functions and data</p>
                         <p className="text-xs text-blue-500 font-medium mt-2">
-                          ℹ️ All new offices are created as Office Admins.
+                          â„¹ï¸ All new offices are created as Office Admins.
                         </p>
                       </div>
                     </div>
@@ -616,12 +630,13 @@ const Offices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔹 Add Office Modal
+  // ðŸ”¹ Add Office Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [addData, setAddData] = useState({ 
     name: "", 
     officialName: "", 
-    email: "", 
+    username: "",
+    email: "",
     role: "office", // Always "office" for new offices
     purposes: [],
     staffToVisit: []
@@ -631,12 +646,13 @@ const Offices = () => {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
 
-  // 🔹 Edit Modal
+  // ðŸ”¹ Edit Modal
   const [editIndex, setEditIndex] = useState(null);
   const [editData, setEditData] = useState({ 
     id: "", 
     name: "", 
     officialName: "", 
+    username: "",
     email: "", 
     role: "office",
     purposes: [],
@@ -647,38 +663,45 @@ const Offices = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetRequests, setResetRequests] = useState([]);
+  const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
+  const [resetRequestActionId, setResetRequestActionId] = useState("");
 
-  // 🔹 Delete Modal
+  // ðŸ”¹ Delete Modal
   const [deleteIndex, setDeleteIndex] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
 
-  // 🔹 Helper functions with useCallback
+  // ðŸ”¹ Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
-  
-  // 🔹 Generate email from name
-  const generateEmailFromName = useCallback((name) => {
-    if (!name || !name.trim()) return "";
-    
-    // Convert name to lowercase, remove spaces and special characters
-    const emailPart = name
-      .toLowerCase()
-      .replace(/\s+/g, '.')  // Replace spaces with dots
-      .replace(/[^a-z0-9.]/g, '')  // Remove non-alphanumeric except dots
-      .replace(/\.+/g, '.')  // Replace multiple dots with single dot
-      .replace(/^\.|\.$/g, ''); // Remove leading/trailing dots
-      
-    return emailPart ? `${emailPart}@gmail.com` : "";
-  }, []);
 
-  // 🔹 Load offices from Firestore
+  const loadPendingResetRequests = useCallback(async () => {
+    try {
+      setResetRequestsLoading(true);
+      const pendingRequests = await getOfficePasswordResetRequests("pending");
+      setResetRequests(pendingRequests);
+    } catch (error) {
+      console.error("Error loading reset requests:", error);
+    } finally {
+      setResetRequestsLoading(false);
+    }
+  }, []);
+  // Load offices first; reset requests are best-effort so they never block page load.
   useEffect(() => {
-    const loadOffices = async () => {
+    const loadInitialData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchOffices();
-        setOffices(data);
+        const officeData = await fetchOffices();
+        setOffices(officeData);
+
+        try {
+          const pendingRequests = await getOfficePasswordResetRequests("pending");
+          setResetRequests(pendingRequests);
+        } catch (resetError) {
+          console.error("Error loading reset requests:", resetError);
+          setResetRequests([]);
+        }
       } catch (err) {
         console.error("Error loading offices:", err);
         setError(`Failed to load offices: ${err.message}`);
@@ -686,39 +709,27 @@ const Offices = () => {
         setLoading(false);
       }
     };
-    loadOffices();
+    loadInitialData();
   }, []);
 
-  // 🔹 Reset delete confirmation when modal closes
+  // ðŸ”¹ Reset delete confirmation when modal closes
   useEffect(() => {
     if (deleteIndex === null) {
       setDeleteConfirmed(false);
     }
   }, [deleteIndex]);
 
-  // 🔹 Handle add office name change
-  const handleAddNameChange = useCallback((value) => {
-    const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value);
-    
-    setAddData(prev => ({
-      ...prev,
-      name: uppercaseName,
-      email: generatedEmail
-    }));
-  }, [toUppercase, generateEmailFromName]);
-
-  // 🔹 Handle add purpose input
+  // ðŸ”¹ Handle add purpose input
   const handleAddPurposeInput = useCallback((value) => {
     setNewPurpose(toUppercase(value));
   }, [toUppercase]);
 
-  // 🔹 Handle add staff input
+  // ðŸ”¹ Handle add staff input
   const handleAddStaffInput = useCallback((value) => {
     setNewStaff(toUppercase(value));
   }, [toUppercase]);
 
-  // 🔹 OPTIMIZED: Add Office - Update local state immediately
+  // ðŸ”¹ OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
     if (!addData.name.trim()) {
       setAddError("Office name is required");
@@ -730,17 +741,18 @@ const Offices = () => {
       return;
     }
 
-    if (!isValidEmail(addData.email)) {
-      setAddError("Invalid email address");
+    const normalizedUsername = normalizeUsername(addData.username || "");
+    if (!isValidUsername(normalizedUsername)) {
+      setAddError("Invalid username format");
       return;
     }
     
-    const emailExists = offices.some(office => 
-      office.email && office.email.toLowerCase() === addData.email.toLowerCase()
+    const usernameExists = offices.some(office =>
+      office.username && office.username.toLowerCase() === normalizedUsername
     );
     
-    if (emailExists) {
-      setAddError("An office with this email already exists");
+    if (usernameExists) {
+      setAddError("An office with this username already exists");
       return;
     }
     
@@ -754,7 +766,8 @@ const Offices = () => {
         id: tempId,
         name: addData.name,
         officialName: addData.officialName,
-        email: addData.email,
+        username: normalizedUsername,
+        email: "",
         role: "office", // Always office admin
         passwordChanged: false,
         passwordChangedAt: null,
@@ -771,6 +784,7 @@ const Offices = () => {
       setAddData({ 
         name: "", 
         officialName: "",
+        username: "",
         email: "", 
         role: "office",
         purposes: [],
@@ -786,6 +800,7 @@ const Offices = () => {
         try {
           const newOffice = await addOffice({
             ...addData,
+            username: normalizedUsername,
             role: "office" // Ensure it's office admin
           });
           
@@ -810,7 +825,7 @@ const Offices = () => {
     }
   }, [addData, offices]);
 
-  // 🔹 Open edit modal
+  // ðŸ”¹ Open edit modal
   const openEditModal = useCallback((index) => {
     if (index >= 0 && index < offices.length) {
       const office = offices[index];
@@ -819,6 +834,7 @@ const Offices = () => {
         id: office.id,
         name: office.name || "",
         officialName: office.officialName || "",
+        username: office.username || "",
         email: office.email || "",
         role: office.role || "office", // Preserve original role
         passwordChanged: office.passwordChanged === true,
@@ -832,24 +848,22 @@ const Offices = () => {
     }
   }, [offices]);
 
-  // 🔹 Handle edit office name change
+  // ðŸ”¹ Handle edit office name change
   const handleEditNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
-    const generatedEmail = generateEmailFromName(value);
-    
+
     setEditData(prev => ({
       ...prev,
-      name: uppercaseName,
-      email: generatedEmail
+      name: uppercaseName
     }));
-  }, [toUppercase, generateEmailFromName]);
+  }, [toUppercase]);
 
-  // 🔹 Handle edit purpose input
+  // ðŸ”¹ Handle edit purpose input
   const handleEditPurposeInput = useCallback((value) => {
     setEditNewPurpose(toUppercase(value));
   }, [toUppercase]);
 
-  // 🔹 Handle edit staff input
+  // ðŸ”¹ Handle edit staff input
   const handleEditStaffInput = useCallback((value) => {
     setEditNewStaff(toUppercase(value));
   }, [toUppercase]);
@@ -868,7 +882,7 @@ const Offices = () => {
     }
 
     const shouldProceed = window.confirm(
-      `Change password for "${editData.name}"?\n\nUse this when the account cannot receive a password reset email.`
+      `Change password for "${editData.name}"?\n\nUse this when the account admin forgot the password.`
     );
     if (!shouldProceed) return;
 
@@ -909,9 +923,9 @@ const Offices = () => {
         passwordChangedAt: null,
       }));
 
-      const loginEmail = response?.data?.email || editData.email;
+      const loginUsername = response?.data?.username || editData.username;
       alert(
-        `Password updated successfully.\n\nOffice: ${editData.name}\nLogin Email: ${loginEmail}\nNew Password: ${nextPassword}\n\nShare this securely with the office admin.`
+        `Password updated successfully.\n\nOffice: ${editData.name}\nLogin Username: ${loginUsername || "N/A"}\nNew Password: ${nextPassword}\n\nShare this securely with the office admin.`
       );
     } catch (error) {
       alert(`Failed to reset password: ${error.message}`);
@@ -920,7 +934,45 @@ const Offices = () => {
     }
   }, [editData, generateTemporaryPassword]);
 
-  // 🔹 Add purpose to edit list
+
+  const handleResolveResetRequest = useCallback(
+    async (requestId, action) => {
+      if (!requestId) return;
+
+      const isApprove = action === "approve";
+      const confirmed = window.confirm(
+        isApprove
+          ? "Approve this request? A one-time reset link will be generated."
+          : "Reject this password reset request?"
+      );
+      if (!confirmed) return;
+
+      setResetRequestActionId(requestId);
+      try {
+        const response = await resolveOfficePasswordResetRequest(requestId, action);
+        await loadPendingResetRequests();
+
+        if (isApprove && response?.resetLink) {
+          try {
+            await navigator.clipboard.writeText(response.resetLink);
+            alert(
+              `Request approved.\n\nReset link copied to clipboard.\nExpires at: ${response.expiresAt || "15 minutes from approval"}`
+            );
+          } catch {
+            alert(`Request approved.\n\nReset link:\n${response.resetLink}`);
+          }
+        } else {
+          alert("Request rejected.");
+        }
+      } catch (error) {
+        alert(`Failed to resolve request: ${error.message}`);
+      } finally {
+        setResetRequestActionId("");
+      }
+    },
+    [loadPendingResetRequests]
+  );
+  // Add purpose to edit list
   const addPurposeToEditList = useCallback(() => {
     if (editNewPurpose.trim() === "") return;
     
@@ -934,7 +986,7 @@ const Offices = () => {
     setEditNewPurpose("");
   }, [editNewPurpose, toUppercase]);
 
-  // 🔹 Remove purpose from edit list
+  // ðŸ”¹ Remove purpose from edit list
   const removePurposeFromEditList = useCallback((id) => {
     setEditData(prev => ({
       ...prev,
@@ -942,7 +994,7 @@ const Offices = () => {
     }));
   }, []);
 
-  // 🔹 Add staff to edit list
+  // ðŸ”¹ Add staff to edit list
   const addStaffToEditList = useCallback(() => {
     if (editNewStaff.trim() === "") return;
     
@@ -956,7 +1008,7 @@ const Offices = () => {
     setEditNewStaff("");
   }, [editNewStaff, toUppercase]);
 
-  // 🔹 Remove staff from edit list
+  // ðŸ”¹ Remove staff from edit list
   const removeStaffFromEditList = useCallback((id) => {
     setEditData(prev => ({
       ...prev,
@@ -964,7 +1016,7 @@ const Offices = () => {
     }));
   }, []);
 
-  // 🔹 OPTIMIZED: Save edit - Update local state immediately
+  // ðŸ”¹ OPTIMIZED: Save edit - Update local state immediately
   const saveEdit = useCallback(async () => {
     if (editIndex === null) return;
     
@@ -973,25 +1025,44 @@ const Offices = () => {
       return;
     }
 
-    if (!isValidEmail(editData.email)) {
-      setEditError("Invalid email address");
-      return;
-    }
-    
     if (!editData.officialName.trim()) {
       setEditError("Official office name is required");
       return;
     }
-    
-    const emailExists = offices.some((office, index) => 
-      index !== editIndex && 
-      office.email && 
-      office.email.toLowerCase() === editData.email.toLowerCase()
-    );
-    
-    if (emailExists) {
-      setEditError("An office with this email already exists");
-      return;
+
+    const normalizedUsername = normalizeUsername(editData.username || "");
+    if (editData.role === "super") {
+      if (!isValidEmail(editData.email)) {
+        setEditError("Invalid email address");
+        return;
+      }
+
+      const emailExists = offices.some((office, index) =>
+        index !== editIndex &&
+        office.email &&
+        office.email.toLowerCase() === editData.email.toLowerCase()
+      );
+
+      if (emailExists) {
+        setEditError("An office with this email already exists");
+        return;
+      }
+    } else {
+      if (!isValidUsername(normalizedUsername)) {
+        setEditError("Invalid username format");
+        return;
+      }
+
+      const usernameExists = offices.some((office, index) =>
+        index !== editIndex &&
+        office.username &&
+        office.username.toLowerCase() === normalizedUsername
+      );
+
+      if (usernameExists) {
+        setEditError("An office with this username already exists");
+        return;
+      }
     }
     
     setEditLoading(true);
@@ -1003,7 +1074,11 @@ const Offices = () => {
         id: editData.id,
         name: editData.name,
         officialName: editData.officialName,
-        email: editData.email,
+        username: editData.role === "super" ? "" : normalizedUsername,
+        email:
+          editData.role === "super"
+            ? editData.email
+            : "",
         role: editData.role, // Keep original role (super or office)
         passwordChanged: editData.passwordChanged === true,
         passwordChangedAt: editData.passwordChangedAt || null,
@@ -1042,14 +1117,14 @@ const Offices = () => {
     }
   }, [editIndex, editData, offices]);
 
-  // 🔹 OPTIMIZED: Confirm delete - Update local state immediately
+  // ðŸ”¹ OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
     if (deleteIndex === null || !deleteConfirmed) return;
     
     const officeToDelete = offices[deleteIndex];
     if (!officeToDelete || !officeToDelete.id) return;
     
-    // 🔹 PREVENT deleting super admin
+    // ðŸ”¹ PREVENT deleting super admin
     if (officeToDelete.role === "super") {
       alert("Super Admin accounts cannot be deleted. This account is protected.");
       setDeleteIndex(null);
@@ -1093,6 +1168,19 @@ const Offices = () => {
     }
   }, [deleteIndex, deleteConfirmed, offices]);
 
+  const formatResetRequestTime = useCallback((value) => {
+    if (!value) return "Unknown time";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Unknown time";
+    return parsed.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -1115,6 +1203,67 @@ const Offices = () => {
               Add Office
             </button>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl p-6 bg-white text-black border border-[#5B2D8B] dark:border-purple-600 dark:bg-gray-800 dark:text-gray-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h4 className="text-xl font-bold">Pending Password Reset Requests</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Office admins submit username-based requests here for super admin approval.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadPendingResetRequests}
+            className="px-3 py-2 rounded-lg bg-purple-100 text-purple-800 hover:bg-purple-200 text-sm font-semibold transition"
+            disabled={resetRequestsLoading}
+          >
+            {resetRequestsLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {resetRequestsLoading ? (
+            <p className="text-sm text-gray-500">Loading reset requests...</p>
+          ) : resetRequests.length === 0 ? (
+            <p className="text-sm text-gray-500">No pending reset requests.</p>
+          ) : (
+            resetRequests.map((request) => (
+              <div
+                key={request.id}
+                className="p-4 rounded-xl border border-gray-200 bg-gray-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+              >
+                <div>
+                  <p className="font-semibold text-gray-800">
+                    {request.officeName || "Office"} ({request.username || "N/A"})
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Requested: {formatResetRequestTime(request.requestedAt)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleResolveResetRequest(request.id, "reject")}
+                    disabled={resetRequestActionId === request.id}
+                    className="px-4 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-100 text-sm font-semibold disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResolveResetRequest(request.id, "approve")}
+                    disabled={resetRequestActionId === request.id}
+                    className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    {resetRequestActionId === request.id ? "Processing..." : "Approve & Generate Link"}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -1161,7 +1310,7 @@ const Offices = () => {
         </div>
       )}
 
-      {/* 🔹 ADD MODAL */}
+      {/* ðŸ”¹ ADD MODAL */}
       <AddOfficeModal 
         show={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -1172,10 +1321,11 @@ const Offices = () => {
         onNewPurposeChange={handleAddPurposeInput}
         newStaff={newStaff}
         onNewStaffChange={handleAddStaffInput}
+        error={addError}
         loading={addLoading}
       />
 
-      {/* 🔹 EDIT MODAL */}
+      {/* ðŸ”¹ EDIT MODAL */}
       {editIndex !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
@@ -1231,7 +1381,7 @@ const Offices = () => {
                     <Shield className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-purple-800 mb-1">
-                        ⚠️ Super Admin Account (Protected)
+                        Super Admin Account (Protected)
                       </p>
                       <p className="text-sm text-purple-700">
                         This is a protected Super Admin account. You can edit its details but cannot delete it or change its role.
@@ -1289,23 +1439,43 @@ const Offices = () => {
                         </div>
                       </div>
                       <div className="mt-4">
-                        <label className="text-sm font-medium text-gray-700 block mb-2">
-                          Email <span className="text-red-500">*</span>
-                        </label>
-
-                        <input
-                          type="email"
-                          value={editData.email}
-                          onChange={(e) =>
-                            setEditData(prev => ({ ...prev, email: e.target.value.toLowerCase() }))
-                          }
-                          className={`w-full px-4 py-3 border rounded-xl ${
-                            editData.role === "super" 
-                              ? "border-purple-300 focus:border-purple-500" 
-                              : "border-gray-300 focus:border-blue-500"
-                          }`}
-                          disabled={editLoading}
-                        />
+                        {editData.role === "super" ? (
+                          <>
+                            <label className="text-sm font-medium text-gray-700 block mb-2">
+                              Email <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="email"
+                              value={editData.email}
+                              onChange={(e) =>
+                                setEditData((prev) => ({ ...prev, email: e.target.value.toLowerCase() }))
+                              }
+                              className="w-full px-4 py-3 border rounded-xl border-purple-300 focus:border-purple-500"
+                              disabled={editLoading}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <label className="text-sm font-medium text-gray-700 block mb-2">
+                              Username <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={editData.username || ""}
+                              onChange={(e) =>
+                                setEditData((prev) => ({
+                                  ...prev,
+                                  username: normalizeUsername(e.target.value),
+                                }))
+                              }
+                              className="w-full px-4 py-3 border rounded-xl border-gray-300 focus:border-blue-500"
+                              disabled={editLoading}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Login uses username only. No email is required for office admins.
+                            </p>
+                          </>
+                        )}
                       </div>
 
                       {editData.role !== "super" && (
@@ -1314,7 +1484,7 @@ const Offices = () => {
                             Password Recovery (No Real Email)
                           </p>
                           <p className="text-xs text-amber-800 mt-1">
-                            If this office account cannot receive reset emails, Super Admin can set a new password directly.
+                            If this office admin forgot the password, Super Admin can set a new password directly.
                           </p>
                           <button
                             type="button"
@@ -1630,7 +1800,7 @@ const Offices = () => {
         </div>
       )}
 
-      {/* 🔹 DELETE MODAL */}
+      {/* ðŸ”¹ DELETE MODAL */}
       {deleteIndex !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
@@ -1654,7 +1824,11 @@ const Offices = () => {
                   </div>
                   <div className="text-left">
                     <h4 className="font-semibold text-gray-800">{offices[deleteIndex]?.name}</h4>
-                    <p className="text-sm text-gray-600">{offices[deleteIndex]?.email}</p>
+                    <p className="text-sm text-gray-600">
+                      {offices[deleteIndex]?.role === "super"
+                        ? offices[deleteIndex]?.email
+                        : offices[deleteIndex]?.username || offices[deleteIndex]?.email}
+                    </p>
                   </div>
                 </div>
                 
@@ -1694,7 +1868,7 @@ const Offices = () => {
                             month: 'short',
                             day: 'numeric'
                           });
-                        } catch (error) {
+                        } catch {
                           return "Just now";
                         }
                       })()}

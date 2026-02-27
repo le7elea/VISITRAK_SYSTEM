@@ -1,4 +1,9 @@
 import { getAdmin } from "./_firebaseAdmin.js";
+import {
+  ensureAuthUser,
+  hashOfficePassword,
+  isValidPassword,
+} from "./_officeCredentials.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -37,8 +42,6 @@ const ensureSuperRequester = async (admin, db, req) => {
   throw new Error("Not authorized");
 };
 
-const isValidPassword = (value) => typeof value === "string" && value.trim().length >= 8;
-
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -74,28 +77,27 @@ export default async function handler(req, res) {
     }
 
     const uid = officeData.uid || id;
+    const credentialFields = hashOfficePassword(newPassword.trim());
 
-    try {
-      await admin.auth().updateUser(uid, {
-        password: newPassword.trim(),
-        disabled: false,
-      });
-    } catch (error) {
-      if (error.code === "auth/user-not-found") {
-        return res.status(404).json({
-          success: false,
-          message: "Authentication account not found for this office.",
-        });
-      }
-      throw error;
-    }
+    await ensureAuthUser({
+      admin,
+      uid,
+      role: "office",
+      displayName: officeData.name || officeData.officialName || "Office User",
+      disabled: false,
+      email: null,
+    });
 
     await officeRef.update({
+      uid,
+      ...credentialFields,
+      credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       passwordChanged: false,
       passwordChangedAt: null,
       lastAdminPasswordResetAt: admin.firestore.FieldValue.serverTimestamp(),
       lastAdminPasswordResetBy: requester.uid || null,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      password: admin.firestore.FieldValue.delete(),
     });
 
     return res.status(200).json({
@@ -104,7 +106,8 @@ export default async function handler(req, res) {
       data: {
         id,
         uid,
-        email: officeData.email || null,
+        email: null,
+        username: officeData.username || null,
         name: officeData.name || null,
       },
     });

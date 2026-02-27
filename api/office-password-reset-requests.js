@@ -1,0 +1,322 @@
+import sgMail from "@sendgrid/mail";
+import { getAdmin } from "./_firebaseAdmin.js";
+
+const setCors = (res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+};
+
+const getBearerToken = (req) => {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Bearer ")) return null;
+  return header.slice(7);
+};
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REQUEST_DEDUPE_MS = 5 * 60 * 1000;
+const PUBLIC_COOLDOWN_MS = 10 * 1000;
+
+const requesterLastSeen = new Map();
+
+const toDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === "function") return value.toDate();
+  return null;
+};
+
+const toIso = (value) => {
+  const d = toDate(value);
+  return d ? d.toISOString() : null;
+};
+
+const getRequesterAddress = (req) => {
+  const ip =
+    req.headers["x-forwarded-for"] ||
+    req.connection?.remoteAddress ||
+    "unknown";
+  return String(ip).split(",")[0].trim();
+};
+
+const canCreatePublicRequest = (key) => {
+  const now = Date.now();
+  const previous = requesterLastSeen.get(key) || 0;
+  if (now - previous < PUBLIC_COOLDOWN_MS) return false;
+  requesterLastSeen.set(key, now);
+  return true;
+};
+
+const ensureSuperRequester = async (admin, db, req) => {
+  const token = getBearerToken(req);
+  if (!token) throw new Error("Missing bearer token");
+
+  const decoded = await admin.auth().verifyIdToken(token);
+  if (decoded.role === "super") return decoded;
+
+  const officeDoc = await db.collection("offices").doc(decoded.uid).get();
+  if (officeDoc.exists && officeDoc.data()?.role === "super") return decoded;
+
+  if (decoded.email) {
+    const byEmail = await db
+      .collection("offices")
+      .where("email", "==", normalizeEmail(decoded.email))
+      .where("role", "==", "super")
+      .limit(1)
+      .get();
+    if (!byEmail.empty) return decoded;
+  }
+
+  throw new Error("Not authorized");
+};
+
+const getSuperAdminEmails = async (db) => {
+  const emails = new Set();
+
+  const envEmails = String(process.env.SUPER_ADMIN_EMAIL || "")
+    .split(",")
+    .map((email) => normalizeEmail(email))
+    .filter((email) => EMAIL_REGEX.test(email));
+  envEmails.forEach((email) => emails.add(email));
+
+  const superDocs = await db
+    .collection("offices")
+    .where("role", "==", "super")
+    .limit(20)
+    .get();
+
+  superDocs.forEach((doc) => {
+    const data = doc.data() || {};
+    const email = normalizeEmail(data.email || "");
+    if (EMAIL_REGEX.test(email)) emails.add(email);
+  });
+
+  return Array.from(emails);
+};
+
+const sendSuperAdminAlert = async ({ superAdminEmails, officeName, username }) => {
+  if (!process.env.SENDGRID_API_KEY || !process.env.SENDGRID_FROM_EMAIL) return;
+  if (!Array.isArray(superAdminEmails) || superAdminEmails.length === 0) return;
+
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL ||
+    "https://visitrak-system.vercel.app";
+  const dashboardLink = appUrl.startsWith("http")
+    ? `${appUrl}/dashboard`
+    : `https://${appUrl}/dashboard`;
+
+  const message = {
+    to: superAdminEmails,
+    from: {
+      email: process.env.SENDGRID_FROM_EMAIL,
+      name: "VisiTrak System",
+    },
+    subject: "Office Password Reset Approval Required",
+    text: `A password reset request was submitted for office "${officeName}" (username: ${username}). Review it in your dashboard: ${dashboardLink}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#222">
+        <h2 style="margin:0 0 12px;">Password Reset Approval Required</h2>
+        <p style="margin:0 0 10px;">
+          An office admin requested a password reset.
+        </p>
+        <p style="margin:0 0 10px;">
+          <strong>Office:</strong> ${officeName}<br />
+          <strong>Username:</strong> ${username}
+        </p>
+        <p style="margin:0;">
+          Review this request in your VisiTrak dashboard:
+          <a href="${dashboardLink}">${dashboardLink}</a>
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    await sgMail.sendMultiple(message);
+  } catch (error) {
+    console.error("sendSuperAdminAlert error:", error?.message || error);
+  }
+};
+
+const listRequests = async (req, res, admin, db) => {
+  await ensureSuperRequester(admin, db, req);
+
+  const url = new URL(req.url || "http://localhost", "http://localhost");
+  const statusFilter = String(url.searchParams.get("status") || "all")
+    .trim()
+    .toLowerCase();
+
+  const requestsSnapshot = await db
+    .collection("passwordResetRequests")
+    .orderBy("requestedAt", "desc")
+    .limit(200)
+    .get();
+
+  const requests = requestsSnapshot.docs
+    .map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        officeId: data.officeId || null,
+        officeName: data.officeName || null,
+        officialName: data.officialName || null,
+        username: data.username || null,
+        usernameNormalized: data.usernameNormalized || null,
+        officeEmail: data.officeEmail || null,
+        status: data.status || "pending",
+        reason: data.reason || "",
+        requestedAt: toIso(data.requestedAt),
+        resolvedAt: toIso(data.resolvedAt),
+        resolvedByUid: data.resolvedByUid || null,
+        resolvedByEmail: data.resolvedByEmail || null,
+        resetTokenId: data.resetTokenId || null,
+        resetLink: data.resetLink || null,
+        resetTokenExpiresAt: toIso(data.resetTokenExpiresAt),
+        lastUpdatedAt: toIso(data.lastUpdatedAt),
+      };
+    })
+    .filter((request) =>
+      statusFilter === "all" ? true : request.status === statusFilter
+    );
+
+  return res.status(200).json({
+    success: true,
+    requests,
+  });
+};
+
+const createRequest = async (req, res, admin, db) => {
+  const usernameNormalized = normalizeUsername(req.body?.username || "");
+  const requesterAddress = getRequesterAddress(req);
+
+  // Always return generic success to avoid username enumeration.
+  const genericResponse = () =>
+    res.status(200).json({
+      success: true,
+      message:
+        "If the username exists, a password reset request has been sent to the super admin.",
+    });
+
+  if (!USERNAME_REGEX.test(usernameNormalized)) {
+    return genericResponse();
+  }
+
+  if (!canCreatePublicRequest(`${requesterAddress}:${usernameNormalized}`)) {
+    return genericResponse();
+  }
+
+  const officeSnapshot = await db
+    .collection("offices")
+    .where("usernameNormalized", "==", usernameNormalized)
+    .where("role", "==", "office")
+    .limit(1)
+    .get();
+
+  if (officeSnapshot.empty) {
+    return genericResponse();
+  }
+
+  const officeDoc = officeSnapshot.docs[0];
+  const officeData = officeDoc.data() || {};
+  const officeId = officeDoc.id;
+
+  if (officeData.status === "inactive") {
+    return genericResponse();
+  }
+
+  const existingRequests = await db
+    .collection("passwordResetRequests")
+    .where("officeId", "==", officeId)
+    .limit(20)
+    .get();
+
+  const hasRecentPendingRequest = existingRequests.docs.some((doc) => {
+    const data = doc.data() || {};
+    if (data.status !== "pending") return false;
+    const requestedAt = toDate(data.requestedAt);
+    if (!requestedAt) return false;
+    return Date.now() - requestedAt.getTime() < REQUEST_DEDUPE_MS;
+  });
+
+  if (hasRecentPendingRequest) {
+    return genericResponse();
+  }
+
+  const requestPayload = {
+    officeId,
+    officeName: officeData.name || "Office",
+    officialName: officeData.officialName || "",
+    username: officeData.username || usernameNormalized,
+    usernameNormalized,
+    officeEmail: officeData.email || "",
+    status: "pending",
+    requestedByIp: requesterAddress,
+    requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+    resolvedAt: null,
+    resolvedByUid: null,
+    resolvedByEmail: null,
+    reason: "",
+    lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const requestRef = await db.collection("passwordResetRequests").add(requestPayload);
+
+  await db.collection("adminNotifications").add({
+    type: "password_reset_request",
+    status: "unread",
+    requestId: requestRef.id,
+    officeId,
+    officeName: officeData.name || "Office",
+    username: officeData.username || usernameNormalized,
+    title: "Password reset request pending",
+    message: `Office "${officeData.name || "Office"}" requested a password reset.`,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    readAt: null,
+  });
+
+  const superAdminEmails = await getSuperAdminEmails(db);
+  await sendSuperAdminAlert({
+    superAdminEmails,
+    officeName: officeData.name || "Office",
+    username: officeData.username || usernameNormalized,
+  });
+
+  return genericResponse();
+};
+
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  try {
+    const admin = await getAdmin();
+    const db = admin.firestore();
+
+    if (req.method === "GET") {
+      return await listRequests(req, res, admin, db);
+    }
+
+    if (req.method === "POST") {
+      return await createRequest(req, res, admin, db);
+    }
+
+    return res.status(405).json({
+      success: false,
+      message: "Method not allowed.",
+    });
+  } catch (error) {
+    console.error("office-password-reset-requests error:", error);
+    const status = error.message === "Not authorized" ? 403 : 500;
+    return res.status(status).json({
+      success: false,
+      message:
+        status === 403 ? "Not authorized." : "Failed to process reset request.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+}

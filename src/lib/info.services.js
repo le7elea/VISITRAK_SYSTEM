@@ -18,6 +18,9 @@ import {
 const officesCollection = collection(db, "offices");
 const activityLogsCollection = collection(db, "activityLogs");
 const passwordResetTokensCollection = collection(db, "passwordResetTokens");
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 
 const callProtectedApi = async (url, method, body) => {
   if (!auth.currentUser) {
@@ -655,7 +658,7 @@ export const createPasswordResetActivityLog = async (email) => {
  */
 export const checkEmailExists = async (email, excludeId = null) => {
   try {
-    const q = query(officesCollection, where("email", "==", email));
+    const q = query(officesCollection, where("email", "==", normalizeEmail(email)));
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
@@ -675,11 +678,51 @@ export const checkEmailExists = async (email, excludeId = null) => {
   }
 };
 
+export const checkUsernameExists = async (username, excludeId = null) => {
+  try {
+    const normalized = normalizeUsername(username);
+    if (!normalized) return false;
+
+    const q = query(
+      officesCollection,
+      where("usernameNormalized", "==", normalized)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      return false;
+    }
+
+    if (excludeId) {
+      const offices = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      return offices.some((office) => office.id !== excludeId);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error checking username:", error);
+    throw error;
+  }
+};
+
 /**
  * Validate office data structure
  */
 const validateOfficeData = (office) => {
   const validatedOffice = { ...office };
+  const role = validatedOffice.role === "super" ? "super" : "office";
+  validatedOffice.role = role;
+
+  if (role === "office") {
+    const usernameNormalized = normalizeUsername(validatedOffice.username || "");
+    validatedOffice.username = usernameNormalized;
+    validatedOffice.usernameNormalized = usernameNormalized;
+    validatedOffice.email = "";
+  } else {
+    validatedOffice.username = "";
+    validatedOffice.usernameNormalized = "";
+    validatedOffice.email = normalizeEmail(validatedOffice.email || "");
+  }
   
   if (!validatedOffice.officialName) {
     validatedOffice.officialName = "";
@@ -713,9 +756,24 @@ const validateOfficeData = (office) => {
  */
 export const addOffice = async (office) => {
   try {
-    const existingOffice = await getOfficeByEmail(office.email);
-    if (existingOffice) {
-      throw new Error(`Office with email ${office.email} already exists`);
+    const role = office.role === "super" ? "super" : "office";
+    if (role === "office") {
+      const normalizedUsername = normalizeUsername(office.username || "");
+      if (!USERNAME_REGEX.test(normalizedUsername)) {
+        throw new Error(
+          "Username is required (4-32 chars, lowercase letters, numbers, dot, underscore, hyphen)."
+        );
+      }
+
+      const usernameExists = await checkUsernameExists(normalizedUsername);
+      if (usernameExists) {
+        throw new Error(`Office with username ${normalizedUsername} already exists`);
+      }
+    } else {
+      const existingOffice = await getOfficeByEmail(office.email);
+      if (existingOffice) {
+        throw new Error(`Office with email ${office.email} already exists`);
+      }
     }
     
     const validatedOffice = validateOfficeData(office);
@@ -724,6 +782,7 @@ export const addOffice = async (office) => {
       name: validatedOffice.name,
       officialName: validatedOffice.officialName,
       email: validatedOffice.email,
+      username: validatedOffice.username,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit,
@@ -744,7 +803,8 @@ export const addOffice = async (office) => {
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
-      officeEmail: office.email,
+      officeEmail: validatedOffice.email,
+      officeUsername: validatedOffice.username || "",
       officeRole: office.role,
       officialOfficeName: office.officialName || '',
       purposesCount: office.purposes?.length || 0,
@@ -779,6 +839,8 @@ export const getOfficeById = async (id) => {
         id: officeSnap.id, 
         ...data,
         officialName: data.officialName || "",
+        username: data.username || "",
+        usernameNormalized: data.usernameNormalized || "",
         purposes: data.purposes || [],
         staffToVisit: data.staffToVisit || []
       };
@@ -795,7 +857,8 @@ export const getOfficeById = async (id) => {
  */
 export const getOfficeByEmail = async (email) => {
   try {
-    const q = query(officesCollection, where("email", "==", email));
+    const cleanEmail = normalizeEmail(email);
+    const q = query(officesCollection, where("email", "==", cleanEmail));
     const snapshot = await getDocs(q);
     
     if (snapshot.empty) {
@@ -808,11 +871,42 @@ export const getOfficeByEmail = async (email) => {
       id: docSnap.id, 
       ...data,
       officialName: data.officialName || "",
+      username: data.username || "",
+      usernameNormalized: data.usernameNormalized || "",
       purposes: data.purposes || [],
       staffToVisit: data.staffToVisit || []
     };
   } catch (error) {
     console.error("Error getting office by email:", error);
+    throw error;
+  }
+};
+
+export const getOfficeByUsername = async (username) => {
+  try {
+    const cleanUsername = normalizeUsername(username);
+    if (!cleanUsername) return null;
+
+    const q = query(
+      officesCollection,
+      where("usernameNormalized", "==", cleanUsername)
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+
+    const docSnap = snapshot.docs[0];
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      ...data,
+      officialName: data.officialName || "",
+      username: data.username || cleanUsername,
+      usernameNormalized: data.usernameNormalized || cleanUsername,
+      purposes: data.purposes || [],
+      staffToVisit: data.staffToVisit || [],
+    };
+  } catch (error) {
+    console.error("Error getting office by username:", error);
     throw error;
   }
 };
@@ -827,6 +921,8 @@ export const fetchOffices = async () => {
       id: doc.id, 
       ...doc.data(),
       officialName: doc.data().officialName || "",
+      username: doc.data().username || "",
+      usernameNormalized: doc.data().usernameNormalized || "",
       purposes: doc.data().purposes || [],
       staffToVisit: doc.data().staffToVisit || []
     }));
@@ -844,6 +940,21 @@ export const fetchOffices = async () => {
  */
 export const updateOffice = async (office) => {
   try {
+    const role = office.role === "super" ? "super" : "office";
+    if (role === "office") {
+      const normalizedUsername = normalizeUsername(office.username || "");
+      if (!USERNAME_REGEX.test(normalizedUsername)) {
+        throw new Error(
+          "Username is required (4-32 chars, lowercase letters, numbers, dot, underscore, hyphen)."
+        );
+      }
+
+      const usernameExists = await checkUsernameExists(normalizedUsername, office.id);
+      if (usernameExists) {
+        throw new Error(`Office with username ${normalizedUsername} already exists`);
+      }
+    }
+
     const officeRef = doc(db, "offices", office.id);
     
     const currentOfficeSnap = await getDoc(officeRef);
@@ -858,6 +969,7 @@ export const updateOffice = async (office) => {
       name: validatedOffice.name,
       officialName: validatedOffice.officialName,
       email: validatedOffice.email,
+      username: validatedOffice.username,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit,
@@ -881,6 +993,11 @@ export const updateOffice = async (office) => {
     }
     if (office.email !== currentData.email) {
       changes.push(`email changed from "${currentData.email}" to "${office.email}"`);
+    }
+    if ((office.username || "") !== (currentData.username || "")) {
+      changes.push(
+        `username changed from "${currentData.username || "none"}" to "${office.username || "none"}"`
+      );
     }
     if (office.role !== currentData.role) {
       changes.push(`role changed from "${currentData.role}" to "${office.role}"`);
@@ -925,6 +1042,8 @@ export const updateOffice = async (office) => {
       id: office.id, 
       ...updateData,
       officialName: validatedOffice.officialName,
+      username: validatedOffice.username,
+      usernameNormalized: validatedOffice.usernameNormalized,
       purposes: validatedOffice.purposes,
       staffToVisit: validatedOffice.staffToVisit
     };
@@ -1421,6 +1540,76 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Public endpoint: office admin submits a password reset request using username.
+ */
+export const requestOfficePasswordReset = async (username) => {
+  const cleanUsername = normalizeUsername(username);
+  if (!cleanUsername) {
+    throw new Error("Username is required.");
+  }
+
+  const response = await fetch("/api/office-password-reset-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ username: cleanUsername }),
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    // Ignore JSON parse errors and use fallback below.
+  }
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.message || "Failed to submit password reset request.");
+  }
+
+  return payload;
+};
+
+/**
+ * Super admin endpoint: list office password reset requests.
+ */
+export const getOfficePasswordResetRequests = async (status = "all") => {
+  const cleanStatus = String(status || "all").trim().toLowerCase();
+  const suffix =
+    cleanStatus && cleanStatus !== "all"
+      ? `?status=${encodeURIComponent(cleanStatus)}`
+      : "";
+
+  const response = await callProtectedApi(
+    `/api/office-password-reset-requests${suffix}`,
+    "GET"
+  );
+
+  return response?.requests || [];
+};
+
+/**
+ * Super admin endpoint: resolve password reset request (approve/reject).
+ */
+export const resolveOfficePasswordResetRequest = async (
+  requestId,
+  action,
+  reason = ""
+) => {
+  const cleanRequestId = String(requestId || "").trim();
+  const cleanAction = String(action || "").trim().toLowerCase();
+  if (!cleanRequestId || !["approve", "reject"].includes(cleanAction)) {
+    throw new Error("Valid requestId and action are required.");
+  }
+
+  return callProtectedApi("/api/resolve-office-password-reset-request", "POST", {
+    requestId: cleanRequestId,
+    action: cleanAction,
+    reason: String(reason || "").trim(),
+  });
+};
+
+/**
  * Wrapper functions for backward compatibility
  */
 export const updateOfficeWithLog = async (office) => {
@@ -1455,10 +1644,11 @@ export const adminResetOfficePassword = async (officeId, newPassword) => {
   const currentUser = getCurrentUser();
   const officeName = response?.data?.name || "Office";
   const officeEmail = response?.data?.email || "";
+  const officeUsername = response?.data?.username || "";
 
   await createActivityLog({
     title: "Office Password Reset",
-    description: `Super admin manually reset password for "${officeName}" (${officeEmail || "no email"})`,
+    description: `Super admin manually reset password for "${officeName}" (${officeUsername || officeEmail || "unknown login"})`,
     office: officeName,
     type: "password_reset",
     userEmail: currentUser.email,
@@ -1466,8 +1656,27 @@ export const adminResetOfficePassword = async (officeId, newPassword) => {
     userRole: currentUser.role,
     resetOfficeId: officeId,
     resetOfficeEmail: officeEmail,
+    resetOfficeUsername: officeUsername,
     action: "reset",
   });
 
   return response;
+};
+
+/**
+ * Office admin: change own password using username-based credentials.
+ */
+export const changeOfficeOwnPassword = async (currentPassword, newPassword) => {
+  if (!currentPassword || !newPassword) {
+    throw new Error("Current and new password are required.");
+  }
+
+  if (newPassword.trim().length < 8) {
+    throw new Error("New password must be at least 8 characters.");
+  }
+
+  return callProtectedApi("/api/office-change-password", "POST", {
+    currentPassword: String(currentPassword),
+    newPassword: String(newPassword).trim(),
+  });
 };

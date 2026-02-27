@@ -14,6 +14,9 @@ import {
 import { db } from "../lib/firebase";
 import { Bell, CheckCheck, Sparkles, Clock, Building2, User, Search, Filter } from "lucide-react";
 
+const getNotificationStorageKeyBase = (user) =>
+  user?.uid || user?.id || user?.email || "anonymous";
+
 const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,15 +48,15 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   // User-specific last viewed time
   const [lastViewedTime, setLastViewedTime] = useState(() => {
-    const userEmail = currentUser?.email || '';
-    const saved = localStorage.getItem(`notificationLastViewedTime_${userEmail}`);
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    const saved = localStorage.getItem(`notificationLastViewedTime_${userKey}`);
     return saved ? new Date(saved) : null;
   });
 
   // User-specific marked as read notifications
   const [markedAsRead, setMarkedAsRead] = useState(() => {
-    const userEmail = currentUser?.email || '';
-    const saved = localStorage.getItem(`markedAsReadNotifications_${userEmail}`);
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    const saved = localStorage.getItem(`markedAsReadNotifications_${userKey}`);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -202,15 +205,15 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
   };
 
   const markNotificationAsRead = (notificationId) => {
-    const userEmail = currentUser?.email || '';
-    if (!userEmail) return;
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    if (!userKey) return;
     
     if (!markedAsRead.includes(notificationId)) {
       const updatedMarkedAsRead = [...markedAsRead, notificationId];
       setMarkedAsRead(updatedMarkedAsRead);
       
       localStorage.setItem(
-        `markedAsReadNotifications_${userEmail}`, 
+        `markedAsReadNotifications_${userKey}`, 
         JSON.stringify(updatedMarkedAsRead)
       );
       
@@ -231,18 +234,18 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   const markAllRead = () => {
     const now = new Date();
-    const userEmail = currentUser?.email || '';
+    const userKey = getNotificationStorageKeyBase(currentUser);
     
-    if (!userEmail) return;
+    if (!userKey) return;
     
     setLastViewedTime(now);
-    localStorage.setItem(`notificationLastViewedTime_${userEmail}`, now.toISOString());
+    localStorage.setItem(`notificationLastViewedTime_${userKey}`, now.toISOString());
     
     const allNotificationIds = notifications.map(n => n.id);
     const updatedMarkedAsRead = [...new Set([...markedAsRead, ...allNotificationIds])];
     setMarkedAsRead(updatedMarkedAsRead);
     localStorage.setItem(
-      `markedAsReadNotifications_${userEmail}`, 
+      `markedAsReadNotifications_${userKey}`, 
       JSON.stringify(updatedMarkedAsRead)
     );
     
@@ -252,11 +255,11 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
   };
 
   useEffect(() => {
-    const userEmail = currentUser?.email || '';
-    if (!userEmail) return;
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    if (!userKey) return;
 
-    const storageKey = `notificationLastViewedTime_${userEmail}`;
-    const markedAsReadKey = `markedAsReadNotifications_${userEmail}`;
+    const storageKey = `notificationLastViewedTime_${userKey}`;
+    const markedAsReadKey = `markedAsReadNotifications_${userKey}`;
     
     const handleStorageChange = () => {
       const saved = localStorage.getItem(storageKey);
@@ -291,7 +294,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [lastViewedTime, markedAsRead, currentUser?.email]);
+  }, [lastViewedTime, markedAsRead, currentUser?.email, currentUser?.uid, currentUser?.id]);
 
   // Filter and search notifications
   const filteredNotifications = notifications.filter(notif => {

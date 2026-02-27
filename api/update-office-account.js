@@ -1,4 +1,5 @@
 import { getAdmin } from "./_firebaseAdmin.js";
+import { ensureAuthUser, hashOfficePassword } from "./_officeCredentials.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -13,7 +14,24 @@ const getBearerToken = (req) => {
 };
 
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
 const normalizeList = (value) => (Array.isArray(value) ? value : []);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
+const isValidUsername = (value) =>
+  typeof value === "string" && USERNAME_REGEX.test(normalizeUsername(value));
+
+const ensureUsernameAvailable = async (db, usernameNormalized, excludeId) => {
+  const existingUsername = await db
+    .collection("offices")
+    .where("usernameNormalized", "==", usernameNormalized)
+    .limit(5)
+    .get();
+
+  if (existingUsername.empty) return true;
+
+  return existingUsername.docs.every((doc) => doc.id === excludeId);
+};
 
 const ensureSuperRequester = async (admin, db, req) => {
   const token = getBearerToken(req);
@@ -55,16 +73,19 @@ export default async function handler(req, res) {
       name,
       officialName = "",
       email,
+      username = "",
       role = "office",
       purposes = [],
       staffToVisit = [],
       status = "active",
     } = req.body || {};
 
-    if (!id || !name || !email) {
-      return res
-        .status(400)
-        .json({ success: false, message: "id, name, and email are required." });
+    const cleanName = String(name || "").trim();
+    if (!id || !cleanName) {
+      return res.status(400).json({
+        success: false,
+        message: "id and name are required.",
+      });
     }
 
     const officeRef = db.collection("offices").doc(id);
@@ -75,32 +96,90 @@ export default async function handler(req, res) {
 
     const existing = officeSnap.data() || {};
     const uid = existing.uid || id;
-    const cleanEmail = normalizeEmail(email);
     const cleanRole = role === "super" ? "super" : "office";
+    const normalizedUsername = normalizeUsername(username);
+    let cleanEmail = normalizeEmail(email);
     const isInactive = status === "inactive";
 
-    try {
-      await admin.auth().updateUser(uid, {
-        email: cleanEmail,
-        displayName: name,
-        disabled: isInactive,
-      });
-      await admin.auth().setCustomUserClaims(uid, { role: cleanRole });
-    } catch (error) {
-      if (error.code !== "auth/user-not-found") {
-        throw error;
+    if (cleanRole === "office") {
+      if (!isValidUsername(normalizedUsername)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Username is required for office admins (4-32 chars, lowercase letters, numbers, dot, underscore, hyphen).",
+        });
       }
+
+      const usernameAvailable = await ensureUsernameAvailable(
+        db,
+        normalizedUsername,
+        id
+      );
+      if (!usernameAvailable) {
+        return res.status(409).json({
+          success: false,
+          message: "Username is already in use.",
+        });
+      }
+
+      cleanEmail = "";
+    } else if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid email is required for super admin accounts.",
+      });
     }
+
+    await ensureAuthUser({
+      admin,
+      uid,
+      role: cleanRole,
+      displayName: cleanName,
+      disabled: isInactive,
+      email: cleanRole === "super" ? cleanEmail : null,
+      password: cleanRole === "super" ? "superadmin2025" : "",
+    });
+
+    const shouldBootstrapOfficeCredentials =
+      cleanRole === "office" &&
+      (!existing.credentialHash || !existing.credentialSalt);
+    const bootstrapPassword = String(existing.password || "").trim();
+    const officeCredentialFields =
+      cleanRole === "office"
+        ? {
+            ...(shouldBootstrapOfficeCredentials
+              ? hashOfficePassword(bootstrapPassword || "officeadmin2025")
+              : {}),
+            ...(shouldBootstrapOfficeCredentials
+              ? {
+                  credentialUpdatedAt:
+                    admin.firestore.FieldValue.serverTimestamp(),
+                }
+              : {}),
+            password: admin.firestore.FieldValue.delete(),
+          }
+        : {
+            credentialHash: admin.firestore.FieldValue.delete(),
+            credentialSalt: admin.firestore.FieldValue.delete(),
+            credentialAlgo: admin.firestore.FieldValue.delete(),
+            credentialIterations: admin.firestore.FieldValue.delete(),
+            credentialKeyLength: admin.firestore.FieldValue.delete(),
+            credentialUpdatedAt: admin.firestore.FieldValue.delete(),
+            password: admin.firestore.FieldValue.delete(),
+          };
 
     const updateData = {
       uid,
-      name,
+      name: cleanName,
       officialName,
-      email: cleanEmail,
+      email: cleanRole === "super" ? cleanEmail : "",
+      username: cleanRole === "office" ? normalizedUsername : "",
+      usernameNormalized: cleanRole === "office" ? normalizedUsername : "",
       role: cleanRole,
       purposes: normalizeList(purposes),
       staffToVisit: normalizeList(staffToVisit),
       status: isInactive ? "inactive" : "active",
+      ...officeCredentialFields,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 

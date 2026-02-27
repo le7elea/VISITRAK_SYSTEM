@@ -43,7 +43,7 @@ const ResetPassword = () => {
   const token = params.get("token");
   const tokenEmail = (params.get("email") || "").trim().toLowerCase();
   const isFirebaseResetFlow = mode === "resetPassword" && !!oobCode;
-  const isTokenResetFlow = !!token && !!tokenEmail;
+  const isTokenResetFlow = !!token;
 
   const [validating, setValidating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +65,7 @@ const ResetPassword = () => {
   useEffect(() => {
     const validateCode = async () => {
       if (isTokenResetFlow) {
-        setAccountEmail(tokenEmail);
+        setAccountEmail(tokenEmail || "");
         setValidating(false);
         return;
       }
@@ -116,7 +116,6 @@ const ResetPassword = () => {
       },
       body: JSON.stringify({
         token,
-        email: tokenEmail,
         newPassword,
       }),
     });
@@ -188,7 +187,6 @@ const ResetPassword = () => {
                 updatedAt: serverTimestamp(),
               });
             }
-
             await signOut(auth);
           }
         } catch (statusError) {
@@ -210,7 +208,6 @@ const ResetPassword = () => {
         message = "This reset link has expired. Please request a new one.";
       } else if (
         error.code === "INVALID_TOKEN" ||
-        error.code === "TOKEN_EMAIL_MISMATCH" ||
         error.code === "auth/invalid-action-code"
       ) {
         message = "This reset link is invalid. Please request a new one.";

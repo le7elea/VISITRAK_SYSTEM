@@ -12,17 +12,20 @@ import profileImg from "../assets/bisulogo.png";
 import { Sun, Moon, Bell, User, X, ChevronRight } from "lucide-react";
 import VisitorInfoModal from "./VisitorInfoModal"; // Import the modal
 
+const getNotificationStorageKeyBase = (user) =>
+  user?.uid || user?.id || user?.email || "anonymous";
+
 const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmin", office: null } }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastViewedTime, setLastViewedTime] = useState(() => {
-    const userEmail = user?.email || '';
-    const saved = localStorage.getItem(`notificationLastViewedTime_${userEmail}`);
+    const userKey = getNotificationStorageKeyBase(user);
+    const saved = localStorage.getItem(`notificationLastViewedTime_${userKey}`);
     return saved ? new Date(saved) : null;
   });
   const [markedAsRead, setMarkedAsRead] = useState(() => {
-    const userEmail = user?.email || '';
-    const saved = localStorage.getItem(`markedAsReadNotifications_${userEmail}`);
+    const userKey = getNotificationStorageKeyBase(user);
+    const saved = localStorage.getItem(`markedAsReadNotifications_${userKey}`);
     return saved ? JSON.parse(saved) : [];
   });
   const [showToast, setShowToast] = useState(false);
@@ -83,7 +86,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
               where("office", "==", userOffice),
               orderBy("checkInTime", "desc")
             );
-          } catch (queryError) {
+          } catch {
             q = query(visitsRef, orderBy("checkInTime", "desc"));
           }
         } else {
@@ -184,10 +187,10 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
 
   // Listen for changes to markedAsReadNotifications in localStorage (user-specific)
   useEffect(() => {
-    const userEmail = currentUser?.email || '';
-    if (!userEmail) return;
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    if (!userKey) return;
 
-    const storageKey = `markedAsReadNotifications_${userEmail}`;
+    const storageKey = `markedAsReadNotifications_${userKey}`;
     
     const handleStorageChange = () => {
       const saved = localStorage.getItem(storageKey);
@@ -211,14 +214,14 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [markedAsRead, currentUser?.email]);
+  }, [markedAsRead, currentUser?.email, currentUser?.uid, currentUser?.id]);
 
   // Listen for changes to lastViewedTime in localStorage (user-specific)
   useEffect(() => {
-    const userEmail = currentUser?.email || '';
-    if (!userEmail) return;
+    const userKey = getNotificationStorageKeyBase(currentUser);
+    if (!userKey) return;
 
-    const storageKey = `notificationLastViewedTime_${userEmail}`;
+    const storageKey = `notificationLastViewedTime_${userKey}`;
     
     const handleStorageChange = () => {
       const saved = localStorage.getItem(storageKey);
@@ -242,7 +245,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [lastViewedTime, currentUser?.email]);
+  }, [lastViewedTime, currentUser?.email, currentUser?.uid, currentUser?.id]);
 
   // Function to play notification sound
   const playNotificationSound = () => {

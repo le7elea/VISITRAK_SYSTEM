@@ -4,7 +4,12 @@ import { useNavigate } from "react-router-dom";
 import ProfileCard from "../components/ProfileCard";
 import Tabs from "../components/Tabs";
 import InfoRow from "../components/InfoRow";
-import { fetchOffices, getOfficeByEmail, getOfficeById } from "../lib/info.services";
+import {
+  changeOfficeOwnPassword,
+  fetchOffices,
+  getOfficeByEmail,
+  getOfficeById,
+} from "../lib/info.services";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -678,17 +683,23 @@ const Profile = () => {
     setPasswordLoading(true);
     
     try {
-      const firebaseUser = auth.currentUser;
-      if (!firebaseUser?.email) {
-        throw new Error("Authenticated email not found. Please log in again.");
-      }
+      const isOfficeAccount = user.role === "office";
 
-      const credential = EmailAuthProvider.credential(
-        firebaseUser.email,
-        currentPassword
-      );
-      await reauthenticateWithCredential(firebaseUser, credential);
-      await updatePassword(firebaseUser, newPassword);
+      if (isOfficeAccount) {
+        await changeOfficeOwnPassword(currentPassword, newPassword);
+      } else {
+        const firebaseUser = auth.currentUser;
+        if (!firebaseUser?.email) {
+          throw new Error("Authenticated email not found. Please log in again.");
+        }
+
+        const credential = EmailAuthProvider.credential(
+          firebaseUser.email,
+          currentPassword
+        );
+        await reauthenticateWithCredential(firebaseUser, credential);
+        await updatePassword(firebaseUser, newPassword);
+      }
 
       if (user?.id) {
         await updateDoc(doc(db, "offices", user.id), {

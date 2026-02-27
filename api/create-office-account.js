@@ -1,4 +1,5 @@
 import { getAdmin } from "./_firebaseAdmin.js";
+import { hashOfficePassword } from "./_officeCredentials.js";
 
 const setCors = (res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -13,8 +14,24 @@ const getBearerToken = (req) => {
 };
 
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
+const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 
 const normalizeList = (value) => (Array.isArray(value) ? value : []);
+
+const isValidUsername = (value) =>
+  typeof value === "string" && USERNAME_REGEX.test(normalizeUsername(value));
+
+const ensureUsernameAvailable = async (db, usernameNormalized) => {
+  const existingUsername = await db
+    .collection("offices")
+    .where("usernameNormalized", "==", usernameNormalized)
+    .limit(1)
+    .get();
+
+  return existingUsername.empty;
+};
 
 const ensureSuperRequester = async (admin, db, req) => {
   const token = getBearerToken(req);
@@ -61,56 +78,108 @@ export default async function handler(req, res) {
       name,
       officialName = "",
       email,
+      username = "",
       role = "office",
       purposes = [],
       staffToVisit = [],
     } = req.body || {};
 
-    const cleanEmail = normalizeEmail(email);
-    if (!name || !cleanEmail) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Name and email are required." });
+    const cleanName = String(name || "").trim();
+    const allowedRole = role === "super" ? "super" : "office";
+    const normalizedUsername = normalizeUsername(username);
+    let cleanEmail = normalizeEmail(email);
+
+    if (!cleanName) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required.",
+      });
     }
 
-    const allowedRole = role === "super" ? "super" : "office";
+    if (allowedRole === "office") {
+      if (!isValidUsername(normalizedUsername)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Username is required for office admins (4-32 chars, lowercase letters, numbers, dot, underscore, hyphen).",
+        });
+      }
+
+      const usernameAvailable = await ensureUsernameAvailable(
+        db,
+        normalizedUsername
+      );
+      if (!usernameAvailable) {
+        return res.status(409).json({
+          success: false,
+          message: "Username is already in use.",
+        });
+      }
+
+      cleanEmail = "";
+    } else if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid email is required for super admin accounts.",
+      });
+    }
+
     const initialPassword =
       allowedRole === "super" ? "superadmin2025" : "officeadmin2025";
 
-    try {
-      const existing = await admin.auth().getUserByEmail(cleanEmail);
-      return res.status(409).json({
-        success: false,
-        message: "An authentication account already exists for this email.",
-        uid: existing.uid,
-      });
-    } catch (error) {
-      if (error.code !== "auth/user-not-found") {
-        throw error;
+    if (allowedRole === "super") {
+      try {
+        const existing = await admin.auth().getUserByEmail(cleanEmail);
+        return res.status(409).json({
+          success: false,
+          message: "An authentication account already exists for this email.",
+          uid: existing.uid,
+        });
+      } catch (error) {
+        if (error.code !== "auth/user-not-found") {
+          throw error;
+        }
       }
     }
 
-    const userRecord = await admin.auth().createUser({
-      email: cleanEmail,
-      password: initialPassword,
-      displayName: name,
-      emailVerified: false,
-      disabled: false,
-    });
+    const userRecord =
+      allowedRole === "super"
+        ? await admin.auth().createUser({
+            email: cleanEmail,
+            password: initialPassword,
+            displayName: cleanName,
+            emailVerified: false,
+            disabled: false,
+          })
+        : await admin.auth().createUser({
+            displayName: cleanName,
+            disabled: false,
+          });
 
     await admin.auth().setCustomUserClaims(userRecord.uid, { role: allowedRole });
 
+    const officeCredentialFields =
+      allowedRole === "office"
+        ? {
+            ...hashOfficePassword(initialPassword),
+            credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }
+        : {};
+
     const officeDoc = {
       uid: userRecord.uid,
-      name,
+      name: cleanName,
       officialName,
-      email: cleanEmail,
+      email: allowedRole === "super" ? cleanEmail : "",
+      username: allowedRole === "office" ? normalizedUsername : "",
+      usernameNormalized: allowedRole === "office" ? normalizedUsername : "",
       role: allowedRole,
       purposes: normalizeList(purposes),
       staffToVisit: normalizeList(staffToVisit),
       status: "active",
       passwordChanged: false,
       passwordChangedAt: null,
+      ...officeCredentialFields,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -125,10 +194,16 @@ export default async function handler(req, res) {
         ...officeDoc,
         createdAt: new Date().toISOString(),
       },
-      credentials: {
-        email: cleanEmail,
-        initialPassword,
-      },
+      credentials:
+        allowedRole === "office"
+          ? {
+              username: normalizedUsername,
+              initialPassword,
+            }
+          : {
+              email: cleanEmail,
+              initialPassword,
+            },
     });
   } catch (error) {
     console.error("create-office-account error:", error);

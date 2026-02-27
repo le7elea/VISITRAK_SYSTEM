@@ -1,11 +1,13 @@
-// pages/ForgotPassword.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { requestOfficePasswordReset } from "../lib/info.services";
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/bisulogo01.png";
 import fgIllustrator from "../assets/fg_illustrator.png";
+
+const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 
 const Modal = ({ show, title, message, onClose }) => {
   if (!show) return null;
@@ -27,7 +29,7 @@ const Modal = ({ show, title, message, onClose }) => {
 };
 
 const ForgotPassword = () => {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState({
     show: false,
@@ -37,112 +39,25 @@ const ForgotPassword = () => {
 
   const navigate = useNavigate();
 
-  const isRouteNotFoundResponse = (payload = {}) =>
-    typeof payload.message === "string" &&
-    payload.message.toLowerCase().includes("route not found");
-
-  const ensureAuthUserExists = async (normalizedEmail) => {
-    const response = await fetch("/api/provision-auth-user", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-
-    let payload = {};
-    try {
-      payload = await response.json();
-    } catch {
-      // Ignore parse failures and fallback to generic error message.
-    }
-
-    if (!response.ok || payload.success === false) {
-      if (response.status === 404) {
-        if (isRouteNotFoundResponse(payload)) {
-          const error = new Error(
-            "Provision API route is missing. Restart your API server or deploy latest backend."
-          );
-          error.code = "api/route-not-found";
-          throw error;
-        }
-
-        const error = new Error("This email is not registered in our system.");
-        error.code = "auth/user-not-found";
-        throw error;
-      }
-
-      throw new Error(
-        payload.message || "Unable to prepare account for password reset."
-      );
-    }
-  };
-
-  const sendStyledResetEmail = async (normalizedEmail) => {
-    const response = await fetch("/api/send-password-reset", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-
-    let payload = {};
-    try {
-      payload = await response.json();
-    } catch {
-      // Ignore parse failures and fallback to generic error message.
-    }
-
-    if (!response.ok || payload.success === false) {
-      if (response.status === 404) {
-        if (isRouteNotFoundResponse(payload)) {
-          const error = new Error(
-            "Password reset API route is missing. Restart your API server or deploy latest backend."
-          );
-          error.code = "api/route-not-found";
-          throw error;
-        }
-
-        const error = new Error("This email is not registered in our system.");
-        error.code = "auth/user-not-found";
-        throw error;
-      }
-
-      if (response.status === 429) {
-        const error = new Error(payload.message || "Please wait before requesting another reset.");
-        error.code = "auth/too-many-requests";
-        throw error;
-      }
-
-      const error = new Error(payload.message || "Unable to send reset email right now.");
-      if (payload.error) {
-        error.code = payload.error;
-      }
-      throw error;
-    }
-
-    return payload;
-  };
-
   const handleResetPassword = async (e) => {
     e.preventDefault();
 
-    if (!email) {
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanUsername) {
       setModal({
         show: true,
-        title: "Missing Email",
-        message: "Please enter your email address.",
+        title: "Missing Username",
+        message: "Please enter your username.",
       });
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!USERNAME_REGEX.test(cleanUsername)) {
       setModal({
         show: true,
-        title: "Invalid Email",
-        message: "Please enter a valid email address (e.g., example@domain.com).",
+        title: "Invalid Username",
+        message:
+          "Username must be 4-32 characters and can use lowercase letters, numbers, dot, underscore, and hyphen.",
       });
       return;
     }
@@ -150,52 +65,21 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      const normalizedEmail = email.trim().toLowerCase();
-      await ensureAuthUserExists(normalizedEmail);
-      const apiPayload = await sendStyledResetEmail(normalizedEmail);
-
+      await requestOfficePasswordReset(cleanUsername);
       setModal({
         show: true,
-        title: "Email Sent Successfully",
+        title: "Request Submitted",
         message:
-          `Password reset link has been sent to:\n${normalizedEmail}\n\n` +
-          "Please check your inbox (and spam folder)." +
-          (apiPayload.warning ? `\n\nNote: ${apiPayload.warning}` : ""),
+          `If "${cleanUsername}" exists, the super admin has been notified.\n\n` +
+          "Please wait for approval. Once approved, your super admin will provide your one-time reset link.",
       });
-
-      setEmail("");
+      setUsername("");
     } catch (error) {
       console.error("Forgot password error:", error);
-
-      let errorTitle = "Error";
-      let errorMessage = "Something went wrong. Please try again later.";
-
-      if (error.code === "auth/user-not-found") {
-        errorTitle = "Email Not Found";
-        errorMessage = "This email is not registered in our system.";
-      } else if (error.code === "api/route-not-found") {
-        errorTitle = "Server Update Needed";
-        errorMessage = "Backend route missing. Start/restart API server with latest code.";
-      } else if (error.code === "SERVER_CONFIG_ERROR") {
-        errorTitle = "Server Configuration Error";
-        errorMessage = "Email service is not configured yet. Contact administrator.";
-      } else if (error.code === "auth/invalid-email") {
-        errorTitle = "Invalid Email";
-        errorMessage = "Please enter a valid email address.";
-      } else if (error.code === "auth/too-many-requests") {
-        errorTitle = "Too Many Requests";
-        errorMessage = error.message || "Please wait a few minutes before trying again.";
-      } else if (error.code === "auth/network-request-failed") {
-        errorTitle = "Connection Error";
-        errorMessage = "Cannot connect right now. Please check your internet connection.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
       setModal({
         show: true,
-        title: errorTitle,
-        message: errorMessage,
+        title: "Request Failed",
+        message: error.message || "Unable to submit reset request right now. Please try again.",
       });
     } finally {
       setLoading(false);
@@ -229,26 +113,26 @@ const ForgotPassword = () => {
             </div>
 
             <p className="text-gray-500 text-sm mb-10">
-              Enter your registered email address below and we will send you a secure link to reset your password.
-              If your account uses a non-real/system email, contact the Super Admin to set a temporary password.
+              Enter your registered username below and we will send a secure reset request to the super admin.
+              Once approved, you can continue password reset using the one-time link.
             </p>
 
             <form onSubmit={handleResetPassword} className="space-y-6">
               <div className="relative">
                 <label
-                  htmlFor="email"
+                  htmlFor="username"
                   className="absolute -top-2.5 left-4 bg-white px-2 text-xs font-medium text-purple-700 z-10"
                 >
-                  Email Address *
+                  Username *
                 </label>
 
                 <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
                   disabled={loading}
-                  placeholder={loading ? "Processing..." : "Enter your registered email address"}
+                  placeholder={loading ? "Processing..." : "Enter your office username"}
                   className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   required
                 />
@@ -265,14 +149,14 @@ const ForgotPassword = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    <span>Sending Reset Link...</span>
+                    <span>Submitting...</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center space-x-2">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    <span>SEND RESET LINK</span>
+                    <span>SEND RESET REQUEST</span>
                   </div>
                 )}
               </button>

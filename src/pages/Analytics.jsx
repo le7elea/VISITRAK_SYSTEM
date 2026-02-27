@@ -1820,7 +1820,7 @@ const Analytics = () => {
             const renderHeader = () => (
               <div className="flex items-start justify-between mb-4 gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-20 h-16 flex items-center justify-center">
+                  <div className="w-20 h-16 flex items-ceniter justify-center">
                     <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                   </div>
                   <div className="leading-tight">

@@ -60,6 +60,7 @@ export const buildSessionUser = (authUser, officeData = null) => {
   if (!authUser) return null;
 
   const role = officeData?.role || "office";
+  const username = (officeData?.username || "").trim().toLowerCase();
   const officeName =
     officeData?.name ||
     authUser.displayName ||
@@ -70,6 +71,8 @@ export const buildSessionUser = (authUser, officeData = null) => {
     uid: authUser.uid,
     id: officeData?.id || authUser.uid,
     email,
+    username,
+    loginIdentifier: role === "office" && username ? username : email,
     name: officeName,
     office: officeName,
     officeName,
