@@ -110,24 +110,39 @@ export const ensureAuthUser = async ({
     authUpdatePayload.email = cleanEmail || null;
   }
 
+  let shouldCreateUser = false;
+
   try {
     await auth.updateUser(cleanUid, authUpdatePayload);
   } catch (error) {
+    const errorCode = String(error?.code || "");
+
     if (
       hasEmailInput &&
       authUpdatePayload.email === null &&
-      error.code === "auth/invalid-email"
+      errorCode === "auth/invalid-email"
     ) {
       const fallbackUpdatePayload = {
         disabled: !!disabled,
       };
       if (cleanDisplayName) fallbackUpdatePayload.displayName = cleanDisplayName;
-      await auth.updateUser(cleanUid, fallbackUpdatePayload);
-    } else if (error.code !== "auth/user-not-found") {
+      try {
+        await auth.updateUser(cleanUid, fallbackUpdatePayload);
+      } catch (fallbackError) {
+        const fallbackCode = String(fallbackError?.code || "");
+        if (fallbackCode === "auth/user-not-found") {
+          shouldCreateUser = true;
+        } else {
+          throw fallbackError;
+        }
+      }
+    } else if (errorCode === "auth/user-not-found") {
+      shouldCreateUser = true;
+    } else {
       throw error;
     }
 
-    if (error.code !== "auth/user-not-found") {
+    if (!shouldCreateUser) {
       if (role) {
         await auth.setCustomUserClaims(cleanUid, { role });
       }
