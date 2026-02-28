@@ -26,7 +26,7 @@ const Dashboard = ({
   );
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { visitors } = useAdminVisitors();
+  const { visitors } = useAdminVisitors(user);
   const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
 
   useEffect(() => localStorage.setItem("darkMode", darkMode), [darkMode]);
@@ -148,6 +148,7 @@ const Dashboard = ({
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             setActiveTab={setActiveTab}
+            user={user}
           />
 
           {activeTab === "dashboard" && (
