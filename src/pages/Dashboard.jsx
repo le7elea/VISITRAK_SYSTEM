@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import CardStat from "../components/CardStat";
@@ -63,10 +63,34 @@ const Dashboard = ({
   });
   const hasInitializedResetRequests = useRef(false);
   const knownResetRequestIds = useRef(new Set());
+  const resetAudioContextRef = useRef(null);
 
-  const playResetRequestSound = () => {
+  const getResetAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+
+    if (
+      !resetAudioContextRef.current ||
+      resetAudioContextRef.current.state === "closed"
+    ) {
+      resetAudioContextRef.current = new AudioContextClass();
+    }
+
+    return resetAudioContextRef.current;
+  }, []);
+
+  const playResetRequestSound = useCallback(async () => {
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioContext = getResetAudioContext();
+      if (!audioContext) return;
+
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+      if (audioContext.state !== "running") return;
+
       const now = audioContext.currentTime;
       const notes = [
         { frequency: 988, start: now, duration: 0.08 },
@@ -90,7 +114,35 @@ const Dashboard = ({
     } catch (error) {
       console.error("Error playing reset request sound:", error);
     }
-  };
+  }, [getResetAudioContext]);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      const audioContext = getResetAudioContext();
+      if (!audioContext) return;
+
+      if (audioContext.state === "suspended") {
+        void audioContext.resume().catch(() => {});
+      }
+    };
+
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [getResetAudioContext]);
+
+  useEffect(
+    () => () => {
+      if (resetAudioContextRef.current?.state !== "closed") {
+        void resetAudioContextRef.current?.close().catch(() => {});
+      }
+    },
+    []
+  );
 
   const { visitors } = useAdminVisitors(user);
   const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
@@ -117,8 +169,8 @@ const Dashboard = ({
         if (!hasInitializedResetRequests.current) {
           hasInitializedResetRequests.current = true;
 
-          if (requests.length > 0 && activeTab !== "offices") {
-            playResetRequestSound();
+          if (requests.length > 0) {
+            void playResetRequestSound();
             setResetRequestModal({
               show: true,
               title: "Pending Password Reset Requests",
@@ -127,10 +179,10 @@ const Dashboard = ({
                 "need your approval.\nPress OK to open Offices.",
             });
           }
-        } else if (newRequests.length > 0 && activeTab !== "offices") {
+        } else if (newRequests.length > 0) {
           const latestOwner =
             newRequests[0]?.officeName || newRequests[0]?.username || "an office account";
-          playResetRequestSound();
+          void playResetRequestSound();
           setResetRequestModal({
             show: true,
             title: "New Password Reset Request",
@@ -155,7 +207,7 @@ const Dashboard = ({
       disposed = true;
       clearInterval(intervalId);
     };
-  }, [activeTab, user?.type]);
+  }, [playResetRequestSound, user?.type]);
 
   const handleResetRequestModalOk = () => {
     setResetRequestModal({

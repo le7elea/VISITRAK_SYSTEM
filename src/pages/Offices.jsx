@@ -1388,11 +1388,6 @@ const Offices = () => {
           } catch (copyError) {
             console.error("Failed to copy reset link to clipboard:", copyError);
           }
-        } else {
-          showNotification("Request rejected.", {
-            title: "Request Rejected",
-            tone: "info",
-          });
         }
       } catch (error) {
         await loadPendingResetRequests();
