@@ -349,18 +349,14 @@ const AddOfficeModal = memo(({
         {items.map((item) => (
           <div 
             key={item.id} 
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] ${
-              isPurpose 
-                ? "bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700" 
-                : "bg-gradient-to-r from-green-50 to-green-100 text-green-700"
-            }`}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
           >
             {isPurpose ? <Target size={14} /> : <UserPlus size={14} />}
             <span className="font-medium">{item.name}</span>
             <button
               type="button"
               onClick={() => onRemove(item.id)}
-              className={`ml-1 ${isPurpose ? "text-blue-400 hover:text-blue-600" : "text-green-400 hover:text-green-600"} transition-colors`}
+              className="ml-1 text-purple-400 hover:text-purple-600 transition-colors"
             >
               <X size={14} />
             </button>
@@ -403,8 +399,8 @@ const AddOfficeModal = memo(({
             {/* Basic Information */}
             <div className="bg-gray-50 rounded-2xl p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Building className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Building className="w-5 h-5 text-purple-600" />
                 </div>
                 <h4 className="text-lg font-semibold text-gray-800">Office Details</h4>
               </div>
@@ -435,7 +431,7 @@ const AddOfficeModal = memo(({
                       onChange={(e) =>
                         onDataChange({ ...data, username: normalizeUsername(e.target.value) })
                       }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
                       placeholder="office.username"
                       disabled={loading}
                     />
@@ -472,8 +468,8 @@ const AddOfficeModal = memo(({
             {/* User Role - Only Office Admin for new offices */}
             <div className="bg-gray-50 rounded-2xl p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Key className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Key className="w-5 h-5 text-purple-600" />
                 </div>
                 <h4 className="text-lg font-semibold text-gray-800">Access Level</h4>
               </div>
@@ -481,7 +477,7 @@ const AddOfficeModal = memo(({
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4">
                   {/* Only Office Admin Option - Auto-selected */}
-                  <label className="relative overflow-hidden rounded-xl border-2 border-blue-500 bg-blue-50 cursor-not-allowed">
+                  <label className="relative overflow-hidden rounded-xl border-2 border-purple-500 bg-purple-50 cursor-not-allowed">
                     <input
                       type="radio"
                       checked={true}
@@ -491,12 +487,12 @@ const AddOfficeModal = memo(({
                     <div className="p-5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-100">
-                            <Building className="w-4 h-4 text-blue-600" />
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-purple-100">
+                            <Building className="w-4 h-4 text-purple-600" />
                           </div>
                           <span className="font-semibold text-gray-800">Office Admin</span>
                         </div>
-                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                        <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       </div>
@@ -506,7 +502,7 @@ const AddOfficeModal = memo(({
                           <code className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">officeadmin2025</code>
                         </div>
                         <p className="text-xs text-gray-500">Limited to specific office functions and data</p>
-                        <p className="text-xs text-blue-500 font-medium mt-2">
+                        <p className="text-xs text-purple-500 font-medium mt-2">
                           â„¹ï¸ All new offices are created as Office Admins.
                         </p>
                       </div>
@@ -520,15 +516,15 @@ const AddOfficeModal = memo(({
             <div className="bg-gray-50 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Target className="w-5 h-5 text-blue-600" />
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Target className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
                     <h4 className="text-lg font-semibold text-gray-800">Visit Purposes</h4>
                     <p className="text-sm text-gray-500">What visitors can select when visiting</p>
                   </div>
                 </div>
-                <span className="text-sm font-medium bg-blue-100 text-blue-600 px-3 py-1 rounded-full">
+                <span className="text-sm font-medium bg-purple-100 text-purple-600 px-3 py-1 rounded-full">
                   {data.purposes.length} added
                 </span>
               </div>
@@ -541,7 +537,7 @@ const AddOfficeModal = memo(({
                       value={newPurpose}
                       onChange={(e) => onNewPurposeChange(toUppercase(e.target.value))}
                       onKeyPress={(e) => e.key === 'Enter' && addPurposeToList()}
-                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all uppercase"
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all uppercase"
                       placeholder="Add a purpose (e.g., MEETING, CONSULTATION)"
                       disabled={loading}
                       style={{ textTransform: 'uppercase' }}
@@ -554,7 +550,7 @@ const AddOfficeModal = memo(({
                     type="button"
                     onClick={addPurposeToList}
                     disabled={loading || !newPurpose.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
                   >
                     <Plus size={18} />
                     Add
@@ -569,15 +565,15 @@ const AddOfficeModal = memo(({
             <div className="bg-gray-50 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <UserPlus className="w-5 h-5 text-green-600" />
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <UserPlus className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
                     <h4 className="text-lg font-semibold text-gray-800">Staff & Instructors</h4>
                     <p className="text-sm text-gray-500">Who visitors can request to meet</p>
                   </div>
                 </div>
-                <span className="text-sm font-medium bg-green-100 text-green-600 px-3 py-1 rounded-full">
+                <span className="text-sm font-medium bg-purple-100 text-purple-600 px-3 py-1 rounded-full">
                   {data.staffToVisit.length} added
                 </span>
               </div>
@@ -590,7 +586,7 @@ const AddOfficeModal = memo(({
                       value={newStaff}
                       onChange={(e) => onNewStaffChange(toUppercase(e.target.value))}
                       onKeyPress={(e) => e.key === 'Enter' && addStaffToList()}
-                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all uppercase"
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all uppercase"
                       placeholder="Add staff/instructor name"
                       disabled={loading}
                       style={{ textTransform: 'uppercase' }}
@@ -603,7 +599,7 @@ const AddOfficeModal = memo(({
                     type="button"
                     onClick={addStaffToList}
                     disabled={loading || !newStaff.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
                   >
                     <Plus size={18} />
                     Add
@@ -1622,7 +1618,7 @@ const Offices = () => {
             <div className={`sticky top-0 bg-gradient-to-r text-white px-8 py-6 ${
               editData.role === "super" 
                 ? "from-purple-600 to-purple-700" 
-                : "from-blue-600 to-blue-700"
+                : "from-purple-600 to-purple-700"
             }`}>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -1683,16 +1679,16 @@ const Offices = () => {
               <div className="space-y-8">
                 {/* Basic Information */}
                 <div className={`rounded-2xl p-6 ${
-                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                  editData.role === "super" ? "bg-purple-50" : "bg-purple-50"
                 }`}>
                   <div className="flex items-center gap-3 mb-6">
                     <div className={`p-2 rounded-lg ${
-                      editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                      editData.role === "super" ? "bg-purple-100" : "bg-purple-100"
                     }`}>
                       {editData.role === "super" ? (
                         <Shield className="w-5 h-5 text-purple-600" />
                       ) : (
-                        <Building className="w-5 h-5 text-blue-600" />
+                        <Building className="w-5 h-5 text-purple-600" />
                       )}
                     </div>
                     <h4 className="text-lg font-semibold text-gray-800">
@@ -1712,7 +1708,7 @@ const Offices = () => {
                           className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
                             editData.role === "super" 
                               ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
-                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                              : "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20"
                           }`}
                           disabled={editLoading}
                           style={{ textTransform: 'uppercase' }}
@@ -1721,7 +1717,7 @@ const Offices = () => {
                           <span className={`text-xs px-2 py-1 rounded ${
                             editData.role === "super" 
                               ? "bg-purple-100 text-purple-600" 
-                              : "bg-blue-100 text-blue-600"
+                              : "bg-purple-100 text-purple-600"
                           }`}>
                             UPPERCASE
                           </span>
@@ -1757,7 +1753,7 @@ const Offices = () => {
                                   username: normalizeUsername(e.target.value),
                                 }))
                               }
-                              className="w-full px-4 py-3 border rounded-xl border-gray-300 focus:border-blue-500"
+                              className="w-full px-4 py-3 border rounded-xl border-purple-300 focus:border-purple-500"
                               disabled={editLoading}
                             />
                             <p className="mt-1 text-xs text-gray-500">
@@ -1770,7 +1766,7 @@ const Offices = () => {
                       {editData.role !== "super" && (
                         <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50">
                           <p className="text-sm font-medium text-amber-900">
-                            Password Recovery (No Real Email)
+                            Password Recovery
                           </p>
                           <p className="text-xs text-amber-800 mt-1">
                             If this office admin forgot the password, Super Admin can set a new password directly.
@@ -1930,7 +1926,7 @@ const Offices = () => {
                           className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 ${
                             editData.role === "super" 
                               ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
-                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                              : "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20"
                           }`}
                           placeholder={editData.role === "super" ? "Enter full name or title" : "Enter official office name"}
                           disabled={editLoading}
@@ -1945,16 +1941,16 @@ const Offices = () => {
 
                 {/* User Role - Show current role but cannot change */}
                 <div className={`rounded-2xl p-6 ${
-                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                  editData.role === "super" ? "bg-purple-50" : "bg-purple-50"
                 }`}>
                   <div className="flex items-center gap-3 mb-6">
                     <div className={`p-2 rounded-lg ${
-                      editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                      editData.role === "super" ? "bg-purple-100" : "bg-purple-100"
                     }`}>
                       {editData.role === "super" ? (
                         <Shield className="w-5 h-5 text-purple-600" />
                       ) : (
-                        <Key className="w-5 h-5 text-blue-600" />
+                        <Key className="w-5 h-5 text-purple-600" />
                       )}
                     </div>
                     <h4 className="text-lg font-semibold text-gray-800">Access Level</h4>
@@ -1966,18 +1962,18 @@ const Offices = () => {
                       <label className={`relative overflow-hidden rounded-xl border-2 cursor-not-allowed ${
                         editData.role === "super" 
                           ? "border-purple-500 bg-gradient-to-r from-purple-50 to-purple-100" 
-                          : "border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100"
+                          : "border-purple-500 bg-gradient-to-r from-purple-50 to-purple-100"
                       }`}>
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                                editData.role === "super" ? "bg-purple-100" : "bg-purple-100"
                               }`}>
                                 {editData.role === "super" ? (
                                   <Shield className="w-4 h-4 text-purple-600" />
                                 ) : (
-                                  <Building className="w-4 h-4 text-blue-600" />
+                                  <Building className="w-4 h-4 text-purple-600" />
                                 )}
                               </div>
                               <div>
@@ -1992,7 +1988,7 @@ const Offices = () => {
                               </div>
                             </div>
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                              editData.role === "super" ? "bg-purple-500" : "bg-blue-500"
+                              editData.role === "super" ? "bg-purple-500" : "bg-purple-500"
                             }`}>
                               <Check className="w-3 h-3 text-white" />
                             </div>
@@ -2005,15 +2001,15 @@ const Offices = () => {
 
                 {/* Purposes of Visit */}
                 <div className={`rounded-2xl p-6 ${
-                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                  editData.role === "super" ? "bg-purple-50" : "bg-purple-50"
                 }`}>
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-lg ${
-                        editData.role === "super" ? "bg-purple-100" : "bg-blue-100"
+                        editData.role === "super" ? "bg-purple-100" : "bg-purple-100"
                       }`}>
                         <Target className={`w-5 h-5 ${
-                          editData.role === "super" ? "text-purple-600" : "text-blue-600"
+                          editData.role === "super" ? "text-purple-600" : "text-purple-600"
                         }`} />
                       </div>
                       <div>
@@ -2024,7 +2020,7 @@ const Offices = () => {
                     <span className={`text-sm font-medium px-3 py-1 rounded-full ${
                       editData.role === "super" 
                         ? "bg-purple-100 text-purple-600" 
-                        : "bg-blue-100 text-blue-600"
+                        : "bg-purple-100 text-purple-600"
                     }`}>
                       {editData.purposes.length} added
                     </span>
@@ -2041,7 +2037,7 @@ const Offices = () => {
                           className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
                             editData.role === "super" 
                               ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
-                              : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                              : "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20"
                           }`}
                           placeholder="Add a purpose"
                           disabled={editLoading}
@@ -2058,7 +2054,7 @@ const Offices = () => {
                         className={`px-6 py-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium ${
                           editData.role === "super"
                             ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                            : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                            : "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
                         } text-white`}
                       >
                         <Plus size={18} />
@@ -2073,7 +2069,7 @@ const Offices = () => {
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] ${
                             editData.role === "super"
                               ? "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
-                              : "bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700"
+                              : "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
                           }`}
                         >
                           <Target size={14} className="flex-shrink-0" />
@@ -2084,7 +2080,7 @@ const Offices = () => {
                             className={`ml-1 transition-colors ${
                               editData.role === "super"
                                 ? "text-purple-400 hover:text-purple-600"
-                                : "text-blue-400 hover:text-blue-600"
+                                : "text-purple-400 hover:text-purple-600"
                             }`}
                           >
                             <X size={14} />
@@ -2097,15 +2093,15 @@ const Offices = () => {
 
                 {/* Staff/Instructors to Visit */}
                 <div className={`rounded-2xl p-6 ${
-                  editData.role === "super" ? "bg-purple-50" : "bg-gray-50"
+                  editData.role === "super" ? "bg-purple-50" : "bg-purple-50"
                 }`}>
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-lg ${
-                        editData.role === "super" ? "bg-purple-100" : "bg-green-100"
+                        editData.role === "super" ? "bg-purple-100" : "bg-purple-100"
                       }`}>
                         <UserPlus className={`w-5 h-5 ${
-                          editData.role === "super" ? "text-purple-600" : "text-green-600"
+                          editData.role === "super" ? "text-purple-600" : "text-purple-600"
                         }`} />
                       </div>
                       <div>
@@ -2116,7 +2112,7 @@ const Offices = () => {
                     <span className={`text-sm font-medium px-3 py-1 rounded-full ${
                       editData.role === "super" 
                         ? "bg-purple-100 text-purple-600" 
-                        : "bg-green-100 text-green-600"
+                        : "bg-purple-100 text-purple-600"
                     }`}>
                       {editData.staffToVisit.length} added
                     </span>
@@ -2133,7 +2129,7 @@ const Offices = () => {
                           className={`w-full px-4 py-3 bg-white border rounded-xl focus:ring-2 transition-all uppercase ${
                             editData.role === "super" 
                               ? "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20" 
-                              : "border-gray-300 focus:border-green-500 focus:ring-green-500/20"
+                              : "border-purple-300 focus:border-purple-500 focus:ring-purple-500/20"
                           }`}
                           placeholder="Add staff/instructor name"
                           disabled={editLoading}
@@ -2150,7 +2146,7 @@ const Offices = () => {
                         className={`px-6 py-3 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium ${
                           editData.role === "super"
                             ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                            : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                            : "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
                         } text-white`}
                       >
                         <Plus size={18} />
@@ -2165,7 +2161,7 @@ const Offices = () => {
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all hover:scale-[1.02] ${
                             editData.role === "super"
                               ? "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
-                              : "bg-gradient-to-r from-green-50 to-green-100 text-green-700"
+                              : "bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700"
                           }`}
                         >
                           <UserPlus size={14} className="flex-shrink-0" />
@@ -2176,7 +2172,7 @@ const Offices = () => {
                             className={`ml-1 transition-colors ${
                               editData.role === "super"
                                 ? "text-purple-400 hover:text-purple-600"
-                                : "text-green-400 hover:text-green-600"
+                                : "text-purple-400 hover:text-purple-600"
                             }`}
                           >
                             <X size={14} />
@@ -2208,7 +2204,7 @@ const Offices = () => {
                     className={`w-full py-4 rounded-xl transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed group ${
                       editData.role === "super"
                         ? "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                        : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                        : "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
                     } text-white`}
                   >
                     {editLoading ? (
