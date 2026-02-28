@@ -64,6 +64,34 @@ const Dashboard = ({
   const hasInitializedResetRequests = useRef(false);
   const knownResetRequestIds = useRef(new Set());
 
+  const playResetRequestSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioContext.currentTime;
+      const notes = [
+        { frequency: 988, start: now, duration: 0.08 },
+        { frequency: 784, start: now + 0.1, duration: 0.08 },
+        { frequency: 659, start: now + 0.2, duration: 0.12 },
+      ];
+
+      notes.forEach(({ frequency, start, duration }) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.type = "triangle";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gainNode.gain.setValueAtTime(0.0001, start);
+        gainNode.gain.exponentialRampToValueAtTime(0.2, start + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      });
+    } catch (error) {
+      console.error("Error playing reset request sound:", error);
+    }
+  };
+
   const { visitors } = useAdminVisitors(user);
   const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
 
@@ -90,6 +118,7 @@ const Dashboard = ({
           hasInitializedResetRequests.current = true;
 
           if (requests.length > 0 && activeTab !== "offices") {
+            playResetRequestSound();
             setResetRequestModal({
               show: true,
               title: "Pending Password Reset Requests",
@@ -101,6 +130,7 @@ const Dashboard = ({
         } else if (newRequests.length > 0 && activeTab !== "offices") {
           const latestOwner =
             newRequests[0]?.officeName || newRequests[0]?.username || "an office account";
+          playResetRequestSound();
           setResetRequestModal({
             show: true,
             title: "New Password Reset Request",
