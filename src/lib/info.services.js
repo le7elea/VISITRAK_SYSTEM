@@ -1647,6 +1647,43 @@ export const requestOfficePasswordReset = async (username) => {
 };
 
 /**
+ * Public endpoint: cancel a pending office password reset request.
+ */
+export const cancelOfficePasswordResetRequest = async (username, requestId = "") => {
+  const cleanUsername = normalizeUsername(username);
+  const cleanRequestId = String(requestId || "").trim();
+
+  if (!cleanUsername && !cleanRequestId) {
+    throw new Error("Username or requestId is required.");
+  }
+
+  const response = await fetch("/api/office-password-reset-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      intent: "cancel",
+      username: cleanUsername || "",
+      requestId: cleanRequestId,
+    }),
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    // Ignore JSON parse errors and use fallback below.
+  }
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.message || "Failed to cancel password reset request.");
+  }
+
+  return payload;
+};
+
+/**
  * Public endpoint: check the latest password reset request status by username.
  */
 export const getOfficePasswordResetRequestStatus = async (username) => {

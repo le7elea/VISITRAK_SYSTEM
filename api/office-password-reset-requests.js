@@ -23,6 +23,7 @@ const PUBLIC_COOLDOWN_MS = 10 * 1000;
 const REQUEST_EXPIRATION_MS = 15 * 60 * 1000;
 const REQUEST_EXPIRY_REASON =
   "Request expired after 15 minutes without super admin action.";
+const REQUEST_CANCEL_REASON = "Request cancelled by office admin before approval.";
 
 const requesterLastSeen = new Map();
 
@@ -48,7 +49,12 @@ const isPendingRequestExpired = (requestData, nowMs = Date.now()) => {
   return nowMs - requestedAt.getTime() >= REQUEST_EXPIRATION_MS;
 };
 
-const archivePendingResetNotifications = async (db, admin, requestId) => {
+const archivePendingResetNotifications = async (
+  db,
+  admin,
+  requestId,
+  status = "expired"
+) => {
   if (!requestId) return;
 
   const notificationsSnapshot = await db
@@ -65,7 +71,7 @@ const archivePendingResetNotifications = async (db, admin, requestId) => {
     batch.set(
       doc.ref,
       {
-        status: "expired",
+        status,
         archived: true,
         archivedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -106,6 +112,48 @@ const markResetRequestExpired = async (db, admin, requestId, existingData = {}) 
   return {
     ...(existingData || {}),
     status: "expired",
+    reason,
+    resolvedAt: now,
+    resolvedByUid: null,
+    resolvedByEmail: "",
+    lastUpdatedAt: now,
+  };
+};
+
+const markResetRequestCancelled = async (
+  db,
+  admin,
+  requestId,
+  existingData = {}
+) => {
+  if (!requestId) {
+    return {
+      ...(existingData || {}),
+      status: "cancelled",
+      reason: existingData?.reason || REQUEST_CANCEL_REASON,
+    };
+  }
+
+  const reason = existingData?.reason || REQUEST_CANCEL_REASON;
+  const requestRef = db.collection("passwordResetRequests").doc(requestId);
+  await requestRef.set(
+    {
+      status: "cancelled",
+      reason,
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedByUid: null,
+      resolvedByEmail: "",
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await archivePendingResetNotifications(db, admin, requestId, "cancelled");
+
+  const now = new Date();
+  return {
+    ...(existingData || {}),
+    status: "cancelled",
     reason,
     resolvedAt: now,
     resolvedByUid: null,
@@ -513,6 +561,86 @@ const getLatestResetRequestForOffice = async (db, officeId) => {
   return requests[0] || null;
 };
 
+const cancelPendingRequest = async (req, res, admin, db) => {
+  const identifier = normalizeIdentifier(
+    req.body?.identifier || req.body?.username || ""
+  );
+  const requestId = String(req.body?.requestId || "").trim();
+
+  let targetRequest = null;
+
+  if (requestId) {
+    const requestSnap = await db.collection("passwordResetRequests").doc(requestId).get();
+    if (requestSnap.exists) {
+      targetRequest = {
+        id: requestSnap.id,
+        ...(requestSnap.data() || {}),
+      };
+    }
+  }
+
+  if (identifier) {
+    const lookup = await findOfficeByIdentifier(db, identifier);
+    if (!lookup.officeDoc) {
+      return res.status(200).json({
+        success: true,
+        cancelled: false,
+        message: "No active reset request found to cancel.",
+      });
+    }
+
+    if (targetRequest && targetRequest.officeId && targetRequest.officeId !== lookup.officeDoc.id) {
+      return res.status(200).json({
+        success: true,
+        cancelled: false,
+        message: "No active reset request found to cancel.",
+      });
+    }
+
+    if (!targetRequest) {
+      targetRequest = await getLatestResetRequestForOffice(db, lookup.officeDoc.id);
+    }
+  }
+
+  if (!targetRequest) {
+    return res.status(200).json({
+      success: true,
+      cancelled: false,
+      message: "No active reset request found to cancel.",
+    });
+  }
+
+  if (isPendingRequestExpired(targetRequest)) {
+    await markResetRequestExpired(db, admin, targetRequest.id, targetRequest);
+    return res.status(200).json({
+      success: true,
+      cancelled: false,
+      status: "expired",
+      requestId: targetRequest.id,
+      message: "Reset request has already expired.",
+    });
+  }
+
+  if ((targetRequest.status || "pending") !== "pending") {
+    return res.status(200).json({
+      success: true,
+      cancelled: false,
+      status: targetRequest.status || "none",
+      requestId: targetRequest.id,
+      message: "Reset request is already resolved.",
+    });
+  }
+
+  await markResetRequestCancelled(db, admin, targetRequest.id, targetRequest);
+  return res.status(200).json({
+    success: true,
+    cancelled: true,
+    status: "cancelled",
+    requestId: targetRequest.id,
+    message: "Reset request cancelled.",
+  });
+};
+
 const getRequestStatus = async (req, res, admin, db) => {
   const identifier = normalizeIdentifier(
     req.body?.identifier || req.body?.username || ""
@@ -563,6 +691,19 @@ const getRequestStatus = async (req, res, admin, db) => {
     resetLink: null,
     expiresAt: null,
   };
+
+  if (baseResponse.status === "cancelled") {
+    return res.status(200).json({
+      success: true,
+      requestId: null,
+      requestedAt: null,
+      resolvedAt: toIso(latestRequest.resolvedAt),
+      status: "none",
+      message: "No password reset request found.",
+      resetLink: null,
+      expiresAt: null,
+    });
+  }
 
   if (baseResponse.status === "approved") {
     if (!latestRequest.resetLink) {
@@ -643,6 +784,9 @@ export default async function handler(req, res) {
       }
       if (intent === "status") {
         return await getRequestStatus(req, res, admin, db);
+      }
+      if (intent === "cancel") {
+        return await cancelPendingRequest(req, res, admin, db);
       }
       return await createRequest(req, res, admin, db);
     }

@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  cancelOfficePasswordResetRequest,
   getOfficePasswordResetRequestStatus,
   lookupOfficePasswordResetAccount,
   requestOfficePasswordReset,
@@ -51,6 +52,10 @@ const ForgotPassword = () => {
     title: "",
     message: "",
   });
+  const trackedUsernameRef = useRef("");
+  const trackedRequestIdRef = useRef("");
+  const trackedStatusRef = useRef("");
+  const cancelSentRef = useRef(false);
 
   const navigate = useNavigate();
 
@@ -84,6 +89,73 @@ const ForgotPassword = () => {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  const clearTrackedRequest = useCallback(() => {
+    setTrackedUsername("");
+    setStatusData(null);
+    setRequestAnchorTime(null);
+    setWatchModalOpen(false);
+    cancelSentRef.current = false;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    trackedUsernameRef.current = String(trackedUsername || "").trim().toLowerCase();
+    trackedRequestIdRef.current = String(statusData?.requestId || "").trim();
+    trackedStatusRef.current = String(statusData?.status || "").trim().toLowerCase();
+
+    if (!trackedUsernameRef.current) {
+      cancelSentRef.current = false;
+    }
+  }, [statusData?.requestId, statusData?.status, trackedUsername]);
+
+  const cancelTrackedRequest = useCallback(
+    async ({ keepalive = false, silent = true } = {}) => {
+      const username = trackedUsernameRef.current;
+      const requestId = trackedRequestIdRef.current;
+      const status = trackedStatusRef.current;
+      const isPending = Boolean(username) && (!status || status === "pending" || status === "none");
+
+      if (!isPending || cancelSentRef.current) return false;
+      cancelSentRef.current = true;
+
+      try {
+        if (keepalive) {
+          await fetch("/api/office-password-reset-requests", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              intent: "cancel",
+              username,
+              requestId,
+            }),
+            keepalive: true,
+          });
+          return true;
+        }
+
+        await cancelOfficePasswordResetRequest(username, requestId);
+        return true;
+      } catch (error) {
+        cancelSentRef.current = false;
+        if (!silent) {
+          setModal({
+            show: true,
+            title: "Cancel Failed",
+            message:
+              error.message ||
+              "Unable to cancel the password reset request right now.",
+          });
+        }
+        return false;
+      }
+    },
+    []
+  );
+
   const loadRequestStatus = useCallback(
     async (targetUsername, options = {}) => {
       const cleanUsername = String(targetUsername || "").trim().toLowerCase();
@@ -116,6 +188,21 @@ const ForgotPassword = () => {
     // Clear legacy stored tracking to avoid reopening modal on page revisit.
     localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBeforeUnload = () => {
+      void cancelTrackedRequest({ keepalive: true, silent: true });
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      void cancelTrackedRequest({ keepalive: true, silent: true });
+    };
+  }, [cancelTrackedRequest]);
 
   useEffect(() => {
     if (!trackedUsername) return;
@@ -173,6 +260,7 @@ const ForgotPassword = () => {
     setResending(true);
     try {
       await requestOfficePasswordReset(trackedUsername);
+      cancelSentRef.current = false;
       setRequestAnchorTime(Date.now());
       await loadRequestStatus(trackedUsername, { showLoader: true });
     } catch (error) {
@@ -233,6 +321,7 @@ const ForgotPassword = () => {
 
       const resolvedUsername = lookup.usernameNormalized;
       await requestOfficePasswordReset(resolvedUsername);
+      cancelSentRef.current = false;
       setTrackedUsername(resolvedUsername);
       setRequestAnchorTime(Date.now());
       setCurrentTimeMs(Date.now());
@@ -251,14 +340,34 @@ const ForgotPassword = () => {
     }
   };
 
-  const handleUseResetLink = () => {
-    setTrackedUsername("");
-    setStatusData(null);
-    setRequestAnchorTime(null);
-    setWatchModalOpen(false);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(RESET_TRACK_USERNAME_KEY);
+  const handleCancelRequest = async () => {
+    if (!isPendingStatus) {
+      clearTrackedRequest();
+      return;
     }
+
+    const cancelled = await cancelTrackedRequest({
+      keepalive: false,
+      silent: true,
+    });
+    clearTrackedRequest();
+    setModal({
+      show: true,
+      title: cancelled ? "Request Cancelled" : "Tracker Closed",
+      message: cancelled
+        ? "Your pending password reset request has been cancelled and removed from the super admin queue."
+        : "Request monitor closed, but cancellation could not be confirmed.",
+    });
+  };
+
+  const handleBackToLogin = async () => {
+    await cancelTrackedRequest({ keepalive: false, silent: true });
+    clearTrackedRequest();
+    navigate("/login");
+  };
+
+  const handleUseResetLink = () => {
+    clearTrackedRequest();
   };
 
   return (
@@ -339,7 +448,7 @@ const ForgotPassword = () => {
 
             <div className="mt-8 pt-6 border-t border-gray-100">
               <button
-                onClick={() => navigate("/login")}
+                onClick={handleBackToLogin}
                 disabled={loading}
                 className="w-full flex items-center justify-center space-x-2 text-gray-500 hover:text-purple-600 hover:underline transition-colors duration-200 disabled:opacity-50"
               >
@@ -383,7 +492,7 @@ const ForgotPassword = () => {
                 {statusData?.status === "approved" &&
                   "Approved. Click the button below to reset your password."}
                 {statusData?.status === "pending" &&
-                  "Waiting for super admin approval. Do not close this modal."}
+                  "Waiting for super admin approval. Leaving this screen will cancel this request."}
                 {statusData?.status === "rejected" &&
                   "Request was rejected. You can send a new request."}
                 {statusData?.status === "expired" &&
@@ -431,6 +540,15 @@ const ForgotPassword = () => {
                   className="h-11 w-full rounded-lg bg-purple-100 text-sm font-semibold text-purple-800 hover:bg-purple-200 disabled:opacity-50"
                 >
                   {statusLoading ? "Checking..." : "CHECK STATUS NOW"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCancelRequest}
+                  disabled={resending || loading || statusLoading}
+                  className="h-11 w-full rounded-lg border border-red-300 bg-white text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {isPendingStatus ? "CANCEL REQUEST" : "CLOSE TRACKER"}
                 </button>
               </div>
             )}
