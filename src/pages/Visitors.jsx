@@ -92,6 +92,14 @@ const formatYear = (dateValue) => {
   return parsed.getFullYear();
 };
 
+const getVisitorSortTime = (visitor) => {
+  const sourceDate = visitor?.rawDate || visitor?.checkInTime || null;
+  const parsed =
+    sourceDate instanceof Date ? sourceDate : new Date(sourceDate || 0);
+  const time = parsed.getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+};
+
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [search, setSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState("All Offices");
@@ -319,13 +327,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   // Print view should list oldest records first.
   const printVisitors = useMemo(() => {
     return [...filteredVisitors].sort((a, b) => {
-      const aTime = a?.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a?.rawDate || 0).getTime();
-      const bTime = b?.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b?.rawDate || 0).getTime();
-
-      const safeATime = Number.isFinite(aTime) ? aTime : Number.MAX_SAFE_INTEGER;
-      const safeBTime = Number.isFinite(bTime) ? bTime : Number.MAX_SAFE_INTEGER;
-
-      return safeATime - safeBTime;
+      const timeDiff = getVisitorSortTime(a) - getVisitorSortTime(b);
+      if (timeDiff !== 0) return timeDiff;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
     });
   }, [filteredVisitors]);
 
@@ -508,7 +512,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
                 {/* Title */}
                 <h2 className="text-center text-base font-bold mb-3 uppercase">Visitors' Log Sheet</h2>
-                <p className="text-center text-[11px] mb-3">Date Range: {selectedDateRangeLabel}</p>
+                {/* <p className="text-center text-[11px] mb-3">Date Range: {selectedDateRangeLabel}</p> */}
 
                 {/* Table */}
                 <table className="w-full border-collapse border-1 border-black">
