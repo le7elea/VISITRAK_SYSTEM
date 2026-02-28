@@ -316,6 +316,19 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     });
   }, [officeFiltered, search, officeFilter, startDateFilter, endDateFilter, user.type]);
 
+  // Print view should list oldest records first.
+  const printVisitors = useMemo(() => {
+    return [...filteredVisitors].sort((a, b) => {
+      const aTime = a?.rawDate instanceof Date ? a.rawDate.getTime() : new Date(a?.rawDate || 0).getTime();
+      const bTime = b?.rawDate instanceof Date ? b.rawDate.getTime() : new Date(b?.rawDate || 0).getTime();
+
+      const safeATime = Number.isFinite(aTime) ? aTime : Number.MAX_SAFE_INTEGER;
+      const safeBTime = Number.isFinite(bTime) ? bTime : Number.MAX_SAFE_INTEGER;
+
+      return safeATime - safeBTime;
+    });
+  }, [filteredVisitors]);
+
   // Calculate statistics
   const stats = useMemo(() => {
     const total = filteredVisitors.length;
@@ -447,11 +460,11 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         {/* Split visitors into pages of 17 rows each */}
         {(() => {
           const rowsPerPage = 17;
-          const totalPages = Math.ceil(filteredVisitors.length / rowsPerPage) || 1;
+          const totalPages = Math.ceil(printVisitors.length / rowsPerPage) || 1;
           
           return Array.from({ length: totalPages }).map((_, pageIndex) => {
             const startIndex = pageIndex * rowsPerPage;
-            const pageVisitors = filteredVisitors.slice(startIndex, startIndex + rowsPerPage);
+            const pageVisitors = printVisitors.slice(startIndex, startIndex + rowsPerPage);
             const emptyRowsNeeded = rowsPerPage - pageVisitors.length;
             
             return (
