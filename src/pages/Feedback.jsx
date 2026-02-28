@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import FeedbackModal from "../components/FeedbackModal";
 import FilterBar from "../components/FilterBars";
 import FeedbackTable from "../components/FeedbackTable";
@@ -86,33 +88,28 @@ const Feedback = ({ user }) => {
 
   // Fetch offices from Firestore
   useEffect(() => {
-    const fetchOffices = async () => {
-      try {
-        const { collection, onSnapshot } = await import("firebase/firestore");
-        const { db } = await import("../lib/firebase");
-        
-        const unsub = onSnapshot(collection(db, "offices"), (snapshot) => {
-          const data = snapshot.docs.map((doc) => {
-            const d = doc.data();
-            return {
-              id: doc.id,
-              name: d.name || "",
-              officialName: d.officialName || "",
-            };
-          });
-          
-          setOffices(data);
-        }, (error) => {
-          console.error("Error fetching offices:", error);
+    const unsub = onSnapshot(
+      collection(db, "offices"),
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            name: d.name || "",
+            officialName: d.officialName || "",
+          };
         });
 
-        return () => unsub();
-      } catch (error) {
-        console.error("Error setting up offices listener:", error);
+        setOffices(data);
+      },
+      (error) => {
+        console.error("Error fetching offices:", error);
       }
-    };
+    );
 
-    fetchOffices();
+    return () => {
+      unsub();
+    };
   }, []);
  
   // Get a safe date string from createdAt

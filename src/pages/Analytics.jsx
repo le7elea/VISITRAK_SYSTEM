@@ -673,45 +673,39 @@ const Analytics = () => {
       return;
     }
 
-    const fetchFeedbacks = () => {
-      try {
-        if (currentUser && currentUser.type === "OfficeAdmin" && currentUser.office) {
-          console.log(`📝 Fetching feedbacks for office: "${currentUser.originalOffice || currentUser.office}"`);
-          
-          // Get the actual office name that might be stored in Firestore
-          const userOffice = currentUser.originalOffice || currentUser.office;
-          
-          // First, we need to get visits for this office to get the visit IDs
-          // We'll use the visits already fetched in state, but make sure they're loaded
-          if (visits.length === 0) {
-            console.log("📝 No visits loaded yet, waiting...");
-            return;
-          }
-          
-          console.log(`📊 Using ${visits.length} visits for feedback filtering`);
-          
-          // Get visit IDs for this office
-          const officeVisitIds = visits.map(v => v.id);
-          
-          console.log(`🏢 Found ${officeVisitIds.length} visit IDs for this office`);
-          
-          if (officeVisitIds.length === 0) {
-            console.log("📝 No visits found for this office, setting empty feedbacks");
-            setFeedbacks([]);
-            return;
-          }
-          
-          // Now fetch ALL feedbacks
-          const feedbackQuery = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
-          
-          const feedbackUnsub = onSnapshot(feedbackQuery, (feedbackSnapshot) => {
+    let feedbackUnsub = null;
+
+    try {
+      if (currentUser.type === "OfficeAdmin" && currentUser.office) {
+        const userOffice = currentUser.originalOffice || currentUser.office;
+
+        if (visits.length === 0) {
+          setFeedbacks([]);
+          return;
+        }
+
+        const officeVisitIds = visits.map((visit) => visit.id);
+        if (officeVisitIds.length === 0) {
+          setFeedbacks([]);
+          return;
+        }
+
+        const feedbackQuery = query(
+          collection(db, "feedbacks"),
+          orderBy("createdAt", "desc")
+        );
+
+        feedbackUnsub = onSnapshot(
+          feedbackQuery,
+          (feedbackSnapshot) => {
             const allFeedbacks = feedbackSnapshot.docs.map((doc) => {
               const d = doc.data();
               return {
                 id: doc.id,
                 visitId: d.visitId,
                 name: d.name,
-                office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
+                office:
+                  d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
                 cc1Rating: getCharterRatingValue(d, 1),
@@ -720,46 +714,46 @@ const Analytics = () => {
                 answers: d.answers || [],
                 questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
-                commendation: d.commendation || d.commendations || d.positiveFeedback || d.compliment || "",
+                commendation:
+                  d.commendation ||
+                  d.commendations ||
+                  d.positiveFeedback ||
+                  d.compliment ||
+                  "",
                 suggestion: d.suggestion || "",
                 createdAt: d.createdAt,
               };
             });
-            
-            console.log(`📝 Fetched ${allFeedbacks.length} total feedbacks from Firestore`);
-            
-            // Filter feedbacks by office visit IDs
-            const filteredData = allFeedbacks.filter(feedback => 
+
+            const filteredData = allFeedbacks.filter((feedback) =>
               officeVisitIds.includes(feedback.visitId)
             );
-            
-            console.log(`📝 After filtering: ${filteredData.length} feedbacks for office "${userOffice}"`);
-            
-            // Debug: Show which visits have feedback
-            const visitsWithFeedback = new Set(filteredData.map(f => f.visitId));
-            console.log(`📝 ${visitsWithFeedback.size} visits have feedback`);
-            
+            console.log(
+              `After filtering: ${filteredData.length} feedbacks for office "${userOffice}"`
+            );
             setFeedbacks(filteredData);
-          }, (error) => {
-            console.error("❌ Error fetching feedbacks:", error);
-          });
-          
-          return () => {
-            if (feedbackUnsub) feedbackUnsub();
-          };
-        } else {
-          // SuperAdmin or no office: Fetch all feedbacks
-          console.log("📝 Fetching all feedbacks (SuperAdmin)");
-          const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
-          
-          const unsub = onSnapshot(q, (snapshot) => {
+          },
+          (error) => {
+            console.error("Error fetching feedbacks:", error);
+          }
+        );
+      } else {
+        const feedbackQuery = query(
+          collection(db, "feedbacks"),
+          orderBy("createdAt", "desc")
+        );
+
+        feedbackUnsub = onSnapshot(
+          feedbackQuery,
+          (snapshot) => {
             const data = snapshot.docs.map((doc) => {
               const d = doc.data();
               return {
                 id: doc.id,
                 visitId: d.visitId,
                 name: d.name,
-                office: d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || '',
+                office:
+                  d.office || d.unitOfficeVisited || d.officeVisited || d.unitOffice || "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
                 cc1Rating: getCharterRatingValue(d, 1),
@@ -768,28 +762,34 @@ const Analytics = () => {
                 answers: d.answers || [],
                 questions: Array.isArray(d.questions) ? d.questions : [],
                 averageRating: d.averageRating || 0,
-                commendation: d.commendation || d.commendations || d.positiveFeedback || d.compliment || "",
+                commendation:
+                  d.commendation ||
+                  d.commendations ||
+                  d.positiveFeedback ||
+                  d.compliment ||
+                  "",
                 suggestion: d.suggestion || "",
                 createdAt: d.createdAt,
               };
             });
-            
-            console.log(`📝 Fetched ${data.length} feedbacks`);
-            setFeedbacks(data);
-          }, (error) => {
-            console.error("Error fetching feedbacks:", error);
-          });
 
-          return () => {
-            if (unsub) unsub();
-          };
-        }
-      } catch (error) {
-        console.error("Error setting up feedbacks listener:", error);
+            console.log(`Fetched ${data.length} feedbacks`);
+            setFeedbacks(data);
+          },
+          (error) => {
+            console.error("Error fetching feedbacks:", error);
+          }
+        );
+      }
+    } catch (error) {
+      console.error("Error setting up feedbacks listener:", error);
+    }
+
+    return () => {
+      if (feedbackUnsub) {
+        feedbackUnsub();
       }
     };
-
-    fetchFeedbacks();
   }, [currentUser, visits]); // Added visits dependency
 
   // --- State for date range ---

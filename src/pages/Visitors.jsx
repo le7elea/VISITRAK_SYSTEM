@@ -107,129 +107,122 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   // Fetch visits from Firestore
   useEffect(() => {
-    const fetchVisits = () => {
-      try {
-        const q = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
-        
-        const unsub = onSnapshot(q, (snapshot) => {
-          const data = snapshot.docs.map((doc) => {
-            const d = doc.data();
-            const checkInTime = d.checkInTime?.toDate() || new Date();
-            const checkOutTime = d.checkOutTime?.toDate() || null;
-            
-            return {
-              id: doc.id,
-              visitorId: d.visitorId,
-              name: d.visitorName || d.name || "Unknown Visitor",
-              email: d.email || "",
-              phone: d.phone || "",
-              contactNumber: d.contactNumber || d.phone || d.email || "",
-              office: d.office || "Unknown Office",
-              purpose: d.purpose || "",
-              checkInTime: checkInTime,
-              checkOutTime: checkOutTime,
-              status: d.status || (checkOutTime ? 'checked-out' : 'checked-in'),
-              // Format for display
-              date: checkInTime.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: '2-digit', 
-                year: 'numeric' 
-              }),
-              timeIn: checkInTime.toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-              }),
-              timeOut: checkOutTime 
-                ? checkOutTime.toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: true 
-                  })
-                : "-",
-              // For filtering by exact date
-              rawDate: checkInTime
-            };
-          });
-          
-          setVisits(data);
-        }, (error) => {
-          console.error("Error fetching visits:", error);
+    const q = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
+
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const d = doc.data();
+          const checkInTime = d.checkInTime?.toDate() || new Date();
+          const checkOutTime = d.checkOutTime?.toDate() || null;
+
+          return {
+            id: doc.id,
+            visitorId: d.visitorId,
+            name: d.visitorName || d.name || "Unknown Visitor",
+            email: d.email || "",
+            phone: d.phone || "",
+            contactNumber: d.contactNumber || d.phone || d.email || "",
+            office: d.office || "Unknown Office",
+            purpose: d.purpose || "",
+            checkInTime: checkInTime,
+            checkOutTime: checkOutTime,
+            status: d.status || (checkOutTime ? "checked-out" : "checked-in"),
+            // Format for display
+            date: checkInTime.toLocaleDateString("en-US", {
+              month: "short",
+              day: "2-digit",
+              year: "numeric",
+            }),
+            timeIn: checkInTime.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            }),
+            timeOut: checkOutTime
+              ? checkOutTime.toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })
+              : "-",
+            // For filtering by exact date
+            rawDate: checkInTime,
+          };
         });
 
-        return () => unsub();
-      } catch (error) {
-        console.error("Error setting up visits listener:", error);
+        setVisits(data);
+      },
+      (error) => {
+        console.error("Error fetching visits:", error);
       }
-    };
+    );
 
-    fetchVisits();
+    return () => {
+      unsub();
+    };
   }, []);
 
   // Fetch feedbacks from Firestore
   useEffect(() => {
-    const fetchFeedbacks = () => {
-      try {
-        const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
-        
-        const unsub = onSnapshot(q, (snapshot) => {
-          const data = snapshot.docs.map((doc) => {
-            const d = doc.data();
-            const rawAnswers = d.answers ?? d.questionRatings ?? d.ratings ?? [];
-            return {
-              id: doc.id,
-              visitId: d.visitId,
-              averageRating: d.averageRating || 0,
-              createdAt: d.createdAt?.toDate() || new Date(),
-              questionRatings: normalizeQuestionRatings(rawAnswers),
-            };
-          });
-          
-          setFeedbacks(data);
-          setLoading(false);
-        }, (error) => {
-          console.error("Error fetching feedbacks:", error);
-          setLoading(false);
+    const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const d = doc.data();
+          const rawAnswers = d.answers ?? d.questionRatings ?? d.ratings ?? [];
+          return {
+            id: doc.id,
+            visitId: d.visitId,
+            averageRating: d.averageRating || 0,
+            createdAt: d.createdAt?.toDate() || new Date(),
+            questionRatings: normalizeQuestionRatings(rawAnswers),
+          };
         });
 
-        return () => unsub();
-      } catch (error) {
-        console.error("Error setting up feedbacks listener:", error);
+        setFeedbacks(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching feedbacks:", error);
         setLoading(false);
       }
-    };
+    );
 
-    fetchFeedbacks();
+    return () => {
+      unsub();
+    };
   }, []);
 
   // Fetch offices from Firestore
   useEffect(() => {
-    const fetchOffices = () => {
-      try {
-        const unsub = onSnapshot(collection(db, "offices"), (snapshot) => {
-          const data = snapshot.docs.map((doc) => {
-            const d = doc.data();
+    const unsub = onSnapshot(
+      collection(db, "offices"),
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const d = doc.data();
           return {
-              id: doc.id,
-              name: d.name || "",
-              officialName: d.officialName || "",
-              role: d.role || "",
-              email: d.email || "",
-            };
-          });
-          
-          setOffices(data);
-        }, (error) => {
-          console.error("Error fetching offices:", error);
+            id: doc.id,
+            name: d.name || "",
+            officialName: d.officialName || "",
+            role: d.role || "",
+            email: d.email || "",
+          };
         });
 
-        return () => unsub();
-      } catch (error) {
-        console.error("Error setting up offices listener:", error);
+        setOffices(data);
+      },
+      (error) => {
+        console.error("Error fetching offices:", error);
       }
-    };
+    );
 
-    fetchOffices();
+    return () => {
+      unsub();
+    };
   }, []);
 
   // Combine visits with feedback ratings
