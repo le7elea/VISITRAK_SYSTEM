@@ -6,13 +6,8 @@ service cloud.firestore {
     }
 
     function isSuper() {
-      return signedIn() && (
-        request.auth.token.role == "super" ||
-        (
-          exists(/databases/$(database)/documents/offices/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/offices/$(request.auth.uid)).data.role == "super"
-        )
-      );
+      // Rely on trusted custom claims only.
+      return signedIn() && request.auth.token.role == "super";
     }
 
     function isOwnOffice(officeId) {
@@ -25,22 +20,46 @@ service cloud.firestore {
       );
     }
 
+    function noLegacyPasswordFieldWrite() {
+      return !("password" in request.resource.data);
+    }
+
+    function noCredentialFieldWrite() {
+      return !(
+        "credentialHash" in request.resource.data ||
+        "credentialSalt" in request.resource.data ||
+        "credentialAlgo" in request.resource.data ||
+        "credentialIterations" in request.resource.data ||
+        "credentialKeyLength" in request.resource.data
+      );
+    }
+
+    function ownOfficeAllowedUpdate(officeId) {
+      return isOwnOffice(officeId) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "passwordChanged",
+          "passwordChangedAt",
+          "lastLoginAt",
+          "updatedAt"
+        ]);
+    }
+
     // Offices directory for admin users.
     match /offices/{officeId} {
+      // Kept broad for current dashboard flows. Tighten to isSuper() || isOwnOffice(officeId)
+      // only after client queries are office-scoped.
       allow read: if signedIn();
 
       // Only super admins can create office accounts.
-      allow create: if isSuper() && !("password" in request.resource.data);
+      allow create: if isSuper() && noLegacyPasswordFieldWrite() && noCredentialFieldWrite();
 
-      // Super admins can update any office. Users can update only their own office doc.
-      // If a legacy password field already exists, it must remain unchanged from clients.
-      allow update: if (isSuper() || isOwnOffice(officeId)) && (
-        !("password" in request.resource.data) ||
-        (
-          "password" in resource.data &&
-          request.resource.data.password == resource.data.password
-        )
-      );
+      // Super admins can update any office metadata except credential internals from client SDK.
+      // Office users can only update a minimal safe set of self fields.
+      allow update: if (
+        isSuper() &&
+        noLegacyPasswordFieldWrite() &&
+        noCredentialFieldWrite()
+      ) || ownOfficeAllowedUpdate(officeId);
 
       // Protect super admin account from accidental deletion.
       allow delete: if isSuper() && resource.data.role != "super";
@@ -70,6 +89,17 @@ service cloud.firestore {
     // Sensitive reset tokens must be handled by backend/Admin SDK only.
     match /passwordResetTokens/{tokenId} {
       allow read, write: if false;
+    }
+
+    // Must only be handled by backend/Admin SDK.
+    match /passwordResetRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    // Admin notifications are server-managed.
+    match /adminNotifications/{notificationId} {
+      allow read: if isSuper();
+      allow write: if false;
     }
 
     // Default deny.
