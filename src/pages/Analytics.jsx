@@ -1326,7 +1326,8 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, filteredVisits.length]);
 
   const summaryPages = useMemo(() => {
-    const rowsPerPage = 4;
+    // Increased page capacity to avoid unnecessary extra print pages.
+    const rowsPerPage = 8;
 
     if (!officeAnalyticsRows.length) {
       return [[]];
@@ -1350,9 +1351,9 @@ const Analytics = ({ setActiveTab }) => {
 
     const officeRowCount = officeAnalyticsRows.length;
 
-    // Conservative heuristic so first page does not overflow.
-    if (officeRowCount <= 1) return 2;
-    if (officeRowCount === 2) return 1;
+    // Allow section C to start on page 1 when summary rows are light.
+    if (officeRowCount <= 3) return 2;
+    if (officeRowCount <= 6) return 1;
     return 0;
   }, [officeAnalyticsRows.length, summaryPages.length]);
 
@@ -1380,7 +1381,7 @@ const Analytics = ({ setActiveTab }) => {
   const showCsfOnFirstPage = firstPageCsfRows.length > 0;
 
   const commendationSuggestionPages = useMemo(() => {
-    const rowsPerPage = 5;
+    const rowsPerPage = 7;
     const baseRows = remainingCsfRows.length
       ? remainingCsfRows
       : showCsfOnFirstPage
