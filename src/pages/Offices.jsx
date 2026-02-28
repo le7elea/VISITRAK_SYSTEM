@@ -1,5 +1,5 @@
 // pages/Offices.jsx
-import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock, Eye, EyeOff } from "lucide-react";
 import {
   fetchOffices,
@@ -865,8 +865,6 @@ const Offices = () => {
     requestId: "",
     action: "",
   });
-  const hasInitializedResetRequests = useRef(false);
-  const knownResetRequestIds = useRef(new Set());
   const [notificationModal, setNotificationModal] = useState({
     show: false,
     title: "",
@@ -995,36 +993,6 @@ const Offices = () => {
     });
   }, []);
 
-  // Distinct tone for password-reset-request notifications.
-  // Visitor check-in tone is handled separately in Topbar.
-  const playResetRequestSound = useCallback(() => {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const now = audioContext.currentTime;
-      const notes = [
-        { frequency: 988, start: now, duration: 0.08 },      // B5
-        { frequency: 784, start: now + 0.1, duration: 0.08 }, // G5
-        { frequency: 659, start: now + 0.2, duration: 0.12 }, // E5
-      ];
-
-      notes.forEach(({ frequency, start, duration }) => {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = "triangle";
-        oscillator.frequency.setValueAtTime(frequency, start);
-        gainNode.gain.setValueAtTime(0.0001, start);
-        gainNode.gain.exponentialRampToValueAtTime(0.2, start + 0.01);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        oscillator.start(start);
-        oscillator.stop(start + duration + 0.02);
-      });
-    } catch (error) {
-      console.error("Error playing reset request sound:", error);
-    }
-  }, []);
-
   const loadPendingResetRequests = useCallback(async (options = {}) => {
     const showLoader = options?.showLoader === true;
     try {
@@ -1032,51 +1000,7 @@ const Offices = () => {
         setResetRequestsLoading(true);
       }
       const pendingRequests = await getOfficePasswordResetRequests("pending");
-      const normalizedRequests = Array.isArray(pendingRequests) ? pendingRequests : [];
-      const latestRequestIds = new Set(
-        normalizedRequests.map((request) => request?.id).filter(Boolean)
-      );
-
-      if (!hasInitializedResetRequests.current) {
-        hasInitializedResetRequests.current = true;
-        knownResetRequestIds.current = latestRequestIds;
-
-        if (normalizedRequests.length > 0) {
-          playResetRequestSound();
-          showNotification(
-            `${normalizedRequests.length} pending password reset request${normalizedRequests.length !== 1 ? "s" : ""} available for review.`,
-            {
-              title: "Password Reset Requests",
-              tone: "warning",
-            }
-          );
-        }
-      } else {
-        const newRequests = normalizedRequests.filter(
-          (request) => request?.id && !knownResetRequestIds.current.has(request.id)
-        );
-
-        if (newRequests.length > 0) {
-          playResetRequestSound();
-          const latestRequest = newRequests[0];
-          const requestOwner =
-            latestRequest?.officeName || latestRequest?.username || "an office account";
-
-          showNotification(
-            newRequests.length === 1
-              ? `New password reset request received from ${requestOwner}.`
-              : `${newRequests.length} new password reset requests received.`,
-            {
-              title: "New Reset Request",
-              tone: "warning",
-            }
-          );
-        }
-
-        knownResetRequestIds.current = latestRequestIds;
-      }
-
-      setResetRequests(normalizedRequests);
+      setResetRequests(Array.isArray(pendingRequests) ? pendingRequests : []);
     } catch (error) {
       console.error("Error loading reset requests:", error);
     } finally {
@@ -1084,7 +1008,7 @@ const Offices = () => {
         setResetRequestsLoading(false);
       }
     }
-  }, [playResetRequestSound, showNotification]);
+  }, []);
   // Load offices first; reset requests are best-effort so they never block page load.
   useEffect(() => {
     const loadInitialData = async () => {
