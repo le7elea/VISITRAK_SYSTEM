@@ -20,7 +20,7 @@ const RESET_REQUEST_POLL_INTERVAL_MS = 5000;
 
 // ==================== MEMOIZED COMPONENTS ====================
 
-const EmailDisplay = memo(({ email }) => {
+const EmailDisplay = memo(({ email, onNotify }) => {
   return (
     <div className="mt-3">
       <div className="flex items-center gap-2 mb-2">
@@ -39,9 +39,19 @@ const EmailDisplay = memo(({ email }) => {
         {email && (
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(email);
-              alert("Email copied to clipboard!");
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(email);
+                onNotify?.("Email copied to clipboard!", {
+                  title: "Copied",
+                  tone: "success",
+                });
+              } catch {
+                onNotify?.("Failed to copy email to clipboard.", {
+                  title: "Copy Failed",
+                  tone: "error",
+                });
+              }
             }}
             className="px-4 py-3 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all flex items-center gap-2"
             title="Copy email"
@@ -624,6 +634,74 @@ const AddOfficeModal = memo(({
 });
 AddOfficeModal.displayName = 'AddOfficeModal';
 
+const NotificationModal = memo(({ show, title, message, tone = "info", onClose }) => {
+  if (!show) return null;
+
+  const toneStyles = {
+    success: {
+      border: "border-green-200",
+      bg: "bg-green-50",
+      text: "text-green-800",
+      button: "bg-green-600 hover:bg-green-700",
+    },
+    warning: {
+      border: "border-amber-200",
+      bg: "bg-amber-50",
+      text: "text-amber-800",
+      button: "bg-amber-600 hover:bg-amber-700",
+    },
+    error: {
+      border: "border-red-200",
+      bg: "bg-red-50",
+      text: "text-red-800",
+      button: "bg-red-600 hover:bg-red-700",
+    },
+    info: {
+      border: "border-blue-200",
+      bg: "bg-blue-50",
+      text: "text-blue-800",
+      button: "bg-blue-600 hover:bg-blue-700",
+    },
+  };
+
+  const selectedTone = toneStyles[tone] || toneStyles.info;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+      <div className={`w-full max-w-md rounded-xl border ${selectedTone.border} ${selectedTone.bg} shadow-xl`}>
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className={`text-lg font-semibold ${selectedTone.text}`}>{title || "Notice"}</h4>
+              <p className={`mt-2 text-sm whitespace-pre-line break-words ${selectedTone.text}`}>
+                {message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 transition"
+              aria-label="Close notification"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition ${selectedTone.button}`}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+NotificationModal.displayName = "NotificationModal";
+
 // ==================== MAIN COMPONENT ====================
 
 const Offices = () => {
@@ -678,6 +756,12 @@ const Offices = () => {
   const [resetRequests, setResetRequests] = useState([]);
   const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
   const [resetRequestActionId, setResetRequestActionId] = useState("");
+  const [notificationModal, setNotificationModal] = useState({
+    show: false,
+    title: "",
+    message: "",
+    tone: "info",
+  });
 
   // ðŸ”¹ Delete Modal
   const [deleteIndex, setDeleteIndex] = useState(null);
@@ -686,6 +770,22 @@ const Offices = () => {
 
   // ðŸ”¹ Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
+
+  const showNotification = useCallback((message, options = {}) => {
+    setNotificationModal({
+      show: true,
+      title: options.title || "Notice",
+      message: String(message || ""),
+      tone: options.tone || "info",
+    });
+  }, []);
+
+  const closeNotification = useCallback(() => {
+    setNotificationModal((prev) => ({
+      ...prev,
+      show: false,
+    }));
+  }, []);
 
   const loadPendingResetRequests = useCallback(async (options = {}) => {
     const showLoader = options?.showLoader === true;
@@ -854,7 +954,10 @@ const Offices = () => {
       setNewPurpose("");
       setNewStaff("");
       
-      alert(`Office "${addData.name}" added successfully!`);
+      showNotification(`Office "${addData.name}" added successfully!`, {
+        title: "Office Added",
+        tone: "success",
+      });
       
       // Save to Firestore in background
       setTimeout(async () => {
@@ -873,7 +976,13 @@ const Offices = () => {
         } catch (err) {
           console.error("Error saving office to Firestore:", err);
           setOffices(prev => prev.filter(office => office.id !== tempId));
-          alert(`Warning: Office "${addData.name}" failed to save to database: ${err.message}`);
+          showNotification(
+            `Warning: Office "${addData.name}" failed to save to database: ${err.message}`,
+            {
+              title: "Background Save Failed",
+              tone: "warning",
+            }
+          );
         } finally {
           setAddLoading(false);
         }
@@ -884,7 +993,7 @@ const Offices = () => {
       setAddError(`Failed to add office: ${err.message}`);
       setAddLoading(false);
     }
-  }, [addData, offices]);
+  }, [addData, offices, showNotification]);
 
   // ðŸ”¹ Open edit modal
   const openEditModal = useCallback((index) => {
@@ -1067,23 +1176,36 @@ const Offices = () => {
         if (isApprove && response?.resetLink) {
           try {
             await navigator.clipboard.writeText(response.resetLink);
-            alert(
-              `Request approved.\n\nReset link copied to clipboard.\nExpires at: ${response.expiresAt || "15 minutes from approval"}`
+            showNotification(
+              `Request approved.\n\nReset link copied to clipboard.\nExpires at: ${response.expiresAt || "15 minutes from approval"}`,
+              {
+                title: "Request Approved",
+                tone: "success",
+              }
             );
           } catch {
-            alert(`Request approved.\n\nReset link:\n${response.resetLink}`);
+            showNotification(`Request approved.\n\nReset link:\n${response.resetLink}`, {
+              title: "Request Approved",
+              tone: "success",
+            });
           }
         } else {
-          alert("Request rejected.");
+          showNotification("Request rejected.", {
+            title: "Request Rejected",
+            tone: "info",
+          });
         }
       } catch (error) {
         await loadPendingResetRequests();
-        alert(`Failed to resolve request: ${error.message}`);
+        showNotification(`Failed to resolve request: ${error.message}`, {
+          title: "Action Failed",
+          tone: "error",
+        });
       } finally {
         setResetRequestActionId("");
       }
     },
-    [loadPendingResetRequests]
+    [loadPendingResetRequests, showNotification]
   );
   // Add purpose to edit list
   const addPurposeToEditList = useCallback(() => {
@@ -1206,7 +1328,10 @@ const Offices = () => {
       setOffices(updatedOffices);
       closeEditModal();
       
-      alert(`Office "${editData.name}" updated successfully!`);
+      showNotification(`Office "${editData.name}" updated successfully!`, {
+        title: "Office Updated",
+        tone: "success",
+      });
       
       // Save to Firestore in background
       setTimeout(async () => {
@@ -1217,7 +1342,13 @@ const Offices = () => {
           const revertedOffices = [...offices];
           revertedOffices[editIndex] = originalOffice;
           setOffices(revertedOffices);
-          alert(`Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`);
+          showNotification(
+            `Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`,
+            {
+              title: "Background Update Failed",
+              tone: "warning",
+            }
+          );
         } finally {
           setEditLoading(false);
         }
@@ -1228,7 +1359,7 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [closeEditModal, editIndex, editData, offices]);
+  }, [closeEditModal, editIndex, editData, offices, showNotification]);
 
   // ðŸ”¹ OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -1239,7 +1370,10 @@ const Offices = () => {
     
     // ðŸ”¹ PREVENT deleting super admin
     if (officeToDelete.role === "super") {
-      alert("Super Admin accounts cannot be deleted. This account is protected.");
+      showNotification("Super Admin accounts cannot be deleted. This account is protected.", {
+        title: "Protected Account",
+        tone: "warning",
+      });
       setDeleteIndex(null);
       setDeleteConfirmed(false);
       return;
@@ -1255,7 +1389,10 @@ const Offices = () => {
       setDeleteIndex(null);
       setDeleteConfirmed(false);
       
-      alert(`Office "${officeToDelete.name}" deleted successfully!`);
+      showNotification(`Office "${officeToDelete.name}" deleted successfully!`, {
+        title: "Office Deleted",
+        tone: "success",
+      });
       
       // Delete from Firestore in background
       setTimeout(async () => {
@@ -1268,7 +1405,13 @@ const Offices = () => {
             restored.splice(deleteIndex, 0, originalOffice);
             return restored;
           });
-          alert(`Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`);
+          showNotification(
+            `Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`,
+            {
+              title: "Background Delete Failed",
+              tone: "warning",
+            }
+          );
         } finally {
           setDeleteLoading(false);
         }
@@ -1276,10 +1419,13 @@ const Offices = () => {
       
     } catch (err) {
       console.error("Error in delete process:", err);
-      alert(`Failed to delete office: ${err.message}`);
+      showNotification(`Failed to delete office: ${err.message}`, {
+        title: "Delete Failed",
+        tone: "error",
+      });
       setDeleteLoading(false);
     }
-  }, [deleteIndex, deleteConfirmed, offices]);
+  }, [deleteIndex, deleteConfirmed, offices, showNotification]);
 
   const formatResetRequestTime = useCallback((value) => {
     if (!value) return "Unknown time";
@@ -2188,7 +2334,10 @@ const Offices = () => {
                 {offices[deleteIndex]?.role === "super" ? (
                   <button 
                     onClick={() => {
-                      alert("Super Admin accounts cannot be deleted. This account is protected.");
+                      showNotification("Super Admin accounts cannot be deleted. This account is protected.", {
+                        title: "Protected Account",
+                        tone: "warning",
+                      });
                       setDeleteIndex(null);
                       setDeleteConfirmed(false);
                     }}
@@ -2221,6 +2370,14 @@ const Offices = () => {
            </div>
         </div>
       )}
+
+      <NotificationModal
+        show={notificationModal.show}
+        title={notificationModal.title}
+        message={notificationModal.message}
+        tone={notificationModal.tone}
+        onClose={closeNotification}
+      />
     </div>
   );
 };
