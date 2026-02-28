@@ -24,7 +24,6 @@ const FilterBar = ({
   setStartDateFilter,
   endDateFilter,
   setEndDateFilter,
-  exportExcel,
   exportPDF,
   uniqueOffices = [],
 }) => {
@@ -81,18 +80,11 @@ const FilterBar = ({
         </h3>
         <div className="flex gap-2">
           <button
-            onClick={exportExcel}
-            className="flex items-center gap-2 bg-[#7400EA] hover:bg-indigo-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
-            <Download className="w-4 h-4" />
-            Export Excel
-          </button>
-          <button
             onClick={exportPDF}
             className="flex items-center gap-2 bg-[#7400EA] hover:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
           >
             <Download className="w-4 h-4" />
-            Print
+            Print Report
           </button>
         </div>
       </div>

@@ -328,7 +328,7 @@ const ResetPassword = () => {
           {submitting ? "Updating..." : "Create Password"}
         </button>
 
-        <p className="text-xs text-gray-400 mt-6">(c) 2025 VisiTrak System - BISU. All rights reserved.</p>
+        <p className="text-xs text-gray-400 mt-6">&copy; 2025 LMT. All rights reserved.</p>
       </div>
 
       <Modal

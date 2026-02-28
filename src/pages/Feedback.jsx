@@ -181,13 +181,11 @@ const Feedback = ({ user }) => {
 
           return { f, idx, suggestion, commendation, questionRatings };
         })
-        .filter(({ f, suggestion, commendation, questionRatings }) => {
+        .filter(({ f, suggestion, commendation }) => {
           if (!f) return false;
           
           const hasWrittenFeedback = Boolean(commendation || suggestion);
-          const hasQuestionRatings = questionRatings.some((entry) => entry.rating !== null);
-
-          if (!hasWrittenFeedback && !hasQuestionRatings) return false;
+          if (!hasWrittenFeedback) return false;
           
           const feedbackOffice = f.office || "Unspecified";
           const searchLower = (search || "").toLowerCase();

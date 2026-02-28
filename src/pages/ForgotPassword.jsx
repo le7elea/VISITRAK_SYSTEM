@@ -353,8 +353,8 @@ const ForgotPassword = () => {
 
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="text-xs text-gray-400 text-center space-y-1">
-              <p>Need help? Contact your system administrator</p>
-              <p>(c) LMT. All rights reserved.</p>
+              
+              <p>&copy; 2025 LMT. All rights reserved.</p>
             </div>
           </div>
         </div>
