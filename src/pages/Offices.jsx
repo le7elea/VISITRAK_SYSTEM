@@ -263,6 +263,10 @@ const AddOfficeModal = memo(({
   onSave, 
   data, 
   onDataChange, 
+  onNameChange,
+  onUsernameChange,
+  suggestedUsername,
+  onUseSuggestedUsername,
   newPurpose, 
   onNewPurposeChange,
   newStaff,
@@ -273,14 +277,6 @@ const AddOfficeModal = memo(({
   if (!show) return null;
 
   const toUppercase = (text) => text ? text.toUpperCase() : "";
-  
-
-  const handleNameChange = (value) => {
-  onDataChange({
-    ...data,
-    name: toUppercase(value)
-  });
-};
 
 
   const addPurposeToList = () => {
@@ -413,7 +409,7 @@ const AddOfficeModal = memo(({
                   <div className="relative">
                     <input
                       value={data.name}
-                      onChange={(e) => handleNameChange(e.target.value)}
+                      onChange={(e) => onNameChange(e.target.value)}
                       className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-[#7400EA] focus:ring-2 focus:ring-[#7400EA]/20 transition-all uppercase"
                       placeholder="Enter office name"
                       disabled={loading}
@@ -428,9 +424,7 @@ const AddOfficeModal = memo(({
                     <input
                       type="text"
                       value={data.username || ""}
-                      onChange={(e) =>
-                        onDataChange({ ...data, username: normalizeUsername(e.target.value) })
-                      }
+                      onChange={(e) => onUsernameChange(e.target.value)}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
                       placeholder="office.username"
                       disabled={loading}
@@ -441,6 +435,23 @@ const AddOfficeModal = memo(({
                     <p className="mt-1 text-xs text-gray-400">
                       Login uses username only. No email is required for office admins.
                     </p>
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+                      <p className="text-xs text-purple-700">
+                        Suggested username:{" "}
+                        <span className="font-mono font-semibold">{suggestedUsername}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onUseSuggestedUsername}
+                        disabled={
+                          loading ||
+                          normalizeUsername(data.username || "") === normalizeUsername(suggestedUsername)
+                        }
+                        className="px-2.5 py-1.5 text-xs font-semibold rounded-md bg-purple-600 text-white hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Use Suggested
+                      </button>
+                    </div>
                   </div>
 
                 </div>
@@ -731,6 +742,7 @@ const Offices = () => {
   const [newStaff, setNewStaff] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
+  const [addUsernameManuallyEdited, setAddUsernameManuallyEdited] = useState(false);
 
   // ðŸ”¹ Edit Modal
   const [editIndex, setEditIndex] = useState(null);
@@ -778,6 +790,86 @@ const Offices = () => {
 
   // ðŸ”¹ Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
+
+  const buildSuggestedUsername = useCallback((officeName = "") => {
+    const existingUsernames = new Set(
+      offices
+        .map((office) => normalizeUsername(office?.username || ""))
+        .filter(Boolean)
+    );
+
+    let base = String(officeName || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ".")
+      .replace(/^\.+|\.+$/g, "");
+
+    if (!base) {
+      base = "office.admin";
+    }
+
+    if (base.length < 4) {
+      base = `${base}.admin`;
+    }
+
+    base = base.slice(0, 32).replace(/[^a-z0-9]+$/g, "");
+    if (!isValidUsername(base)) {
+      base = "office.admin";
+    }
+
+    if (!existingUsernames.has(base)) {
+      return base;
+    }
+
+    for (let count = 1; count <= 999; count += 1) {
+      const suffix = `.${count}`;
+      const maxBaseLength = 32 - suffix.length;
+      const trimmedBase =
+        (base.slice(0, maxBaseLength).replace(/[^a-z0-9]+$/g, "") || "office").slice(0, maxBaseLength);
+      const candidate = `${trimmedBase}${suffix}`;
+
+      if (isValidUsername(candidate) && !existingUsernames.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    return "office.admin";
+  }, [offices]);
+
+  const suggestedAddUsername = useMemo(
+    () => buildSuggestedUsername(addData.name),
+    [addData.name, buildSuggestedUsername]
+  );
+
+  const handleAddOfficeNameChange = useCallback((value) => {
+    const uppercaseName = toUppercase(value);
+    const suggested = buildSuggestedUsername(uppercaseName);
+
+    setAddData((prev) => ({
+      ...prev,
+      name: uppercaseName,
+      username:
+        !addUsernameManuallyEdited || !String(prev.username || "").trim()
+          ? suggested
+          : prev.username,
+    }));
+  }, [addUsernameManuallyEdited, buildSuggestedUsername, toUppercase]);
+
+  const handleAddUsernameChange = useCallback((value) => {
+    setAddUsernameManuallyEdited(true);
+    setAddData((prev) => ({
+      ...prev,
+      username: normalizeUsername(value),
+    }));
+  }, []);
+
+  const handleUseSuggestedAddUsername = useCallback(() => {
+    const suggested = buildSuggestedUsername(addData.name);
+    setAddData((prev) => ({
+      ...prev,
+      username: suggested,
+    }));
+    setAddUsernameManuallyEdited(false);
+  }, [addData.name, buildSuggestedUsername]);
 
   const showNotification = useCallback((message, options = {}) => {
     setNotificationModal({
@@ -966,6 +1058,7 @@ const Offices = () => {
         purposes: [],
         staffToVisit: []
       });
+      setAddUsernameManuallyEdited(false);
       setNewPurpose("");
       setNewStaff("");
       
@@ -1602,6 +1695,10 @@ const Offices = () => {
         onSave={saveAddOffice}
         data={addData}
         onDataChange={setAddData}
+        onNameChange={handleAddOfficeNameChange}
+        onUsernameChange={handleAddUsernameChange}
+        suggestedUsername={suggestedAddUsername}
+        onUseSuggestedUsername={handleUseSuggestedAddUsername}
         newPurpose={newPurpose}
         onNewPurposeChange={handleAddPurposeInput}
         newStaff={newStaff}
