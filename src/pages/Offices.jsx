@@ -1461,18 +1461,8 @@ const Offices = () => {
         if (isApprove && response?.resetLink) {
           try {
             await navigator.clipboard.writeText(response.resetLink);
-            showNotification(
-              `Request approved.\n\nReset link copied to clipboard.\nExpires at: ${response.expiresAt || "15 minutes from approval"}`,
-              {
-                title: "Request Approved",
-                tone: "success",
-              }
-            );
-          } catch {
-            showNotification(`Request approved.\n\nReset link:\n${response.resetLink}`, {
-              title: "Request Approved",
-              tone: "success",
-            });
+          } catch (copyError) {
+            console.error("Failed to copy reset link to clipboard:", copyError);
           }
         } else {
           showNotification("Request rejected.", {
