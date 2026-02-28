@@ -1875,6 +1875,11 @@ const Analytics = ({ setActiveTab }) => {
             page-break-inside: avoid;
           }
 
+          .page-break-before {
+            break-before: page;
+            page-break-before: always;
+          }
+
           .page-break:last-child {
             page-break-after: auto;
           }
@@ -2246,14 +2251,22 @@ const Analytics = ({ setActiveTab }) => {
 
                 {commendationSuggestionPages.map((pageRows, pageIndex) => {
                   const isLastPage = pageIndex === totalCsfPages - 1;
+                  const isFirstPage = pageIndex === 0;
                   const isContinuationPage = showCsfOnFirstPage || pageIndex > 0;
                   const showCsfTitle = !isContinuationPage;
                   const showCsfHeader = !isContinuationPage;
+                  const pageClassName = [
+                    "analytics-print-page",
+                    isFirstPage ? "page-break-before" : "",
+                    isLastPage ? "" : "page-break",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
 
                   return (
                     <div
                       key={`commendation-page-${pageIndex}`}
-                      className={isLastPage ? "analytics-print-page" : "analytics-print-page page-break"}
+                      className={pageClassName}
                     >
                       {renderHeader()}
                       <h2 className="analytics-report-title">
