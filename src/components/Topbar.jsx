@@ -80,15 +80,11 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
         let q;
         
         if (isOfficeAdmin && hasOffice) {
-          try {
-            q = query(
-              visitsRef,
-              where("office", "==", userOffice),
-              orderBy("checkInTime", "desc")
-            );
-          } catch {
-            q = query(visitsRef, orderBy("checkInTime", "desc"));
-          }
+          // Avoid composite-index dependency for office-filtered listener.
+          q = query(
+            visitsRef,
+            where("office", "==", userOffice)
+          );
         } else {
           q = query(visitsRef, orderBy("checkInTime", "desc"));
         }
@@ -97,6 +93,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
           let count = 0;
           let latestVisitor = null;
           let latestVisitorData = null;
+          let latestVisitorTimeMs = -1;
           const compareTime = lastViewedTime || new Date(Date.now() - (24 * 60 * 60 * 1000));
           
           snapshot.forEach((doc) => {
@@ -118,12 +115,16 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
               checkInDate = new Date(data.checkInTime);
             }
             
+            const checkInTimeMs = Number.isNaN(checkInDate.getTime())
+              ? 0
+              : checkInDate.getTime();
             const isAfterLastViewed = checkInDate > compareTime;
             const isNotMarkedRead = !markedAsRead.includes(doc.id);
             
             if (isAfterLastViewed && isNotMarkedRead) {
               count++;
-              if (!latestVisitor) {
+              if (checkInTimeMs > latestVisitorTimeMs) {
+                latestVisitorTimeMs = checkInTimeMs;
                 latestVisitor = {
                   name: data.visitorName || data.name || "Unknown Visitor",
                   office: data.office || "Unknown Office"

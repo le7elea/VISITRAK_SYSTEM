@@ -25,14 +25,16 @@ export const useNotificationCount = (user) => {
     const setupListener = () => {
       try {
         const visitsRef = collection(db, "visits");
-        
+        const userOffice = String(user.office || "").trim();
+        const hasOffice = userOffice !== "";
+
         let q = query(visitsRef, orderBy("checkInTime", "desc"));
-        
-        if (user.type === "OfficeAdmin" && user.office) {
+
+        if (user.type === "OfficeAdmin" && hasOffice) {
+          // Avoid composite-index dependency for office-filtered listener.
           q = query(
             visitsRef,
-            where("office", "==", user.office),
-            orderBy("checkInTime", "desc")
+            where("office", "==", userOffice)
           );
         }
         

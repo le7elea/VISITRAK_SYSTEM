@@ -76,10 +76,10 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
         let q;
         
         if (isOfficeAdmin && hasOffice) {
+          // Avoid composite-index dependency for office-filtered listener.
           q = query(
             notificationsRef,
-            where("office", "==", userOffice),
-            orderBy("checkInTime", "desc")
+            where("office", "==", userOffice)
           );
         } else {
           q = query(notificationsRef, orderBy("checkInTime", "desc"));
@@ -120,6 +120,9 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
               hour12: true
             });
             
+            const checkInTimeMs = Number.isNaN(checkInDate.getTime())
+              ? 0
+              : checkInDate.getTime();
             const isMarkedAsRead = markedAsRead.includes(doc.id);
             const isNew = checkInDate > compareTime && !isMarkedAsRead;
             
@@ -135,11 +138,13 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
               address: data.address,
               purpose: data.purpose,
               staffName: data.staffName || data.personToVisit,
-              timestamp: checkInDate
+              timestamp: checkInTimeMs
             });
           });
           
-          const limitedNotifications = newNotifications.slice(0, 50);
+          const limitedNotifications = newNotifications
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 50);
           
           setNotifications(limitedNotifications);
           setLoading(false);

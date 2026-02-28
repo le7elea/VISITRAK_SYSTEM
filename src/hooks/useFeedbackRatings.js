@@ -37,8 +37,8 @@ const useFeedbackRatings = () => {
                     ? Object.entries(rawAnswers).map(([question, rating]) => ({ question, rating }))
                     : [];
                 
-                // If visitId exists, fetch office from visits collection
-                if (d.visitId) {
+                // Resolve office from linked visit only when missing in feedback doc.
+                if (!officeFromVisit && d.visitId) {
                   try {
                     const visitRef = doc(db, "visits", d.visitId);
                     const visitSnap = await getDoc(visitRef);
@@ -51,7 +51,10 @@ const useFeedbackRatings = () => {
                       console.warn(`⚠️ Visit document not found for visitId: ${d.visitId}`);
                     }
                   } catch (visitError) {
-                    console.error(`❌ Error fetching visit for visitId ${d.visitId}:`, visitError);
+                    const visitErrorCode = String(visitError?.code || "");
+                    if (visitErrorCode !== "permission-denied") {
+                      console.error(`❌ Error fetching visit for visitId ${d.visitId}:`, visitError);
+                    }
                   }
                 }
                 
