@@ -1,5 +1,5 @@
 // pages/Offices.jsx
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock, Eye, EyeOff } from "lucide-react";
 import {
   fetchOffices,
@@ -16,6 +16,17 @@ const isValidEmail = (email) =>
 const isValidUsername = (username) =>
   /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/.test((username || "").trim().toLowerCase());
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const normalizeEditList = (items = []) =>
+  (Array.isArray(items) ? items : []).map((item) => String(item?.name || "").trim());
+const createEditSnapshot = (data = {}) => ({
+  name: String(data.name || "").trim(),
+  officialName: String(data.officialName || "").trim(),
+  username: normalizeUsername(data.username || ""),
+  email: String(data.email || "").trim().toLowerCase(),
+  role: String(data.role || "office"),
+  purposes: normalizeEditList(data.purposes),
+  staffToVisit: normalizeEditList(data.staffToVisit),
+});
 const RESET_REQUEST_POLL_INTERVAL_MS = 5000;
 
 // ==================== MEMOIZED COMPONENTS ====================
@@ -741,6 +752,7 @@ const Offices = () => {
   const [editNewStaff, setEditNewStaff] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
+  const [editBaseline, setEditBaseline] = useState(null);
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
   const [showResetPasswordFields, setShowResetPasswordFields] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({
@@ -877,6 +889,7 @@ const Offices = () => {
 
   const closeEditModal = useCallback(() => {
     setEditIndex(null);
+    setEditBaseline(null);
     setShowResetPasswordFields(false);
     setResetPasswordForm({
       newPassword: "",
@@ -889,6 +902,12 @@ const Offices = () => {
     setResetPasswordError("");
     setResetPasswordSuccess(null);
   }, []);
+
+  const hasEditChanges = useMemo(() => {
+    if (editIndex === null || !editBaseline) return false;
+    const currentSnapshot = createEditSnapshot(editData);
+    return JSON.stringify(currentSnapshot) !== JSON.stringify(editBaseline);
+  }, [editBaseline, editData, editIndex]);
 
   // ðŸ”¹ OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
@@ -1000,7 +1019,7 @@ const Offices = () => {
     if (index >= 0 && index < offices.length) {
       const office = offices[index];
       setEditIndex(index);
-      setEditData({
+      const nextEditData = {
         id: office.id,
         name: office.name || "",
         officialName: office.officialName || "",
@@ -1011,7 +1030,9 @@ const Offices = () => {
         passwordChangedAt: office.passwordChangedAt || null,
         purposes: office.purposes || [],
         staffToVisit: office.staffToVisit || []
-      });
+      };
+      setEditData(nextEditData);
+      setEditBaseline(createEditSnapshot(nextEditData));
       setEditNewPurpose("");
       setEditNewStaff("");
       setEditError("");
@@ -1254,6 +1275,14 @@ const Offices = () => {
   // ðŸ”¹ OPTIMIZED: Save edit - Update local state immediately
   const saveEdit = useCallback(async () => {
     if (editIndex === null) return;
+
+    if (!hasEditChanges) {
+      showNotification("No changes detected. Update at least one field before saving.", {
+        title: "No Changes",
+        tone: "info",
+      });
+      return;
+    }
     
     if (!editData.name.trim()) {
       setEditError("Office name is required");
@@ -1359,7 +1388,7 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [closeEditModal, editIndex, editData, offices, showNotification]);
+  }, [closeEditModal, editIndex, editData, hasEditChanges, offices, showNotification]);
 
   // ðŸ”¹ OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -2160,9 +2189,22 @@ const Offices = () => {
 
                 {/* Action Button */}
                 <div className="pt-6 border-t border-gray-200">
+                  <div
+                    className={`mb-4 p-3 rounded-lg border ${
+                      hasEditChanges
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-gray-50 border-gray-200 text-gray-700"
+                    }`}
+                  >
+                    <p className="text-sm font-medium">
+                      {hasEditChanges
+                        ? "Unsaved changes detected. Click Update to save."
+                        : "No changes yet. Update is enabled after you edit office information."}
+                    </p>
+                  </div>
                   <button 
                     onClick={saveEdit} 
-                    disabled={editLoading}
+                    disabled={editLoading || !hasEditChanges}
                     className={`w-full py-4 rounded-xl transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed group ${
                       editData.role === "super"
                         ? "bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
