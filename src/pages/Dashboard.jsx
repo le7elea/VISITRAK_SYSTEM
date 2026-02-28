@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import CardStat from "../components/CardStat";
@@ -13,6 +13,37 @@ import Footer from "../components/Footer";
 import Profile from "../pages/Profile";
 import useAdminVisitors from "../hooks/useAdminVisitors";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
+import { getOfficePasswordResetRequests } from "../lib/info.services";
+
+const RESET_REQUEST_CHECK_INTERVAL_MS = 5000;
+
+const ResetRequestNotificationModal = ({ show, title, message, onOk }) => {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-xl border border-amber-200 bg-amber-50 shadow-xl">
+        <div className="p-5">
+          <h4 className="text-lg font-semibold text-amber-800">
+            {title || "Password Reset Request"}
+          </h4>
+          <p className="mt-2 text-sm text-amber-800 whitespace-pre-line break-words">
+            {message}
+          </p>
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={onOk}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition bg-amber-600 hover:bg-amber-700"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard = ({
   user = { type: "SuperAdmin", office: null },
@@ -25,12 +56,85 @@ const Dashboard = ({
     () => localStorage.getItem("activeTab") || "dashboard"
   );
   const [showConfirm, setShowConfirm] = useState(false);
+  const [resetRequestModal, setResetRequestModal] = useState({
+    show: false,
+    title: "",
+    message: "",
+  });
+  const hasInitializedResetRequests = useRef(false);
+  const knownResetRequestIds = useRef(new Set());
 
   const { visitors } = useAdminVisitors(user);
   const { feedbacks, loading: feedbacksLoading } = useFeedbackRatings();
 
   useEffect(() => localStorage.setItem("darkMode", darkMode), [darkMode]);
   useEffect(() => localStorage.setItem("activeTab", activeTab), [activeTab]);
+
+  useEffect(() => {
+    if (user?.type !== "SuperAdmin") return undefined;
+
+    let disposed = false;
+
+    const checkPendingResetRequests = async () => {
+      try {
+        const pendingRequests = await getOfficePasswordResetRequests("pending");
+        if (disposed) return;
+
+        const requests = Array.isArray(pendingRequests) ? pendingRequests : [];
+        const latestIds = new Set(requests.map((request) => request?.id).filter(Boolean));
+        const newRequests = requests.filter(
+          (request) => request?.id && !knownResetRequestIds.current.has(request.id)
+        );
+
+        if (!hasInitializedResetRequests.current) {
+          hasInitializedResetRequests.current = true;
+
+          if (requests.length > 0 && activeTab !== "offices") {
+            setResetRequestModal({
+              show: true,
+              title: "Pending Password Reset Requests",
+              message:
+                `${requests.length} pending password reset request${requests.length !== 1 ? "s" : ""} ` +
+                "need your approval.\nPress OK to open Offices.",
+            });
+          }
+        } else if (newRequests.length > 0 && activeTab !== "offices") {
+          const latestOwner =
+            newRequests[0]?.officeName || newRequests[0]?.username || "an office account";
+          setResetRequestModal({
+            show: true,
+            title: "New Password Reset Request",
+            message:
+              (newRequests.length === 1
+                ? `A new password reset request was submitted by ${latestOwner}.`
+                : `${newRequests.length} new password reset requests were submitted.`) +
+              "\nPress OK to open Offices.",
+          });
+        }
+
+        knownResetRequestIds.current = latestIds;
+      } catch (error) {
+        console.error("Error checking password reset requests:", error);
+      }
+    };
+
+    checkPendingResetRequests();
+    const intervalId = setInterval(checkPendingResetRequests, RESET_REQUEST_CHECK_INTERVAL_MS);
+
+    return () => {
+      disposed = true;
+      clearInterval(intervalId);
+    };
+  }, [activeTab, user?.type]);
+
+  const handleResetRequestModalOk = () => {
+    setResetRequestModal({
+      show: false,
+      title: "",
+      message: "",
+    });
+    setActiveTab("offices");
+  };
 
   // 🧭 MENU CONFIG
   const menuConfig = {
@@ -199,6 +303,13 @@ const Dashboard = ({
               onCancel={() => setShowConfirm(false)}
             />
           )}
+
+          <ResetRequestNotificationModal
+            show={resetRequestModal.show}
+            title={resetRequestModal.title}
+            message={resetRequestModal.message}
+            onOk={handleResetRequestModalOk}
+          />
         </main>
 
         <Footer />
