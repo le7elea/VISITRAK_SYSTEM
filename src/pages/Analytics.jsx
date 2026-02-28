@@ -1796,7 +1796,6 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-print-page {
-            min-height: 7.1in;
             padding: 14px 18px;
             font-family: "Times New Roman", Times, serif;
             color: #111;
@@ -2022,7 +2021,7 @@ const Analytics = ({ setActiveTab }) => {
               <>
                 {summaryPages.map((summaryRows, summaryPageIndex) => {
                   const isLastSummaryPage = summaryPageIndex === summaryPages.length - 1;
-                  const hasMorePages = !isLastSummaryPage || totalCsfPages > 0;
+                  const hasMorePages = !isLastSummaryPage;
                   const isSummaryContinuationPage = summaryPageIndex > 0;
                   const showCsfOnThisPage = summaryPageIndex === 0 && showCsfOnFirstPage;
                   const showSummaryOverallRows = isLastSummaryPage;
