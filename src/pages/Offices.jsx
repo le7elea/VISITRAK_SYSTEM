@@ -720,6 +720,90 @@ const NotificationModal = memo(({ show, title, message, tone = "info", onClose }
 });
 NotificationModal.displayName = "NotificationModal";
 
+const ConfirmationModal = memo(
+  ({
+    show,
+    title,
+    message,
+    tone = "warning",
+    confirmLabel = "Confirm",
+    cancelLabel = "Cancel",
+    loading = false,
+    onConfirm,
+    onCancel,
+  }) => {
+    if (!show) return null;
+
+    const toneStyles = {
+      warning: {
+        border: "border-amber-200",
+        bg: "bg-amber-50",
+        text: "text-amber-800",
+        confirmButton: "bg-amber-600 hover:bg-amber-700",
+      },
+      danger: {
+        border: "border-red-200",
+        bg: "bg-red-50",
+        text: "text-red-800",
+        confirmButton: "bg-red-600 hover:bg-red-700",
+      },
+      info: {
+        border: "border-blue-200",
+        bg: "bg-blue-50",
+        text: "text-blue-800",
+        confirmButton: "bg-blue-600 hover:bg-blue-700",
+      },
+    };
+
+    const selectedTone = toneStyles[tone] || toneStyles.warning;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+        <div className={`w-full max-w-md rounded-xl border ${selectedTone.border} ${selectedTone.bg} shadow-xl`}>
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className={`text-lg font-semibold ${selectedTone.text}`}>{title || "Please Confirm"}</h4>
+                <p className={`mt-2 text-sm whitespace-pre-line break-words ${selectedTone.text}`}>
+                  {message}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="text-gray-500 hover:text-gray-700 transition"
+                aria-label="Close confirmation"
+                disabled={loading}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+                disabled={loading}
+              >
+                {cancelLabel}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition ${selectedTone.confirmButton} disabled:opacity-50`}
+                disabled={loading}
+              >
+                {loading ? "Processing..." : confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+);
+ConfirmationModal.displayName = "ConfirmationModal";
+
 // ==================== MAIN COMPONENT ====================
 
 const Offices = () => {
@@ -776,6 +860,11 @@ const Offices = () => {
   const [resetRequests, setResetRequests] = useState([]);
   const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
   const [resetRequestActionId, setResetRequestActionId] = useState("");
+  const [resetRequestConfirmation, setResetRequestConfirmation] = useState({
+    show: false,
+    requestId: "",
+    action: "",
+  });
   const hasInitializedResetRequests = useRef(false);
   const knownResetRequestIds = useRef(new Set());
   const [notificationModal, setNotificationModal] = useState({
@@ -887,6 +976,23 @@ const Offices = () => {
       ...prev,
       show: false,
     }));
+  }, []);
+
+  const requestResetRequestConfirmation = useCallback((requestId, action) => {
+    if (!requestId) return;
+    setResetRequestConfirmation({
+      show: true,
+      requestId,
+      action,
+    });
+  }, []);
+
+  const closeResetRequestConfirmation = useCallback(() => {
+    setResetRequestConfirmation({
+      show: false,
+      requestId: "",
+      action: "",
+    });
   }, []);
 
   // Distinct tone for password-reset-request notifications.
@@ -1345,14 +1451,7 @@ const Offices = () => {
   const handleResolveResetRequest = useCallback(
     async (requestId, action) => {
       if (!requestId) return;
-
       const isApprove = action === "approve";
-      const confirmed = window.confirm(
-        isApprove
-          ? "Approve this request? A one-time reset link will be generated."
-          : "Reject this password reset request?"
-      );
-      if (!confirmed) return;
 
       setResetRequestActionId(requestId);
       try {
@@ -1393,6 +1492,20 @@ const Offices = () => {
     },
     [loadPendingResetRequests, showNotification]
   );
+
+  const confirmResolveResetRequest = useCallback(async () => {
+    const requestId = resetRequestConfirmation.requestId;
+    const action = resetRequestConfirmation.action;
+
+    if (!requestId || !action) {
+      closeResetRequestConfirmation();
+      return;
+    }
+
+    closeResetRequestConfirmation();
+    await handleResolveResetRequest(requestId, action);
+  }, [closeResetRequestConfirmation, handleResolveResetRequest, resetRequestConfirmation]);
+
   // Add purpose to edit list
   const addPurposeToEditList = useCallback(() => {
     if (editNewPurpose.trim() === "") return;
@@ -1700,7 +1813,7 @@ const Offices = () => {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => handleResolveResetRequest(request.id, "reject")}
+                    onClick={() => requestResetRequestConfirmation(request.id, "reject")}
                     disabled={resetRequestActionId === request.id}
                     className="px-4 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-100 text-sm font-semibold disabled:opacity-50"
                   >
@@ -1708,7 +1821,7 @@ const Offices = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleResolveResetRequest(request.id, "approve")}
+                    onClick={() => requestResetRequestConfirmation(request.id, "approve")}
                     disabled={resetRequestActionId === request.id}
                     className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-sm font-semibold disabled:opacity-50"
                   >
@@ -2581,6 +2694,26 @@ const Offices = () => {
            </div>
         </div>
       )}
+
+      <ConfirmationModal
+        show={resetRequestConfirmation.show}
+        title={
+          resetRequestConfirmation.action === "approve"
+            ? "Approve Password Reset Request"
+            : "Reject Password Reset Request"
+        }
+        message={
+          resetRequestConfirmation.action === "approve"
+            ? "Approve this request? A one-time reset link will be generated."
+            : "Reject this password reset request?"
+        }
+        tone={resetRequestConfirmation.action === "approve" ? "warning" : "danger"}
+        confirmLabel={resetRequestConfirmation.action === "approve" ? "Approve" : "Reject"}
+        cancelLabel="Cancel"
+        loading={Boolean(resetRequestActionId)}
+        onConfirm={confirmResolveResetRequest}
+        onCancel={closeResetRequestConfirmation}
+      />
 
       <NotificationModal
         show={notificationModal.show}
