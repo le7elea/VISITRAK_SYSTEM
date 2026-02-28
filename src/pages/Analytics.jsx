@@ -1347,15 +1347,9 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows]);
 
   const firstPageCsfRowsCapacity = useMemo(() => {
-    if (summaryPages.length > 1) return 0;
-
-    const officeRowCount = officeAnalyticsRows.length;
-
-    // Allow section C to start on page 1 when summary rows are light.
-    if (officeRowCount <= 2) return 2;
-    if (officeRowCount <= 5) return 1;
+    // Keep section C on dedicated pages for predictable report formatting.
     return 0;
-  }, [officeAnalyticsRows.length, summaryPages.length]);
+  }, []);
 
   const firstPageCsfRows = useMemo(() => {
     if (firstPageCsfRowsCapacity <= 0) return [];
@@ -2026,14 +2020,13 @@ const Analytics = ({ setActiveTab }) => {
               <>
                 {summaryPages.map((summaryRows, summaryPageIndex) => {
                   const isLastSummaryPage = summaryPageIndex === summaryPages.length - 1;
-                  const hasMorePages = !isLastSummaryPage;
-                  const isSummaryContinuationPage = summaryPageIndex > 0;
+                  const hasMorePages = !isLastSummaryPage || totalCsfPages > 0;
                   const showCsfOnThisPage = summaryPageIndex === 0 && showCsfOnFirstPage;
                   const showSummaryOverallRows = isLastSummaryPage;
                   const showSummarySignatories =
                     !showSignatoriesOnFirstPage && totalCsfPages === 0 && isLastSummaryPage;
-                  const showSummarySectionTitles = !isSummaryContinuationPage;
-                  const showSummaryColumnHeaders = !isSummaryContinuationPage;
+                  const showSummarySectionTitles = true;
+                  const showSummaryColumnHeaders = true;
 
                   return (
                     <div
