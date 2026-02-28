@@ -415,8 +415,11 @@ const getCurrentUser = () => {
 };
 
 // --- Components ---
-const Card = ({ children, className = "" }) => (
-  <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 shadow-sm p-6 ${className}`}>
+const Card = ({ children, className = "", ...props }) => (
+  <div
+    className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 shadow-sm p-6 ${className}`}
+    {...props}
+  >
     {children}
   </div>
 );
@@ -549,7 +552,7 @@ const SatisfactionChart = ({ ratings }) => {
 };
 
 // --- Main Component with Office Filtering ---
-const Analytics = () => {
+const Analytics = ({ setActiveTab }) => {
   // State for visits from database
   const [visits, setVisits] = useState([]);
   // State for feedbacks from database
@@ -558,6 +561,20 @@ const Analytics = () => {
   const [offices, setOffices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const canOpenFeedbackTab = typeof setActiveTab === "function";
+
+  const handleOpenFeedbackTab = () => {
+    if (!canOpenFeedbackTab) return;
+    setActiveTab("feedback");
+  };
+
+  const handleFeedbackCardKeyDown = (event) => {
+    if (!canOpenFeedbackTab) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleOpenFeedbackTab();
+    }
+  };
 
   // Get current user on component mount
   useEffect(() => {
@@ -2362,7 +2379,16 @@ const Analytics = () => {
 
 
             {/* Feedback Insights */}
-            <Card className="relative overflow-hidden">
+            <Card
+              className={`relative overflow-hidden ${
+                canOpenFeedbackTab ? "cursor-pointer hover:shadow-md transition-shadow duration-200" : ""
+              }`}
+              onClick={canOpenFeedbackTab ? handleOpenFeedbackTab : undefined}
+              onKeyDown={canOpenFeedbackTab ? handleFeedbackCardKeyDown : undefined}
+              role={canOpenFeedbackTab ? "button" : undefined}
+              tabIndex={canOpenFeedbackTab ? 0 : undefined}
+              aria-label={canOpenFeedbackTab ? "Open feedback section" : undefined}
+            >
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-purple-200 to-transparent no-print"></div>
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -2372,6 +2398,10 @@ const Analytics = () => {
                   </div>
                   <h3 className="font-bold text-lg text-gray-800 dark:text-white">Feedback Insights</h3>
                 </div>
+
+                {canOpenFeedbackTab && (
+                  <p className="text-xs text-purple-700 font-medium">Click to open Feedback</p>
+                )}
                 
                 {/* <div className="relative no-print">
                   <button 

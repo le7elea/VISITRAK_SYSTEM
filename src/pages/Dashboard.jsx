@@ -359,7 +359,11 @@ const Dashboard = ({
           )}
 
           {activeTab === "analytics" && (
-            <Analytics visitors={filteredVisitors} feedbacks={feedbacks} />
+            <Analytics
+              visitors={filteredVisitors}
+              feedbacks={feedbacks}
+              setActiveTab={setActiveTab}
+            />
           )}
           {activeTab === "visitors" && <Visitors user={user} />}
           {activeTab === "offices" && user.type === "SuperAdmin" && <Offices />}
