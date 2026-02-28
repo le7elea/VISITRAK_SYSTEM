@@ -1457,6 +1457,8 @@ const Analytics = () => {
     }
   };
 
+  const allowCsvExport = false;
+
   // Generate integrated narrative
   const generateIntegratedNarrative = () => {
     const avgSat = avgSatisfaction;
@@ -2248,24 +2250,28 @@ const Analytics = () => {
                      <ChevronDown size={16} className="text-gray-400" />
                    </button>
 
-                   {showExportMenu && (
-                     <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50 min-w-[180px]">
-                       <button
-                         onClick={exportToCSV}
-                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                       >
-                         <FileText size={16} className="text-gray-600" />
-                         <div>
-                           <div className="text-sm font-medium text-gray-800">Export CSV</div>
-                           <div className="text-xs text-gray-500">Download with charts (.csv)</div>
-                         </div>
-                       </button>
-                       <button
-                         onClick={exportToPDF}
-                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-t border-gray-100"
-                       >
-                         <Printer size={16} className="text-gray-600" />
-                         <div>
+                    {showExportMenu && (
+                      <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50 min-w-[180px]">
+                        {allowCsvExport && (
+                          <button
+                            onClick={exportToCSV}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                          >
+                            <FileText size={16} className="text-gray-600" />
+                            <div>
+                              <div className="text-sm font-medium text-gray-800">Export CSV</div>
+                              <div className="text-xs text-gray-500">Download with charts (.csv)</div>
+                            </div>
+                          </button>
+                        )}
+                        <button
+                          onClick={exportToPDF}
+                          className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left ${
+                            allowCsvExport ? 'border-t border-gray-100' : ''
+                          }`}
+                        >
+                          <Printer size={16} className="text-gray-600" />
+                          <div>
                            <div className="text-sm font-medium text-gray-800">Print Report</div>
                            <div className="text-xs text-gray-500">Print Report</div>
                          </div>
