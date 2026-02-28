@@ -1326,18 +1326,8 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, filteredVisits.length]);
 
   const summaryPages = useMemo(() => {
-    // Keep summary rows within printable height so rows do not spill above the next page header.
-    const rowsPerPage = 7;
-
-    if (!officeAnalyticsRows.length) {
-      return [[]];
-    }
-
-    const totalPages = Math.ceil(officeAnalyticsRows.length / rowsPerPage) || 1;
-
-    return Array.from({ length: totalPages }).map((_, pageIndex) =>
-      officeAnalyticsRows.slice(pageIndex * rowsPerPage, pageIndex * rowsPerPage + rowsPerPage)
-    );
+    // Keep sections A and B together as a single summary block.
+    return [officeAnalyticsRows];
   }, [officeAnalyticsRows]);
 
   const commendationSuggestionRows = useMemo(() => {
@@ -1347,9 +1337,12 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows]);
 
   const firstPageCsfRowsCapacity = useMemo(() => {
-    // Keep section C on dedicated pages for predictable report formatting.
-    return 0;
-  }, []);
+    // Fill remaining space on the first print page after sections A and B.
+    // Keep this conservative to avoid forcing A/B to spill to a new page.
+    const officeRowCount = officeAnalyticsRows.length;
+    const estimatedCapacity = 9 - officeRowCount;
+    return Math.max(0, Math.min(3, estimatedCapacity));
+  }, [officeAnalyticsRows.length]);
 
   const firstPageCsfRows = useMemo(() => {
     if (firstPageCsfRowsCapacity <= 0) return [];
@@ -1832,6 +1825,18 @@ const Analytics = ({ setActiveTab }) => {
           .analytics-table-b td:first-child,
           .analytics-table-c td:first-child {
             text-align: center;
+          }
+
+          .analytics-table-a,
+          .analytics-table-b {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          .analytics-table-a tr,
+          .analytics-table-b tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
 
           .analytics-table-c td {
