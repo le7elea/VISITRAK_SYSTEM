@@ -1,6 +1,6 @@
 // pages/Offices.jsx
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock } from "lucide-react";
+import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock, Eye, EyeOff } from "lucide-react";
 import {
   fetchOffices,
   addOffice,
@@ -664,6 +664,17 @@ const Offices = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [showResetPasswordFields, setShowResetPasswordFields] = useState(false);
+  const [resetPasswordForm, setResetPasswordForm] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [resetPasswordVisibility, setResetPasswordVisibility] = useState({
+    newPassword: false,
+    confirmPassword: false,
+  });
+  const [resetPasswordError, setResetPasswordError] = useState("");
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState(null);
   const [resetRequests, setResetRequests] = useState([]);
   const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
   const [resetRequestActionId, setResetRequestActionId] = useState("");
@@ -763,6 +774,21 @@ const Offices = () => {
   const handleAddStaffInput = useCallback((value) => {
     setNewStaff(toUppercase(value));
   }, [toUppercase]);
+
+  const closeEditModal = useCallback(() => {
+    setEditIndex(null);
+    setShowResetPasswordFields(false);
+    setResetPasswordForm({
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setResetPasswordVisibility({
+      newPassword: false,
+      confirmPassword: false,
+    });
+    setResetPasswordError("");
+    setResetPasswordSuccess(null);
+  }, []);
 
   // ðŸ”¹ OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
@@ -880,6 +906,17 @@ const Offices = () => {
       setEditNewPurpose("");
       setEditNewStaff("");
       setEditError("");
+      setShowResetPasswordFields(false);
+      setResetPasswordForm({
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setResetPasswordVisibility({
+        newPassword: false,
+        confirmPassword: false,
+      });
+      setResetPasswordError("");
+      setResetPasswordSuccess(null);
     }
   }, [offices]);
 
@@ -908,34 +945,67 @@ const Offices = () => {
     return `VisiTrak!${token}`;
   }, []);
 
+  const handleOpenAdminPasswordReset = useCallback(() => {
+    if (editData.role === "super") {
+      setResetPasswordError("Super Admin passwords cannot be reset from this action.");
+      return;
+    }
+
+    setShowResetPasswordFields(true);
+    setResetPasswordError("");
+    setResetPasswordSuccess(null);
+  }, [editData.role]);
+
+  const handleUseSuggestedPassword = useCallback(() => {
+    const suggestedPassword = generateTemporaryPassword();
+    setResetPasswordForm({
+      newPassword: suggestedPassword,
+      confirmPassword: suggestedPassword,
+    });
+    setResetPasswordError("");
+    setResetPasswordSuccess(null);
+  }, [generateTemporaryPassword]);
+
+  const handleResetPasswordFieldChange = useCallback((field, value) => {
+    setResetPasswordForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+    setResetPasswordError("");
+    setResetPasswordSuccess(null);
+  }, []);
+
+  const toggleResetPasswordVisibility = useCallback((field) => {
+    setResetPasswordVisibility((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  }, []);
+
   const handleAdminPasswordReset = useCallback(async () => {
     if (!editData?.id) return;
 
     if (editData.role === "super") {
-      alert("Super Admin passwords cannot be reset from this action.");
+      setResetPasswordError("Super Admin passwords cannot be reset from this action.");
       return;
     }
 
-    const shouldProceed = window.confirm(
-      `Change password for "${editData.name}"?\n\nUse this when the account admin forgot the password.`
-    );
-    if (!shouldProceed) return;
+    const nextPassword = resetPasswordForm.newPassword.trim();
+    const confirmPassword = resetPasswordForm.confirmPassword.trim();
 
-    const suggestedPassword = generateTemporaryPassword();
-    const enteredPassword = window.prompt(
-      `Enter a new password for "${editData.name}" (minimum 8 characters):`,
-      suggestedPassword
-    );
-
-    if (enteredPassword === null) return;
-
-    const nextPassword = enteredPassword.trim();
     if (nextPassword.length < 8) {
-      alert("Password must be at least 8 characters.");
+      setResetPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (nextPassword !== confirmPassword) {
+      setResetPasswordError("New password and confirm password do not match.");
       return;
     }
 
     setResetPasswordLoading(true);
+    setResetPasswordError("");
+    setResetPasswordSuccess(null);
 
     try {
       const response = await adminResetOfficePassword(editData.id, nextPassword);
@@ -959,15 +1029,22 @@ const Offices = () => {
       }));
 
       const loginUsername = response?.data?.username || editData.username;
-      alert(
-        `Password updated successfully.\n\nOffice: ${editData.name}\nLogin Username: ${loginUsername || "N/A"}\nNew Password: ${nextPassword}\n\nShare this securely with the office admin.`
-      );
+      setResetPasswordSuccess({
+        officeName: editData.name || "Office",
+        loginUsername: loginUsername || "N/A",
+        newPassword: nextPassword,
+      });
+      setResetPasswordForm({
+        newPassword: "",
+        confirmPassword: "",
+      });
     } catch (error) {
-      alert(`Failed to reset password: ${error.message}`);
+      const message = error?.message || "Failed to reset password.";
+      setResetPasswordError(message);
     } finally {
       setResetPasswordLoading(false);
     }
-  }, [editData, generateTemporaryPassword]);
+  }, [editData, resetPasswordForm]);
 
 
   const handleResolveResetRequest = useCallback(
@@ -1127,7 +1204,7 @@ const Offices = () => {
       const updatedOffices = [...offices];
       updatedOffices[editIndex] = updatedOffice;
       setOffices(updatedOffices);
-      setEditIndex(null);
+      closeEditModal();
       
       alert(`Office "${editData.name}" updated successfully!`);
       
@@ -1151,7 +1228,7 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [editIndex, editData, offices]);
+  }, [closeEditModal, editIndex, editData, offices]);
 
   // ðŸ”¹ OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -1393,7 +1470,7 @@ const Offices = () => {
                   </div>
                 </div>
                 <button 
-                  onClick={() => setEditIndex(null)} 
+                  onClick={closeEditModal}
                   className="p-2 hover:bg-white/10 rounded-xl transition-all"
                 >
                   <X className="text-white" size={24} />
@@ -1525,12 +1602,143 @@ const Offices = () => {
                           </p>
                           <button
                             type="button"
-                            onClick={handleAdminPasswordReset}
+                            onClick={handleOpenAdminPasswordReset}
                             disabled={editLoading || resetPasswordLoading}
                             className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {resetPasswordLoading ? "Updating..." : "Change Password"}
+                            Change Password
                           </button>
+
+                          {showResetPasswordFields && (
+                            <div className="mt-3 p-3 rounded-lg border border-amber-300 bg-white">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                New Password
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={resetPasswordVisibility.newPassword ? "text" : "password"}
+                                  value={resetPasswordForm.newPassword}
+                                  onChange={(e) =>
+                                    handleResetPasswordFieldChange("newPassword", e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 pr-10 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                  placeholder="Enter new password (min 8 chars)"
+                                  disabled={editLoading || resetPasswordLoading}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleResetPasswordVisibility("newPassword")}
+                                  disabled={editLoading || resetPasswordLoading}
+                                  className="absolute inset-y-0 right-2 flex items-center text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                                  aria-label={
+                                    resetPasswordVisibility.newPassword
+                                      ? "Hide new password"
+                                      : "Show new password"
+                                  }
+                                >
+                                  {resetPasswordVisibility.newPassword ? (
+                                    <EyeOff size={16} />
+                                  ) : (
+                                    <Eye size={16} />
+                                  )}
+                                </button>
+                              </div>
+
+                              <label className="block text-xs font-medium text-gray-700 mt-3 mb-1">
+                                Confirm New Password
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={resetPasswordVisibility.confirmPassword ? "text" : "password"}
+                                  value={resetPasswordForm.confirmPassword}
+                                  onChange={(e) =>
+                                    handleResetPasswordFieldChange("confirmPassword", e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 pr-10 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                  placeholder="Re-enter new password"
+                                  disabled={editLoading || resetPasswordLoading}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleResetPasswordVisibility("confirmPassword")}
+                                  disabled={editLoading || resetPasswordLoading}
+                                  className="absolute inset-y-0 right-2 flex items-center text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                                  aria-label={
+                                    resetPasswordVisibility.confirmPassword
+                                      ? "Hide confirm password"
+                                      : "Show confirm password"
+                                  }
+                                >
+                                  {resetPasswordVisibility.confirmPassword ? (
+                                    <EyeOff size={16} />
+                                  ) : (
+                                    <Eye size={16} />
+                                  )}
+                                </button>
+                              </div>
+
+                              {resetPasswordError && (
+                                <p className="mt-2 text-xs text-red-600">{resetPasswordError}</p>
+                              )}
+
+                              {resetPasswordSuccess && (
+                                <div className="mt-2 p-2 rounded-md border border-green-300 bg-green-50">
+                                  <p className="text-xs font-semibold text-green-700">
+                                    Password updated successfully.
+                                  </p>
+                                  <p className="mt-1 text-xs text-green-800">
+                                    Office: {resetPasswordSuccess.officeName}
+                                  </p>
+                                  <p className="text-xs text-green-800">
+                                    Login Username: {resetPasswordSuccess.loginUsername}
+                                  </p>
+                                  <p className="text-xs text-green-800">
+                                    New Password:{" "}
+                                    <span className="font-mono">{resetPasswordSuccess.newPassword}</span>
+                                  </p>
+                                </div>
+                              )}
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleUseSuggestedPassword}
+                                  disabled={editLoading || resetPasswordLoading}
+                                  className="px-3 py-2 text-xs font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Use Suggested Password
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleAdminPasswordReset}
+                                  disabled={editLoading || resetPasswordLoading}
+                                  className="px-3 py-2 text-xs font-semibold text-white bg-amber-700 hover:bg-amber-800 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {resetPasswordLoading ? "Updating..." : "Update Password"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowResetPasswordFields(false);
+                                    setResetPasswordForm({
+                                      newPassword: "",
+                                      confirmPassword: "",
+                                    });
+                                    setResetPasswordVisibility({
+                                      newPassword: false,
+                                      confirmPassword: false,
+                                    });
+                                    setResetPasswordError("");
+                                    setResetPasswordSuccess(null);
+                                  }}
+                                  disabled={editLoading || resetPasswordLoading}
+                                  className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
