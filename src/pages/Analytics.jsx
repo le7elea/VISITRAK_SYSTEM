@@ -1326,8 +1326,8 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, filteredVisits.length]);
 
   const summaryPages = useMemo(() => {
-    // Increased page capacity to avoid unnecessary extra print pages.
-    const rowsPerPage = 8;
+    // Keep summary rows within printable height so rows do not spill above the next page header.
+    const rowsPerPage = 7;
 
     if (!officeAnalyticsRows.length) {
       return [[]];
@@ -1352,8 +1352,8 @@ const Analytics = ({ setActiveTab }) => {
     const officeRowCount = officeAnalyticsRows.length;
 
     // Allow section C to start on page 1 when summary rows are light.
-    if (officeRowCount <= 3) return 2;
-    if (officeRowCount <= 6) return 1;
+    if (officeRowCount <= 2) return 2;
+    if (officeRowCount <= 5) return 1;
     return 0;
   }, [officeAnalyticsRows.length, summaryPages.length]);
 
