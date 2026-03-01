@@ -316,16 +316,16 @@ const calculateSatisfactionRates = (feedbacks = []) => {
   };
 
   return [
-    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '🤩', color: 'bg-yellow-400' },
-    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '😄', color: 'bg-yellow-400' },
+    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
+    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
     {
       label: 'Neither Satisfied nor Dissatisfied',
       pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100),
-      emoji: '😐',
+      emoji: '??',
       color: 'bg-yellow-400',
     },
-    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '😟', color: 'bg-green-100' },
-    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '😡', color: 'bg-green-100' },
+    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
+    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
   ];
 };
 
@@ -512,7 +512,7 @@ const SatisfactionChart = ({ ratings }) => {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100">
-             <span className="text-xs">⚖️</span> 
+             <span className="text-xs">??</span> 
           </div>
           <h3 className="font-bold text-gray-800 dark:text-white">Satisfaction Rate</h3>
         </div>
@@ -540,7 +540,7 @@ const SatisfactionChart = ({ ratings }) => {
         ) : (
           <div className="text-center text-gray-500 py-8">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-50 mx-auto mb-3">
-              <span className="text-xl">😊</span>
+              <span className="text-xl">??</span>
             </div>
             <p className="text-gray-600">No satisfaction data available</p>
             <p className="text-sm text-gray-500 mt-1">Ratings will appear here when visitors submit feedback</p>
@@ -582,10 +582,10 @@ const Analytics = ({ setActiveTab }) => {
     setCurrentUser(user);
     
     if (!user) {
-      console.warn("⚠️ No user found in localStorage");
+      console.warn("?? No user found in localStorage");
     } else {
-      console.log("👤 Current user:", user);
-      console.log("🏢 User office - Original:", user.originalOffice, "Normalized:", user.office);
+      console.log("?? Current user:", user);
+      console.log("?? User office - Original:", user.originalOffice, "Normalized:", user.office);
     }
   }, []);
 
@@ -622,7 +622,7 @@ const Analytics = ({ setActiveTab }) => {
 
     setLoading(true);
     
-    console.log("🔄 Starting visits fetch for:", currentUser.type, currentUser.originalOffice || currentUser.office);
+    console.log("?? Starting visits fetch for:", currentUser.type, currentUser.originalOffice || currentUser.office);
     
     // Fetch all visits
     const visitsQuery = query(collection(db, "visits"), orderBy("checkInTime", "desc"));
@@ -647,13 +647,13 @@ const Analytics = ({ setActiveTab }) => {
         };
       });
       
-      console.log(`📊 Fetched ${allVisits.length} total visits from Firestore`);
+      console.log(`?? Fetched ${allVisits.length} total visits from Firestore`);
       
       // Filter visits by office if OfficeAdmin
       let filteredVisits = allVisits;
       if (currentUser && currentUser.type === "OfficeAdmin" && currentUser.office) {
         const userOffice = currentUser.originalOffice || currentUser.office;
-        console.log(`🏢 Filtering visits for office: "${userOffice}"`);
+        console.log(`?? Filtering visits for office: "${userOffice}"`);
         
         filteredVisits = allVisits.filter(visit => {
           if (!visit.office) return false;
@@ -661,33 +661,33 @@ const Analytics = ({ setActiveTab }) => {
           // Use flexible comparison
           const matches = compareOfficeNames(visit.office, userOffice);
           if (matches) {
-            console.log(`✅ Visit ${visit.id} matches office:`, visit.office);
+            console.log(`? Visit ${visit.id} matches office:`, visit.office);
           }
           return matches;
         });
         
-        console.log(`🏢 After filtering: ${filteredVisits.length} visits for this office`);
+        console.log(`?? After filtering: ${filteredVisits.length} visits for this office`);
         
         // Debug: Show unique office names found
         const uniqueOffices = [...new Set(filteredVisits.map(v => v.office).filter(Boolean))];
-        console.log("📊 Unique offices in filtered visits:", uniqueOffices);
+        console.log("?? Unique offices in filtered visits:", uniqueOffices);
         
         // Also show all offices in database for debugging
         const allUniqueOffices = [...new Set(allVisits.map(v => v.office).filter(Boolean))];
-        console.log("📊 All offices in database:", allUniqueOffices);
+        console.log("?? All offices in database:", allUniqueOffices);
       } else {
-        console.log("👑 SuperAdmin: Keeping all visits");
+        console.log("?? SuperAdmin: Keeping all visits");
       }
       
       setVisits(filteredVisits);
       setLoading(false);
     }, (error) => {
-      console.error("❌ Error fetching visits:", error);
+      console.error("? Error fetching visits:", error);
       setLoading(false);
     });
     
     return () => {
-      console.log("🧹 Cleaning up visits listener");
+      console.log("?? Cleaning up visits listener");
       if (visitsUnsub) visitsUnsub();
     };
   }, [currentUser]);
@@ -838,29 +838,43 @@ const Analytics = ({ setActiveTab }) => {
     };
   };
 
+  const getDefaultMonthRange = () => {
+    const defaults = getDefaultDateRange();
+    return {
+      start: defaults.start.slice(0, 7),
+      end: defaults.end.slice(0, 7),
+    };
+  };
+
   const [dateRange, setDateRange] = useState(getDefaultDateRange());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateRangeMode, setDateRangeMode] = useState("day");
+  const [monthRange, setMonthRange] = useState(getDefaultMonthRange());
+  const [pendingDayRange, setPendingDayRange] = useState(getDefaultDateRange());
+  const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
-  const datePickerRef = useRef(null);
+  const dayRangeDropdownRef = useRef(null);
 
   useEffect(() => {
-    const handleOutsideDatePickerClick = (event) => {
-      if (!showDatePicker) return;
+    if (!showDayRangeDropdown) return undefined;
 
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
-        setShowDatePicker(false);
+    const handleOutsideClick = (event) => {
+      if (
+        dayRangeDropdownRef.current &&
+        !dayRangeDropdownRef.current.contains(event.target)
+      ) {
+        setShowDayRangeDropdown(false);
       }
     };
 
-    document.addEventListener('mousedown', handleOutsideDatePickerClick);
-    document.addEventListener('touchstart', handleOutsideDatePickerClick);
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
 
     return () => {
-      document.removeEventListener('mousedown', handleOutsideDatePickerClick);
-      document.removeEventListener('touchstart', handleOutsideDatePickerClick);
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
     };
-  }, [showDatePicker]);
+  }, [showDayRangeDropdown]);
 
   const formatDateDisplay = (dateStr) => {
     try {
@@ -871,6 +885,105 @@ const Analytics = ({ setActiveTab }) => {
     } catch {
       return dateStr;
     }
+  };
+
+  const formatDateInputValue = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const monthValueToBoundaryDate = (value, boundary = "start") => {
+    if (!value) return null;
+    const [year, month] = value.split("-").map(Number);
+    if (!year || !month) return null;
+    if (boundary === "end") {
+      return new Date(year, month, 0);
+    }
+    return new Date(year, month - 1, 1);
+  };
+
+  const applyMonthRangeToDateRange = (range) => {
+    const startDateRaw = monthValueToBoundaryDate(range.start, "start");
+    const endDateRaw = monthValueToBoundaryDate(range.end, "end");
+    if (!startDateRaw || !endDateRaw) return;
+
+    let startDate = startDateRaw;
+    let endDate = endDateRaw;
+
+    if (startDate > endDate) {
+      startDate = monthValueToBoundaryDate(range.end, "start");
+      endDate = monthValueToBoundaryDate(range.start, "end");
+    }
+
+    if (!startDate || !endDate) return;
+
+    setDateRange({
+      start: formatDateInputValue(startDate),
+      end: formatDateInputValue(endDate),
+    });
+  };
+
+  const handleDateRangeModeChange = (nextMode) => {
+    setDateRangeMode(nextMode);
+
+    if (nextMode === "month") {
+      const monthValue = dateRange.start ? dateRange.start.slice(0, 7) : monthRange.start;
+      const nextMonthRange = {
+        start: monthValue,
+        end: monthValue,
+      };
+      setMonthRange(nextMonthRange);
+      applyMonthRangeToDateRange(nextMonthRange);
+      setShowDayRangeDropdown(false);
+      return;
+    }
+
+    setPendingDayRange({
+      start: dateRange.start,
+      end: dateRange.end,
+    });
+  };
+
+  const handleDayRangeChange = (field, value) => {
+    if (!value) return;
+    setPendingDayRange((prev) => {
+      const next = {
+        ...prev,
+        [field]: value,
+      };
+
+      if (next.start && next.end && next.start > next.end) {
+        if (field === "start") {
+          next.end = value;
+        } else {
+          next.start = value;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const applyDayRangeSelection = () => {
+    if (!pendingDayRange.start || !pendingDayRange.end) return;
+    setDateRange({
+      start: pendingDayRange.start,
+      end: pendingDayRange.end,
+    });
+    setShowDayRangeDropdown(false);
+  };
+
+  const handleSingleMonthChange = (value) => {
+    if (!value) return;
+    const next = {
+      start: value,
+      end: value,
+    };
+    setMonthRange(next);
+    applyMonthRangeToDateRange(next);
   };
 
   const parseLocalDate = (dateStr) => {
@@ -1024,21 +1137,11 @@ const Analytics = ({ setActiveTab }) => {
 
   const reportPeriodLabel = useMemo(() => {
     const startDate = parseLocalDate(dateRange.start);
-    const endDate = parseLocalDate(dateRange.end);
+    if (!startDate) return reportDateRangeLabel.toUpperCase();
 
-    if (
-      startDate &&
-      endDate &&
-      startDate.getMonth() === endDate.getMonth() &&
-      startDate.getFullYear() === endDate.getFullYear()
-    ) {
-      return startDate
-        .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        .toUpperCase();
-    }
-
-    return reportDateRangeLabel.toUpperCase();
-  }, [dateRange, reportDateRangeLabel]);
+    const monthName = startDate.toLocaleDateString('en-US', { month: 'long' });
+    return `${monthName}, ${startDate.getFullYear()}`.toUpperCase();
+  }, [dateRange.start, reportDateRangeLabel]);
 
   const visitsById = useMemo(() => {
     const map = new Map();
@@ -1358,32 +1461,40 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, summaryOverallRow]);
 
   const printPages = useMemo(() => {
-    const PAGE_UNITS = 24;
+    const PAGE_UNITS = 20;
+    const estimateCsfRowUnits = (row) => {
+      const commendations = Array.isArray(row?.commendations) ? row.commendations : [];
+      const suggestions = Array.isArray(row?.suggestions) ? row.suggestions : [];
+      const maxItems = Math.max(commendations.length, suggestions.length, 1);
+      const longestText = [...commendations, ...suggestions].reduce(
+        (max, item) => Math.max(max, toTrimmedText(item).length),
+        0
+      );
+
+      // Mild penalty for very long wrapped bullet text.
+      const wrapPenalty = longestText > 0 ? Math.max(0, Math.ceil(longestText / 64) - 1) : 0;
+      return Math.max(1, Math.ceil(maxItems / 2) + wrapPenalty);
+    };
     const sections = [
       {
         key: 'A',
         rows: charterRowsForPrint,
         rowUnits: () => 1,
-        firstOverhead: 8,
+        firstOverhead: 6,
         continuationOverhead: 1,
       },
       {
         key: 'B',
         rows: summaryRowsForPrint,
         rowUnits: () => 1,
-        firstOverhead: 5,
+        firstOverhead: 4,
         continuationOverhead: 1,
       },
       {
         key: 'C',
         rows: csfRowsForPrint,
-        rowUnits: (row) =>
-          Math.max(
-            1,
-            Array.isArray(row?.commendations) ? row.commendations.length : 0,
-            Array.isArray(row?.suggestions) ? row.suggestions.length : 0
-          ),
-        firstOverhead: 5,
+        rowUnits: (row) => estimateCsfRowUnits(row),
+        firstOverhead: 4,
         continuationOverhead: 1,
       },
     ];
@@ -1412,7 +1523,7 @@ const Analytics = ({ setActiveTab }) => {
           const candidate = section.rows[sectionRowIndex];
           const units = Math.max(1, section.rowUnits(candidate));
 
-          if (rows.length > 0 && units > remaining) {
+          if (units > remaining) {
             break;
           }
 
@@ -1893,17 +2004,19 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table th {
-            font-size: 9px;
+            font-size: 12px;
             font-weight: 700;
             text-align: center;
             padding: 4px 3px;
             vertical-align: middle;
+            font-family: Arial, sans-serif;
           }
 
           .analytics-table td {
-            font-size: 9px;
+            font-size: 12px;
             padding: 4px;
             text-align: center;
+            font-family: Arial, sans-serif;
           }
 
           .analytics-table-a td:first-child,
@@ -1919,8 +2032,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table-a thead,
-          .analytics-table-b thead,
-          .analytics-table-c thead {
+          .analytics-table-b thead {
             display: table-header-group;
           }
 
@@ -1953,8 +2065,6 @@ const Analytics = ({ setActiveTab }) => {
           .page-break {
             break-after: page;
             page-break-after: always;
-            break-inside: avoid-page;
-            page-break-inside: avoid;
           }
 
           .page-break:last-child {
@@ -1964,6 +2074,11 @@ const Analytics = ({ setActiveTab }) => {
 
           table thead {
             display: table-header-group;
+          }
+
+          /* Keep C header from repeating on automatic page continuation */
+          .analytics-table-c thead {
+            display: table-row-group !important;
           }
 
           table tr {
@@ -1989,11 +2104,11 @@ const Analytics = ({ setActiveTab }) => {
                     <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                   </div>
                   <div className="leading-tight">
-                    <p className="text-[12px]">Republic of the Philippines</p>
-                    <h1 className="text-[30px] font-bold tracking-wide leading-none">BOHOL ISLAND STATE UNIVERSITY</h1>
-                    <p className="text-[12px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                    <p className="text-[12px]">{printOfficeName}</p>
-                    <p className="text-[12px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                    <p className="text-[14.67px]" style={{ fontFamily: "Arial, sans-serif" }}>Republic of the Philippines</p>
+                    <h1 className="text-[16px] font-bold tracking-wide leading-none" style={{ fontFamily: "Arial, sans-serif" }}>BOHOL ISLAND STATE UNIVERSITY</h1>
+                    <p className="text-[13.33px]" style={{ fontFamily: "Arial, sans-serif" }}>Magsija, Balilihan 6342, Bohol, Philippines</p>
+                    <p className="text-[13.33px]" style={{ fontFamily: "Arial, sans-serif" }}>{printOfficeName}</p>
+                    <p className="text-[13.33px] italic" style={{ fontFamily: "\"Times New Roman\", Times, serif" }}>Balance | Integrity | Stewardship | Uprightness</p>
                   </div>
                 </div>
 
@@ -2309,7 +2424,7 @@ const Analytics = ({ setActiveTab }) => {
                     >
                       <div>
                         {renderHeader()}
-                        <h2 className="analytics-report-title">
+                        <h2 className="analytics-report-title font-Arial">
                           Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
                         </h2>
                       </div>
@@ -2323,8 +2438,10 @@ const Analytics = ({ setActiveTab }) => {
                             <div key={`segment-a-${segmentKey}`} className={blockClass}>
                               {segment.showSectionTitle && (
                                 <div className="flex items-center justify-between mb-2">
-                                  <p className="analytics-section-label">A. Citizen&apos;s Charter Summary Result</p>
-                                  <p className="analytics-section-label">
+                                  <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                                    A. Citizen&apos;s Charter Summary Result
+                                  </p>
+                                  <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
                                     Campus: <span className="underline">Balilihan Campus</span>
                                   </p>
                                 </div>
@@ -2338,7 +2455,9 @@ const Analytics = ({ setActiveTab }) => {
                           return (
                             <div key={`segment-b-${segmentKey}`} className={blockClass}>
                               {segment.showSectionTitle && (
-                                <p className="analytics-section-label mb-2">B. CSF Monthly Summary Rating</p>
+                                <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                                  B. CSF Monthly Summary Rating
+                                </p>
                               )}
                               {renderSummaryTable(segment.rows, segmentKey, segment.showTableHeader)}
                             </div>
@@ -2348,7 +2467,7 @@ const Analytics = ({ setActiveTab }) => {
                         return (
                           <div key={`segment-c-${segmentKey}`} className={blockClass}>
                             {segment.showSectionTitle && (
-                              <p className="analytics-section-label mb-2">
+                              <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
                                 C. CSF Monthly Commendations &amp; Suggestions
                               </p>
                             )}
@@ -2412,49 +2531,92 @@ const Analytics = ({ setActiveTab }) => {
                     </button>
                   </div>
 
-                 <div className="relative" ref={datePickerRef}>
-                 <button 
-                   onClick={() => setShowDatePicker(!showDatePicker)}
-                   className="flex gap-3 items-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                 >
-                   <Calendar size={18} className="text-gray-500" />
-                   <span className="text-sm font-medium text-gray-700">
-                     {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
-                   </span>
-                   <ChevronDown size={16} className="text-gray-400" />
-                 </button>
+                 <div className="flex items-center gap-3">
+                   <select
+                     className="h-[42px] min-w-[140px] border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                     value={dateRangeMode}
+                     onChange={(e) => handleDateRangeModeChange(e.target.value)}
+                   >
+                     <option value="month">Month</option>
+                     <option value="day">Day</option>
+                   </select>
 
-                 {showDatePicker && (
-                   <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 min-w-[320px]">
-                     <div className="space-y-3">
-                       <div>
-                         <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
-                         <input 
-                           type="date" 
-                           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                           value={dateRange.start} 
-                           onChange={e => setDateRange({...dateRange, start: e.target.value})}
-                         />
+                    {dateRangeMode === "month" ? (
+                      <div className="relative min-w-[260px]">
+                        <input
+                          type="month"
+                          className="h-[42px] w-full border border-gray-300 rounded-xl pl-4 pr-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                         value={monthRange.start}
+                         onChange={(e) => handleSingleMonthChange(e.target.value)}
+                        />
                        </div>
-                       <div>
-                         <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
-                         <input 
-                           type="date" 
-                           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                           value={dateRange.end} 
-                           onChange={e => setDateRange({...dateRange, end: e.target.value})}
-                         />
-                       </div>
-                       <button 
-                         onClick={() => setShowDatePicker(false)}
-                         className="w-full bg-[#6B46C1] text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-[#5B34B8] transition-colors"
-                       >
-                         Apply
-                       </button>
-                     </div>
-                   </div>
-                 )}
-               </div>
+                    ) : (
+                      <div className="relative" ref={dayRangeDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingDayRange({
+                              start: dateRange.start,
+                              end: dateRange.end,
+                            });
+                            setShowDayRangeDropdown((prev) => !prev);
+                          }}
+                          className="h-[46px] min-w-[260px] border-2 border-gray-800 rounded-xl px-4 bg-white text-gray-800 flex items-center justify-between"
+                        >
+                          <span className="inline-flex items-center gap-2 text-sm font-medium">
+                            <Calendar size={16} className="text-gray-600" />
+                            <span>
+                              {dateRange.start && dateRange.end
+                                ? `${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}`
+                                : "Select date range"}
+                            </span>
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={`text-gray-600 transition-transform ${
+                              showDayRangeDropdown ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {showDayRangeDropdown && (
+                          <div className="absolute left-0 top-full mt-2 w-[260px] bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50">
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                                <input
+                                  type="date"
+                                  className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                  value={pendingDayRange.start}
+                                  max={pendingDayRange.end || undefined}
+                                  onChange={(e) => handleDayRangeChange("start", e.target.value)}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                                <input
+                                  type="date"
+                                  className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                  value={pendingDayRange.end}
+                                  min={pendingDayRange.start || undefined}
+                                  onChange={(e) => handleDayRangeChange("end", e.target.value)}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={applyDayRangeSelection}
+                                className="w-full bg-[#6B46C1] text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-[#5B34B8] transition-colors"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
              </div>
             </div>
 
@@ -2549,7 +2711,7 @@ const Analytics = ({ setActiveTab }) => {
                                   key={i} 
                                   className={`text-lg ${i < Math.round(feedback.averageRating) ? 'text-yellow-400' : 'text-gray-300'}`}
                                 >
-                                  ★
+                                  ?
                                 </span>
                               ))}
                             </div>

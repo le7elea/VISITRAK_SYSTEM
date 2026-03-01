@@ -484,11 +484,11 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                       />
                     </div>
                     <div>
-                      <p className="text-[14px]">Republic of the Philippines</p>
-                      <h1 className="text-lg font-bold">BOHOL ISLAND STATE UNIVERSITY</h1>
-                      <p className="text-[14px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                      <p className="text-[14px]">{printOfficeName}</p>
-                      <p className="text-[14px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                      <p className="text-[14.67px]">Republic of the Philippines</p>
+                      <p className="text-[16px] font-bold">BOHOL ISLAND STATE UNIVERSITY</p>
+                      <p className="text-[13.33px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                      <p className="text-[13.33px]">{printOfficeName}</p>
+                      <p className="text-[13.33px] italic">Balance | Integrity | Stewardship | Uprightness</p>
                     </div>
                   </div>
                   
