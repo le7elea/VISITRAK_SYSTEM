@@ -1338,10 +1338,10 @@ const Analytics = ({ setActiveTab }) => {
 
   const firstPageCsfRowsCapacity = useMemo(() => {
     // Fill remaining space on the first print page after sections A and B.
-    // Keep this conservative to avoid forcing A/B to spill to a new page.
+    // Do not hard-cap to 3 so short reports can continue section C on the same page.
     const officeRowCount = officeAnalyticsRows.length;
     const estimatedCapacity = 9 - officeRowCount;
-    return Math.max(0, Math.min(3, estimatedCapacity));
+    return Math.max(0, estimatedCapacity);
   }, [officeAnalyticsRows.length]);
 
   const firstPageCsfRows = useMemo(() => {
@@ -1799,6 +1799,8 @@ const Analytics = ({ setActiveTab }) => {
           .analytics-section-label {
             font-size: 12px;
             font-weight: 700;
+            break-after: avoid-page;
+            page-break-after: avoid;
           }
 
           .analytics-table th,
@@ -1827,16 +1829,16 @@ const Analytics = ({ setActiveTab }) => {
             text-align: center;
           }
 
-          .analytics-table-a,
-          .analytics-table-b {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
-
           .analytics-table-a tr,
           .analytics-table-b tr {
             break-inside: avoid;
             page-break-inside: avoid;
+          }
+
+          .analytics-table-a thead,
+          .analytics-table-b thead,
+          .analytics-table-c thead {
+            display: table-header-group;
           }
 
           .analytics-table-c td {
@@ -1845,10 +1847,6 @@ const Analytics = ({ setActiveTab }) => {
 
           .analytics-table-c td.text-center {
             text-align: center;
-          }
-
-          .analytics-table-c thead {
-            display: table-header-group;
           }
 
           .analytics-table-c tr {
@@ -1871,12 +1869,6 @@ const Analytics = ({ setActiveTab }) => {
 
           .page-break {
             page-break-after: always;
-            page-break-inside: avoid;
-          }
-
-          .page-break-before {
-            break-before: page;
-            page-break-before: always;
           }
 
           .page-break:last-child {
@@ -2249,13 +2241,11 @@ const Analytics = ({ setActiveTab }) => {
 
                 {commendationSuggestionPages.map((pageRows, pageIndex) => {
                   const isLastPage = pageIndex === totalCsfPages - 1;
-                  const isFirstPage = pageIndex === 0;
                   const isContinuationPage = showCsfOnFirstPage || pageIndex > 0;
                   const showCsfTitle = !isContinuationPage;
                   const showCsfHeader = !isContinuationPage;
                   const pageClassName = [
                     "analytics-print-page",
-                    isFirstPage ? "page-break-before" : "",
                     isLastPage ? "" : "page-break",
                   ]
                     .filter(Boolean)
