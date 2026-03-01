@@ -1134,24 +1134,16 @@ const Offices = () => {
     setAddError("");
     
     try {
-      const tempId = `temp_${Date.now()}`;
-      
-      const tempOffice = {
-        id: tempId,
-        name: addData.name,
-        officialName: addData.officialName,
+      const newOffice = await addOffice({
+        ...addData,
         username: normalizedUsername,
-        email: "",
-        role: "office", // Always office admin
-        passwordChanged: false,
-        passwordChangedAt: null,
-        purposes: addData.purposes,
-        staffToVisit: addData.staffToVisit,
-        createdAt: new Date()
-      };
-      
-      // Update local state immediately
-      setOffices(prev => [...prev, tempOffice]);
+        role: "office",
+      });
+
+      setOffices(prev => [
+        ...prev,
+        { ...newOffice, createdAt: newOffice.createdAt || new Date() },
+      ]);
       setShowAddModal(false);
       
       // Reset form
@@ -1172,39 +1164,14 @@ const Offices = () => {
         title: "Office Added",
         tone: "success",
       });
-      
-      // Save to Firestore in background
-      setTimeout(async () => {
-        try {
-          const newOffice = await addOffice({
-            ...addData,
-            username: normalizedUsername,
-            role: "office" // Ensure it's office admin
-          });
-          
-          setOffices(prev => prev.map(office => 
-            office.id === tempId 
-              ? { ...newOffice, createdAt: newOffice.createdAt || new Date() }
-              : office
-          ));
-        } catch (err) {
-          console.error("Error saving office to Firestore:", err);
-          setOffices(prev => prev.filter(office => office.id !== tempId));
-          showNotification(
-            `Warning: Office "${addData.name}" failed to save to database: ${err.message}`,
-            {
-              title: "Background Save Failed",
-              tone: "warning",
-            }
-          );
-        } finally {
-          setAddLoading(false);
-        }
-      }, 0);
-      
     } catch (err) {
       console.error("Error in add office process:", err);
       setAddError(`Failed to add office: ${err.message}`);
+      showNotification(`Failed to add office: ${err.message}`, {
+        title: "Add Office Failed",
+        tone: "warning",
+      });
+    } finally {
       setAddLoading(false);
     }
   }, [addData, offices, showNotification]);

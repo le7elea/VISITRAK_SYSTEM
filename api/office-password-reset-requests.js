@@ -797,11 +797,20 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("office-password-reset-requests error:", error);
+    const errorMessage = String(error?.message || "");
+    const isConfigError =
+      errorMessage.includes("Firebase Admin credentials") ||
+      errorMessage.includes("Firebase Admin environment variables") ||
+      errorMessage.includes("Invalid PEM formatted message");
     const status = error.message === "Not authorized" ? 403 : 500;
     return res.status(status).json({
       success: false,
       message:
-        status === 403 ? "Not authorized." : "Failed to process reset request.",
+        status === 403
+          ? "Not authorized."
+          : isConfigError
+            ? "Server Firebase Admin configuration is invalid. Please check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY on Vercel."
+            : "Failed to process reset request.",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
