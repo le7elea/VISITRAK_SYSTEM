@@ -14,7 +14,7 @@ import fgIllustrator from "../assets/fg_illustrator.png";
 
 const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RESET_STATUS_POLL_INTERVAL_MS = 5000;
+const RESET_STATUS_POLL_INTERVAL_MS = 15000;
 const RESET_TRACK_USERNAME_KEY = "office_reset_tracking_username";
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000;
 

@@ -15,7 +15,7 @@ import useAdminVisitors from "../hooks/useAdminVisitors";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
 import { getOfficePasswordResetRequests } from "../lib/info.services";
 
-const RESET_REQUEST_CHECK_INTERVAL_MS = 5000;
+const RESET_REQUEST_CHECK_INTERVAL_MS = 30000;
 
 const ResetRequestNotificationModal = ({ show, title, message, onOk }) => {
   if (!show) return null;
@@ -151,11 +151,15 @@ const Dashboard = ({
   useEffect(() => localStorage.setItem("activeTab", activeTab), [activeTab]);
 
   useEffect(() => {
-    if (user?.type !== "SuperAdmin") return undefined;
+    if (user?.type !== "SuperAdmin" || activeTab === "offices") return undefined;
 
     let disposed = false;
 
     const checkPendingResetRequests = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
       try {
         const pendingRequests = await getOfficePasswordResetRequests("pending");
         if (disposed) return;
@@ -207,7 +211,7 @@ const Dashboard = ({
       disposed = true;
       clearInterval(intervalId);
     };
-  }, [playResetRequestSound, user?.type]);
+  }, [activeTab, playResetRequestSound, user?.type]);
 
   const handleResetRequestModalOk = () => {
     setResetRequestModal({

@@ -24,8 +24,27 @@ const REQUEST_EXPIRATION_MS = 15 * 60 * 1000;
 const REQUEST_EXPIRY_REASON =
   "Request expired after 15 minutes without super admin action.";
 const REQUEST_CANCEL_REASON = "Request cancelled by office admin before approval.";
+const ALLOWED_STATUS_FILTERS = new Set([
+  "all",
+  "pending",
+  "approved",
+  "rejected",
+  "expired",
+  "cancelled",
+]);
 
 const requesterLastSeen = new Map();
+
+const isQuotaExceededError = (error) => {
+  const code = String(error?.code || "").trim().toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    code === "resource-exhausted" ||
+    code === "8" ||
+    message.includes("resource_exhausted") ||
+    message.includes("quota exceeded")
+  );
+};
 
 const toDate = (value) => {
   if (!value) return null;
@@ -369,22 +388,44 @@ const listRequests = async (req, res, admin, db) => {
   await ensureSuperRequester(admin, db, req);
 
   const url = new URL(req.url || "http://localhost", "http://localhost");
-  const statusFilter = String(url.searchParams.get("status") || "all")
+  const requestedStatusFilter = String(url.searchParams.get("status") || "all")
     .trim()
     .toLowerCase();
+  const statusFilter = ALLOWED_STATUS_FILTERS.has(requestedStatusFilter)
+    ? requestedStatusFilter
+    : "all";
 
-  const requestsSnapshot = await db
-    .collection("passwordResetRequests")
-    .orderBy("requestedAt", "desc")
-    .limit(200)
-    .get();
+  const baseQuery = db.collection("passwordResetRequests");
+  const requestsSnapshot =
+    statusFilter === "all"
+      ? await baseQuery.orderBy("requestedAt", "desc").limit(200).get()
+      : await baseQuery.where("status", "==", statusFilter).limit(200).get();
+  const requestDocs =
+    statusFilter === "all"
+      ? requestsSnapshot.docs
+      : [...requestsSnapshot.docs].sort((a, b) => {
+          const aData = a.data() || {};
+          const bData = b.data() || {};
+          const aTime =
+            toDate(aData.lastUpdatedAt)?.getTime() ||
+            toDate(aData.requestedAt)?.getTime() ||
+            0;
+          const bTime =
+            toDate(bData.lastUpdatedAt)?.getTime() ||
+            toDate(bData.requestedAt)?.getTime() ||
+            0;
+          return bTime - aTime;
+        });
 
   const nowMs = Date.now();
   const requests = await Promise.all(
-    requestsSnapshot.docs.map(async (doc) => {
+    requestDocs.map(async (doc) => {
       let data = doc.data() || {};
 
-      if (isPendingRequestExpired(data, nowMs)) {
+      if (
+        (statusFilter === "all" || statusFilter === "pending") &&
+        isPendingRequestExpired(data, nowMs)
+      ) {
         data = await markResetRequestExpired(db, admin, doc.id, data);
       }
 
@@ -822,6 +863,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("office-password-reset-requests error:", error);
     const errorMessage = String(error?.message || "");
+    const isQuotaError = isQuotaExceededError(error);
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||
       errorMessage.includes("Firebase Admin environment variables") ||
@@ -830,7 +872,13 @@ export default async function handler(req, res) {
       errorMessage === "Missing bearer token" ||
       errorMessage === "Invalid bearer token";
     const status =
-      error.message === "Not authorized" ? 403 : isAuthTokenError ? 401 : 500;
+      error.message === "Not authorized"
+        ? 403
+        : isAuthTokenError
+          ? 401
+          : isQuotaError
+            ? 503
+            : 500;
     return res.status(status).json({
       success: false,
       message:
@@ -838,6 +886,8 @@ export default async function handler(req, res) {
           ? "Session token is invalid for the server Firebase project. Sign out and sign in again. If it persists, client Firebase config and server Admin credentials may be pointing to different projects."
           : status === 403
           ? "Not authorized."
+          : status === 503
+            ? "Firestore quota is temporarily exhausted. Please wait and try again."
           : isConfigError
             ? "Server Firebase Admin configuration is invalid. Please check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY on Vercel."
             : "Failed to process reset request.",

@@ -17,6 +17,17 @@ const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/;
 const REQUEST_COOLDOWN_MS = 400;
 const requesterLastSeen = new Map();
 
+const isQuotaExceededError = (error) => {
+  const code = String(error?.code || "").trim().toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    code === "resource-exhausted" ||
+    code === "8" ||
+    message.includes("resource_exhausted") ||
+    message.includes("quota exceeded")
+  );
+};
+
 const getRequesterKey = (req) => {
   const ip =
     req.headers["x-forwarded-for"] ||
@@ -159,6 +170,7 @@ export default async function handler(req, res) {
     console.error("office-login error:", error);
     const message = String(error?.message || "");
     const code = String(error?.code || "");
+    const isQuotaError = isQuotaExceededError(error);
     const isConfigError =
       message.includes("Firebase Admin credentials") ||
       message.includes("Firebase Admin environment variables") ||
@@ -166,14 +178,17 @@ export default async function handler(req, res) {
     const isIndexError =
       code === "failed-precondition" ||
       message.toLowerCase().includes("index");
+    const statusCode = isQuotaError ? 503 : 500;
 
     const userMessage = isConfigError
       ? "Server Firebase Admin configuration is invalid. Please verify Vercel Firebase Admin environment variables."
+      : isQuotaError
+        ? "Firestore quota is temporarily exhausted. Please try again later."
       : isIndexError
         ? "A required Firestore index is missing for office login."
         : "Unable to log in right now.";
 
-    return res.status(500).json({
+    return res.status(statusCode).json({
       success: false,
       message: userMessage,
       error: process.env.NODE_ENV === "development" ? error.message : undefined,

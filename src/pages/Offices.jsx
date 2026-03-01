@@ -27,7 +27,7 @@ const createEditSnapshot = (data = {}) => ({
   purposes: normalizeEditList(data.purposes),
   staffToVisit: normalizeEditList(data.staffToVisit),
 });
-const RESET_REQUEST_POLL_INTERVAL_MS = 5000;
+const RESET_REQUEST_POLL_INTERVAL_MS = 30000;
 
 // ==================== MEMOIZED COMPONENTS ====================
 
