@@ -71,15 +71,28 @@ export default async function handler(req, res) {
     const officeSnapshot = await db
       .collection("offices")
       .where("usernameNormalized", "==", usernameNormalized)
-      .where("role", "==", "office")
-      .limit(1)
+      .limit(5)
       .get();
 
-    if (officeSnapshot.empty) {
-      return invalidCredentials(res);
+    let officeDoc =
+      officeSnapshot.docs.find((doc) => (doc.data()?.role || "office") === "office") ||
+      null;
+
+    // Fallback for legacy documents that do not have usernameNormalized.
+    if (!officeDoc) {
+      const legacySnapshot = await db
+        .collection("offices")
+        .where("username", "==", usernameNormalized)
+        .limit(5)
+        .get();
+      officeDoc =
+        legacySnapshot.docs.find((doc) => (doc.data()?.role || "office") === "office") ||
+        null;
     }
 
-    const officeDoc = officeSnapshot.docs[0];
+    if (!officeDoc) {
+      return invalidCredentials(res);
+    }
     const officeData = officeDoc.data() || {};
 
     if (officeData.status === "inactive") {
@@ -144,9 +157,25 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("office-login error:", error);
+    const message = String(error?.message || "");
+    const code = String(error?.code || "");
+    const isConfigError =
+      message.includes("Firebase Admin credentials") ||
+      message.includes("Firebase Admin environment variables") ||
+      message.includes("Invalid PEM formatted message");
+    const isIndexError =
+      code === "failed-precondition" ||
+      message.toLowerCase().includes("index");
+
+    const userMessage = isConfigError
+      ? "Server Firebase Admin configuration is invalid. Please verify Vercel Firebase Admin environment variables."
+      : isIndexError
+        ? "A required Firestore index is missing for office login."
+        : "Unable to log in right now.";
+
     return res.status(500).json({
       success: false,
-      message: "Unable to log in right now.",
+      message: userMessage,
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
