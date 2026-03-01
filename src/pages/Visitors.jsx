@@ -449,6 +449,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           visitors={filteredVisitors}
           renderStars={renderStars}
           onViewDetails={handleViewVisitorDetails}
+          canDeleteVisitors={user.type === "SuperAdmin"}
         />
       </div>
 

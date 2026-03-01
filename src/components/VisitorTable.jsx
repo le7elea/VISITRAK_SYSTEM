@@ -1,8 +1,12 @@
 import React, { useState } from "react";
-import { db } from "../lib/firebase";
-import { doc, deleteDoc } from "firebase/firestore";
+import { auth } from "../lib/firebase";
 
-const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
+const VisitorTable = ({
+  visitors = [],
+  renderStars,
+  onViewDetails,
+  canDeleteVisitors = false,
+}) => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -41,8 +45,31 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
     setError(null);
 
     try {
-      // Delete from Firebase Firestore - from "visits" collection
-      await deleteDoc(doc(db, "visits", selectedVisitor.id));
+      const currentAuthUser = auth.currentUser;
+      if (!currentAuthUser) {
+        throw new Error("You are not logged in.");
+      }
+
+      const idToken = await currentAuthUser.getIdToken();
+      const response = await fetch("/api/delete-visitor", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ id: selectedVisitor.id }),
+      });
+
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        // Ignore parse errors; use fallback message below.
+      }
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.message || "Failed to delete visitor.");
+      }
       
       // Close modal on success
       setDeleteModalOpen(false);
@@ -50,7 +77,7 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
       
     } catch (error) {
       console.error("Error deleting visitor:", error);
-      setError("Failed to delete visitor. Please try again.");
+      setError(error?.message || "Failed to delete visitor. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -103,7 +130,7 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
                       <col className="w-[80px]" />
                       <col className="w-[100px]" />
                       <col className="w-[120px]" />
-                      <col className="w-[70px]" /> {/* Delete column */}
+                      {canDeleteVisitors && <col className="w-[70px]" />}
                     </colgroup>
                     {/* Table header */}
                     <thead className="bg-white dark:bg-gray-900 border-b border-gray-300 dark:border-gray-700">
@@ -129,9 +156,11 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
                         <th className="py-3 px-4 font-medium text-gray-700 dark:text-gray-300 text-left">
                           Satisfaction
                         </th>
-                        <th className="py-3 px-4 font-medium text-gray-700 dark:text-gray-300 text-left">
-                          Action
-                        </th>
+                        {canDeleteVisitors && (
+                          <th className="py-3 px-4 font-medium text-gray-700 dark:text-gray-300 text-left">
+                            Action
+                          </th>
+                        )}
                       </tr>
                     </thead>
                   </table>
@@ -147,7 +176,7 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
                         <col className="w-[80px]" />
                         <col className="w-[100px]" />
                         <col className="w-[120px]" />
-                        <col className="w-[70px]" /> {/* Delete column */}
+                        {canDeleteVisitors && <col className="w-[70px]" />}
                       </colgroup>
                       <tbody>
                         {visitors.map((v, index) => (
@@ -193,30 +222,32 @@ const VisitorTable = ({ visitors = [], renderStars, onViewDetails }) => {
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <button
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleDeleteClick(v);
-                                }}
-                                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Delete visitor permanently"
-                              >
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
+                            {canDeleteVisitors && (
+                              <td className="py-3 px-4">
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleDeleteClick(v);
+                                  }}
+                                  className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Delete visitor permanently"
                                 >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            </td>
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
