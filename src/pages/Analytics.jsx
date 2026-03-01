@@ -1,5 +1,16 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { BarChart2, ChevronDown, MoreHorizontal, MessageSquare, Calendar, FileText, Printer } from 'lucide-react';
+import {
+  BarChart2,
+  ChevronDown,
+  MoreHorizontal,
+  MessageSquare,
+  Calendar,
+  FileText,
+  Printer,
+  Smile,
+  Meh,
+  Frown,
+} from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import bisuLogo from '../assets/bisulogo.png';
@@ -316,16 +327,11 @@ const calculateSatisfactionRates = (feedbacks = []) => {
   };
 
   return [
-    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
-    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
-    {
-      label: 'Neither Satisfied nor Dissatisfied',
-      pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100),
-      emoji: '??',
-      color: 'bg-yellow-400',
-    },
-    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
-    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
+    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100) },
+    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100) },
+    { label: 'Neither Satisfied nor Dissatisfied', pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100) },
+    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100) },
+    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100) },
   ];
 };
 
@@ -356,6 +362,16 @@ const calculateTrafficByDay = (visits = []) => {
     count: counts[index],
     full: 100
   }));
+};
+
+const SatisfactionIcon = ({ label, className = "w-4 h-4" }) => {
+  if (label === 'Very Satisfied' || label === 'Satisfied') {
+    return <Smile className={className} />;
+  }
+  if (label === 'Neither Satisfied nor Dissatisfied') {
+    return <Meh className={className} />;
+  }
+  return <Frown className={className} />;
 };
 
 // Helper function to normalize office names - UPDATED
@@ -512,7 +528,7 @@ const SatisfactionChart = ({ ratings }) => {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100">
-             <span className="text-xs">??</span> 
+            <Smile size={14} className="text-yellow-700" />
           </div>
           <h3 className="font-bold text-gray-800 dark:text-white">Satisfaction Rate</h3>
         </div>
@@ -524,7 +540,10 @@ const SatisfactionChart = ({ ratings }) => {
           ratings.map((item, idx) => (
             <div key={idx} className="w-full">
               <div className="flex items-center gap-3 mb-1">
-                <span className="text-lg">{item.emoji}</span>
+                <SatisfactionIcon
+                  label={item.label}
+                  className={`w-4 h-4 ${idx < 3 ? 'text-yellow-600' : 'text-gray-500'}`}
+                />
                 <span className="text-xs font-bold text-gray-700 w-24">{item.label}</span>
                 <div className="flex-1 h-2 bg-green-50 rounded-full overflow-hidden relative">
                   <div 
@@ -540,7 +559,7 @@ const SatisfactionChart = ({ ratings }) => {
         ) : (
           <div className="text-center text-gray-500 py-8">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-50 mx-auto mb-3">
-              <span className="text-xl">??</span>
+              <Meh size={20} className="text-yellow-600" />
             </div>
             <p className="text-gray-600">No satisfaction data available</p>
             <p className="text-sm text-gray-500 mt-1">Ratings will appear here when visitors submit feedback</p>
@@ -2698,7 +2717,7 @@ const Analytics = ({ setActiveTab }) => {
                     // Display feedbacks that have comments
                     return feedbacksWithComments.map((feedback) => (
                       <div key={feedback.id} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
-                        <div className="flex items-start justify-between mb-2">
+                        <div className="mb-2">
                           <div>
                             <h4 className="font-bold text-gray-800 dark:text-white">
                               {feedback.visitorName} 
@@ -2710,29 +2729,9 @@ const Analytics = ({ setActiveTab }) => {
                             </h4>
                             <p className="text-gray-600 text-sm mt-1 dark:text-white">{feedback.comment}</p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex">
-                              {[...Array(5)].map((_, i) => (
-                                <span 
-                                  key={i} 
-                                  className={`text-lg ${i < Math.round(feedback.averageRating) ? 'text-yellow-400' : 'text-gray-300'}`}
-                                >
-                                  ?
-                                </span>
-                              ))}
-                            </div>
-                            <span className="text-sm font-medium text-gray-700 dark:text-white">
-                              {typeof feedback.averageRating === 'number' 
-                                ? feedback.averageRating.toFixed(1) 
-                                : parseFloat(feedback.averageRating || 0).toFixed(1)}/5
-                            </span>
-                          </div>
                         </div>
                         <p className="text-gray-400 text-xs">
-                          {feedback.visitorDate || (feedback.createdAt ? (feedback.createdAt.toDate ? feedback.createdAt.toDate() : new Date(feedback.createdAt)).toLocaleDateString() : 'N/A')} | 
-                          Rating: {typeof feedback.averageRating === 'number' 
-                                  ? feedback.averageRating.toFixed(1) 
-                                  : parseFloat(feedback.averageRating || 0).toFixed(1)}/5
+                          {feedback.visitorDate || (feedback.createdAt ? (feedback.createdAt.toDate ? feedback.createdAt.toDate() : new Date(feedback.createdAt)).toLocaleDateString() : 'N/A')}
                         </p>
                       </div>
                     ));
