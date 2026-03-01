@@ -60,14 +60,15 @@ const archivePendingResetNotifications = async (
   const notificationsSnapshot = await db
     .collection("adminNotifications")
     .where("requestId", "==", requestId)
-    .where("type", "==", "password_reset_request")
     .limit(30)
     .get();
 
   if (notificationsSnapshot.empty) return;
 
   const batch = db.batch();
-  notificationsSnapshot.docs.forEach((doc) => {
+  notificationsSnapshot.docs
+    .filter((doc) => (doc.data()?.type || "") === "password_reset_request")
+    .forEach((doc) => {
     batch.set(
       doc.ref,
       {
@@ -78,7 +79,7 @@ const archivePendingResetNotifications = async (
       },
       { merge: true }
     );
-  });
+    });
 
   await batch.commit();
 };
@@ -177,12 +178,14 @@ const findOfficeByIdentifier = async (db, identifier) => {
     const byEmail = await db
       .collection("offices")
       .where("email", "==", normalizedIdentifier)
-      .where("role", "==", "office")
-      .limit(1)
+      .limit(5)
       .get();
 
-    if (!byEmail.empty) {
-      officeDoc = byEmail.docs[0];
+    const matched = byEmail.docs.find(
+      (doc) => (doc.data()?.role || "office") === "office"
+    );
+    if (matched) {
+      officeDoc = matched;
     }
   }
 
@@ -198,12 +201,14 @@ const findOfficeByIdentifier = async (db, identifier) => {
     const byUsername = await db
       .collection("offices")
       .where("usernameNormalized", "==", usernameCandidate)
-      .where("role", "==", "office")
-      .limit(1)
+      .limit(5)
       .get();
 
-    if (!byUsername.empty) {
-      officeDoc = byUsername.docs[0];
+    const matched = byUsername.docs.find(
+      (doc) => (doc.data()?.role || "office") === "office"
+    );
+    if (matched) {
+      officeDoc = matched;
     }
   }
 
@@ -279,10 +284,12 @@ const ensureSuperRequester = async (admin, db, req) => {
     const byEmail = await db
       .collection("offices")
       .where("email", "==", normalizeEmail(decoded.email))
-      .where("role", "==", "super")
-      .limit(1)
+      .limit(5)
       .get();
-    if (!byEmail.empty) return decoded;
+    const hasSuperEmailMatch = byEmail.docs.some(
+      (doc) => (doc.data()?.role || "office") === "super"
+    );
+    if (hasSuperEmailMatch) return decoded;
   }
 
   throw new Error("Not authorized");

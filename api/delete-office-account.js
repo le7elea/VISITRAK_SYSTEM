@@ -18,7 +18,23 @@ const ensureSuperRequester = async (admin, db, req) => {
   const token = getBearerToken(req);
   if (!token) throw new Error("Missing bearer token");
 
-  const decoded = await admin.auth().verifyIdToken(token);
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(token);
+  } catch (error) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || "");
+    const isTokenError =
+      code.startsWith("auth/") ||
+      message.includes("ID token") ||
+      message.includes("argument") ||
+      message.includes("token");
+
+    if (isTokenError) {
+      throw new Error("Invalid bearer token");
+    }
+    throw error;
+  }
   if (decoded.role === "super") return decoded;
 
   const officeDoc = await db.collection("offices").doc(decoded.uid).get();
@@ -28,10 +44,12 @@ const ensureSuperRequester = async (admin, db, req) => {
     const byEmail = await db
       .collection("offices")
       .where("email", "==", normalizeEmail(decoded.email))
-      .where("role", "==", "super")
-      .limit(1)
+      .limit(5)
       .get();
-    if (!byEmail.empty) return decoded;
+    const hasSuperEmailMatch = byEmail.docs.some(
+      (doc) => (doc.data()?.role || "office") === "super"
+    );
+    if (hasSuperEmailMatch) return decoded;
   }
 
   throw new Error("Not authorized");
@@ -88,10 +106,26 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("delete-office-account error:", error);
-    const status = error.message === "Not authorized" ? 403 : 500;
+    const errorMessage = String(error?.message || "");
+    const isConfigError =
+      errorMessage.includes("Firebase Admin credentials") ||
+      errorMessage.includes("Firebase Admin environment variables") ||
+      errorMessage.includes("Invalid PEM formatted message");
+    const isAuthTokenError =
+      errorMessage === "Missing bearer token" ||
+      errorMessage === "Invalid bearer token";
+    const status =
+      error.message === "Not authorized" ? 403 : isAuthTokenError ? 401 : 500;
     return res.status(status).json({
       success: false,
-      message: status === 403 ? "Not authorized." : "Failed to delete office account.",
+      message:
+        status === 401
+          ? "Session token is invalid for the server Firebase project. Sign out and sign in again."
+          : status === 403
+            ? "Not authorized."
+            : isConfigError
+              ? "Server Firebase Admin configuration is invalid. Please check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY on Vercel."
+              : "Failed to delete office account.",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }

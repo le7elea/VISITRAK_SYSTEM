@@ -68,10 +68,12 @@ const ensureSuperRequester = async (admin, db, req) => {
     const byEmail = await db
       .collection("offices")
       .where("email", "==", normalizeEmail(decoded.email))
-      .where("role", "==", "super")
-      .limit(1)
+      .limit(5)
       .get();
-    if (!byEmail.empty) {
+    const hasSuperEmailMatch = byEmail.docs.some(
+      (doc) => (doc.data()?.role || "office") === "super"
+    );
+    if (hasSuperEmailMatch) {
       return decoded;
     }
   }
