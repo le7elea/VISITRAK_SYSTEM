@@ -1461,19 +1461,20 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, summaryOverallRow]);
 
   const printPages = useMemo(() => {
-    const PAGE_UNITS = 20;
+    const PAGE_UNITS = 19;
+    const estimateListLines = (items = []) => {
+      if (!Array.isArray(items) || items.length === 0) return 1;
+      return items.reduce((sum, item) => {
+        const text = toTrimmedText(item);
+        return sum + Math.max(1, Math.ceil((text.length || 1) / 24));
+      }, 0);
+    };
+
     const estimateCsfRowUnits = (row) => {
       const commendations = Array.isArray(row?.commendations) ? row.commendations : [];
       const suggestions = Array.isArray(row?.suggestions) ? row.suggestions : [];
-      const maxItems = Math.max(commendations.length, suggestions.length, 1);
-      const longestText = [...commendations, ...suggestions].reduce(
-        (max, item) => Math.max(max, toTrimmedText(item).length),
-        0
-      );
-
-      // Mild penalty for very long wrapped bullet text.
-      const wrapPenalty = longestText > 0 ? Math.max(0, Math.ceil(longestText / 64) - 1) : 0;
-      return Math.max(1, Math.ceil(maxItems / 2) + wrapPenalty);
+      const estimatedLines = Math.max(estimateListLines(commendations), estimateListLines(suggestions), 1);
+      return Math.max(1, Math.ceil(estimatedLines * 0.75));
     };
     const sections = [
       {
@@ -1516,33 +1517,38 @@ const Analytics = ({ setActiveTab }) => {
           break;
         }
 
-        remaining -= overhead;
+        const remainingAfterOverhead = remaining - overhead;
         const rows = [];
+        let tentativeRemaining = remainingAfterOverhead;
 
         while (sectionRowIndex < section.rows.length) {
           const candidate = section.rows[sectionRowIndex];
           const units = Math.max(1, section.rowUnits(candidate));
 
-          if (units > remaining) {
+          if (units > tentativeRemaining) {
             break;
           }
 
           rows.push(candidate);
           sectionRowIndex += 1;
-          remaining = Math.max(0, remaining - units);
+          tentativeRemaining = Math.max(0, tentativeRemaining - units);
 
-          if (remaining === 0) {
+          if (tentativeRemaining === 0) {
             break;
           }
         }
 
         if (rows.length) {
+          remaining = tentativeRemaining;
           pageSegments.push({
             section: section.key,
             rows,
             showSectionTitle: !isContinuation,
             showTableHeader: !isContinuation,
           });
+        } else {
+          // Do not consume overhead when nothing from this section can fit.
+          break;
         }
 
         if (sectionRowIndex >= section.rows.length) {
