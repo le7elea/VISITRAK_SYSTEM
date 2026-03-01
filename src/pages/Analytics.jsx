@@ -1594,7 +1594,7 @@ const Analytics = ({ setActiveTab }) => {
             section: section.key,
             rows,
             isContinuation,
-            showSectionTitle: true,
+            showSectionTitle: !isContinuation,
             showTableHeader: !isContinuation,
           });
         } else {
@@ -1618,7 +1618,7 @@ const Analytics = ({ setActiveTab }) => {
           section: section.key,
           rows: [fallbackRow],
           isContinuation: sectionRowIndex > 0,
-          showSectionTitle: true,
+          showSectionTitle: sectionRowIndex === 0,
           showTableHeader: sectionRowIndex === 0,
         });
         sectionRowIndex += 1;
