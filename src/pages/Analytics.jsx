@@ -1480,7 +1480,16 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows, summaryOverallRow]);
 
   const printPages = useMemo(() => {
-    const PAGE_UNITS = 19;
+    const PAGE_UNITS = 35;
+    const PAGE_BASE_OVERHEAD = 7;
+    const PAGE_SAFETY_BUFFER = 0;
+    const SECTION_GAP_UNITS = 0;
+
+    const estimateTextLines = (value, charsPerLine = 24) => {
+      const text = toTrimmedText(value);
+      return Math.max(1, Math.ceil((text.length || 1) / charsPerLine));
+    };
+
     const estimateListLines = (items = []) => {
       if (!Array.isArray(items) || items.length === 0) return 1;
       return items.reduce((sum, item) => {
@@ -1489,32 +1498,52 @@ const Analytics = ({ setActiveTab }) => {
       }, 0);
     };
 
+    const estimateCharterRowUnits = (entry) => {
+      if (!entry || entry.kind === 'overall') return 1;
+      const officeLines = estimateTextLines(entry?.row?.office, 24);
+      return Math.max(1, officeLines);
+    };
+
+    const estimateSummaryRowUnits = (entry) => {
+      if (!entry || entry.kind === 'overall') return 1;
+      const officeLines = estimateTextLines(entry?.row?.office, 24);
+      const descriptionLines = estimateTextLines(entry?.row?.satisfactionDescription, 16);
+      return Math.max(1, officeLines, descriptionLines);
+    };
+
     const estimateCsfRowUnits = (row) => {
       const commendations = Array.isArray(row?.commendations) ? row.commendations : [];
       const suggestions = Array.isArray(row?.suggestions) ? row.suggestions : [];
-      const estimatedLines = Math.max(estimateListLines(commendations), estimateListLines(suggestions), 1);
+      const officeLines = estimateTextLines(row?.office, 20);
+      const estimatedLines = Math.max(
+        estimateListLines(commendations),
+        estimateListLines(suggestions),
+        officeLines,
+        1
+      );
       return Math.max(1, Math.ceil(estimatedLines * 0.75));
     };
+
     const sections = [
       {
         key: 'A',
         rows: charterRowsForPrint,
-        rowUnits: () => 1,
-        firstOverhead: 6,
+        rowUnits: (entry) => estimateCharterRowUnits(entry),
+        firstOverhead: 4,
         continuationOverhead: 1,
       },
       {
         key: 'B',
         rows: summaryRowsForPrint,
-        rowUnits: () => 1,
-        firstOverhead: 4,
+        rowUnits: (entry) => estimateSummaryRowUnits(entry),
+        firstOverhead: 3,
         continuationOverhead: 1,
       },
       {
         key: 'C',
         rows: csfRowsForPrint,
         rowUnits: (row) => estimateCsfRowUnits(row),
-        firstOverhead: 4,
+        firstOverhead: 3,
         continuationOverhead: 1,
       },
     ];
@@ -1524,13 +1553,15 @@ const Analytics = ({ setActiveTab }) => {
     let sectionRowIndex = 0;
 
     while (sectionIndex < sections.length) {
-      let remaining = PAGE_UNITS;
+      let remaining = Math.max(1, PAGE_UNITS - PAGE_BASE_OVERHEAD - PAGE_SAFETY_BUFFER);
       const pageSegments = [];
 
       while (sectionIndex < sections.length) {
         const section = sections[sectionIndex];
         const isContinuation = sectionRowIndex > 0;
-        const overhead = isContinuation ? section.continuationOverhead : section.firstOverhead;
+        const sectionGap = pageSegments.length ? SECTION_GAP_UNITS : 0;
+        const baseOverhead = isContinuation ? section.continuationOverhead : section.firstOverhead;
+        const overhead = baseOverhead + sectionGap;
 
         if (remaining < overhead) {
           break;
@@ -1562,7 +1593,8 @@ const Analytics = ({ setActiveTab }) => {
           pageSegments.push({
             section: section.key,
             rows,
-            showSectionTitle: !isContinuation,
+            isContinuation,
+            showSectionTitle: true,
             showTableHeader: !isContinuation,
           });
         } else {
@@ -1585,7 +1617,8 @@ const Analytics = ({ setActiveTab }) => {
         pageSegments.push({
           section: section.key,
           rows: [fallbackRow],
-          showSectionTitle: sectionRowIndex === 0,
+          isContinuation: sectionRowIndex > 0,
+          showSectionTitle: true,
           showTableHeader: sectionRowIndex === 0,
         });
         sectionRowIndex += 1;
@@ -2000,7 +2033,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-print-page {
-            padding: 14px 18px;
+            padding: 10px 14px;
             font-family: "Times New Roman", Times, serif;
             color: #111;
             width: 100%;
@@ -2008,18 +2041,23 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-report-title {
-            font-size: 18px;
+            font-size: 16px;
             text-align: center;
             letter-spacing: 0.03em;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
           }
 
           .analytics-section-label {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             break-after: avoid-page;
             page-break-after: avoid;
+          }
+
+          .analytics-table {
+            width: 100%;
+            table-layout: fixed;
           }
 
           .analytics-table th,
@@ -2029,19 +2067,23 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table th {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             text-align: center;
-            padding: 4px 3px;
+            padding: 3px 2px;
             vertical-align: middle;
             font-family: Arial, sans-serif;
+            word-break: break-word;
           }
 
           .analytics-table td {
-            font-size: 12px;
-            padding: 4px;
+            font-size: 10.5px;
+            line-height: 1.2;
+            padding: 2px 2px;
             text-align: center;
             font-family: Arial, sans-serif;
+            word-break: break-word;
+            white-space: normal;
           }
 
           .analytics-table-a td:first-child,
@@ -2099,11 +2141,6 @@ const Analytics = ({ setActiveTab }) => {
 
           table thead {
             display: table-header-group;
-          }
-
-          /* Keep C header from repeating on automatic page continuation */
-          .analytics-table-c thead {
-            display: table-row-group !important;
           }
 
           table tr {
@@ -2455,18 +2492,19 @@ const Analytics = ({ setActiveTab }) => {
                       </div>
 
                       {segments.map((segment, segmentIndex) => {
-                        const blockClass = segmentIndex > 0 ? "mt-6" : "";
+                        const blockClass = segmentIndex > 0 ? "mt-2" : "";
                         const segmentKey = `page-${pageIndex}-segment-${segmentIndex}`;
+                        const continuationSuffix = segment.isContinuation ? " (Continuation)" : "";
 
                         if (segment.section === 'A') {
                           return (
                             <div key={`segment-a-${segmentKey}`} className={blockClass}>
                               {segment.showSectionTitle && (
                                 <div className="flex items-center justify-between mb-2">
-                                  <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
-                                    A. Citizen&apos;s Charter Summary Result
+                                  <p className="analytics-section-label" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
+                                    A. Citizen&apos;s Charter Summary Result{continuationSuffix}
                                   </p>
-                                  <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                                  <p className="analytics-section-label" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
                                     Campus: <span className="underline">Balilihan Campus</span>
                                   </p>
                                 </div>
@@ -2480,8 +2518,8 @@ const Analytics = ({ setActiveTab }) => {
                           return (
                             <div key={`segment-b-${segmentKey}`} className={blockClass}>
                               {segment.showSectionTitle && (
-                                <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
-                                  B. CSF Monthly Summary Rating
+                                <p className="analytics-section-label mb-2" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
+                                  B. CSF Monthly Summary Rating{continuationSuffix}
                                 </p>
                               )}
                               {renderSummaryTable(segment.rows, segmentKey, segment.showTableHeader)}
@@ -2492,8 +2530,8 @@ const Analytics = ({ setActiveTab }) => {
                         return (
                           <div key={`segment-c-${segmentKey}`} className={blockClass}>
                             {segment.showSectionTitle && (
-                              <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
-                                C. CSF Monthly Commendations &amp; Suggestions
+                              <p className="analytics-section-label mb-2" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
+                                C. CSF Monthly Commendations &amp; Suggestions{continuationSuffix}
                               </p>
                             )}
                             {renderCsfTable(segment.rows, segmentKey, segment.showTableHeader)}
