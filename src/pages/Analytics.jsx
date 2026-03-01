@@ -1325,70 +1325,145 @@ const Analytics = ({ setActiveTab }) => {
     };
   }, [officeAnalyticsRows, filteredVisits.length]);
 
-  const summaryPages = useMemo(() => {
-    // Keep sections A and B together as a single summary block.
-    return [officeAnalyticsRows];
-  }, [officeAnalyticsRows]);
-
   const commendationSuggestionRows = useMemo(() => {
     return officeAnalyticsRows.filter(
       (row) => row.commendations.length > 0 || row.suggestions.length > 0
     );
   }, [officeAnalyticsRows]);
 
-  const firstPageCsfRowsCapacity = useMemo(() => {
-    // Fill remaining space on the first print page after sections A and B.
-    // Do not hard-cap to 3 so short reports can continue section C on the same page.
-    const officeRowCount = officeAnalyticsRows.length;
-    const estimatedCapacity = 9 - officeRowCount;
-    return Math.max(0, estimatedCapacity);
-  }, [officeAnalyticsRows.length]);
+  const csfRowsForPrint = useMemo(() => {
+    if (commendationSuggestionRows.length) return commendationSuggestionRows;
 
-  const firstPageCsfRows = useMemo(() => {
-    if (firstPageCsfRowsCapacity <= 0) return [];
+    return [
+      {
+        office: 'N/A',
+        commendations: [],
+        suggestions: [],
+      },
+    ];
+  }, [commendationSuggestionRows]);
 
-    if (!commendationSuggestionRows.length) {
-      return [
-        {
-          office: 'N/A',
-          commendations: [],
-          suggestions: [],
-        },
-      ];
+  const charterRowsForPrint = useMemo(() => {
+    return [
+      ...officeAnalyticsRows.map((row) => ({ kind: 'office', row })),
+      { kind: 'overall', row: charterOverallTotals },
+    ];
+  }, [officeAnalyticsRows, charterOverallTotals]);
+
+  const summaryRowsForPrint = useMemo(() => {
+    return [
+      ...officeAnalyticsRows.map((row) => ({ kind: 'office', row })),
+      { kind: 'overall', row: summaryOverallRow },
+    ];
+  }, [officeAnalyticsRows, summaryOverallRow]);
+
+  const printPages = useMemo(() => {
+    const PAGE_UNITS = 24;
+    const sections = [
+      {
+        key: 'A',
+        rows: charterRowsForPrint,
+        rowUnits: () => 1,
+        firstOverhead: 8,
+        continuationOverhead: 1,
+      },
+      {
+        key: 'B',
+        rows: summaryRowsForPrint,
+        rowUnits: () => 1,
+        firstOverhead: 5,
+        continuationOverhead: 1,
+      },
+      {
+        key: 'C',
+        rows: csfRowsForPrint,
+        rowUnits: (row) =>
+          Math.max(
+            1,
+            Array.isArray(row?.commendations) ? row.commendations.length : 0,
+            Array.isArray(row?.suggestions) ? row.suggestions.length : 0
+          ),
+        firstOverhead: 5,
+        continuationOverhead: 1,
+      },
+    ];
+
+    const pages = [];
+    let sectionIndex = 0;
+    let sectionRowIndex = 0;
+
+    while (sectionIndex < sections.length) {
+      let remaining = PAGE_UNITS;
+      const pageSegments = [];
+
+      while (sectionIndex < sections.length) {
+        const section = sections[sectionIndex];
+        const isContinuation = sectionRowIndex > 0;
+        const overhead = isContinuation ? section.continuationOverhead : section.firstOverhead;
+
+        if (remaining < overhead) {
+          break;
+        }
+
+        remaining -= overhead;
+        const rows = [];
+
+        while (sectionRowIndex < section.rows.length) {
+          const candidate = section.rows[sectionRowIndex];
+          const units = Math.max(1, section.rowUnits(candidate));
+
+          if (rows.length > 0 && units > remaining) {
+            break;
+          }
+
+          rows.push(candidate);
+          sectionRowIndex += 1;
+          remaining = Math.max(0, remaining - units);
+
+          if (remaining === 0) {
+            break;
+          }
+        }
+
+        if (rows.length) {
+          pageSegments.push({
+            section: section.key,
+            rows,
+            showSectionTitle: !isContinuation,
+            showTableHeader: !isContinuation,
+          });
+        }
+
+        if (sectionRowIndex >= section.rows.length) {
+          sectionIndex += 1;
+          sectionRowIndex = 0;
+          continue;
+        }
+
+        break;
+      }
+
+      if (!pageSegments.length && sectionIndex < sections.length) {
+        const section = sections[sectionIndex];
+        const fallbackRow = section.rows[sectionRowIndex];
+        pageSegments.push({
+          section: section.key,
+          rows: [fallbackRow],
+          showSectionTitle: sectionRowIndex === 0,
+          showTableHeader: sectionRowIndex === 0,
+        });
+        sectionRowIndex += 1;
+        if (sectionRowIndex >= section.rows.length) {
+          sectionIndex += 1;
+          sectionRowIndex = 0;
+        }
+      }
+
+      pages.push(pageSegments);
     }
 
-    return commendationSuggestionRows.slice(0, firstPageCsfRowsCapacity);
-  }, [commendationSuggestionRows, firstPageCsfRowsCapacity]);
-
-  const remainingCsfRows = useMemo(() => {
-    if (!commendationSuggestionRows.length) return [];
-    return commendationSuggestionRows.slice(firstPageCsfRows.length);
-  }, [commendationSuggestionRows, firstPageCsfRows.length]);
-
-  const showCsfOnFirstPage = firstPageCsfRows.length > 0;
-
-  const commendationSuggestionPages = useMemo(() => {
-    const rowsPerPage = 7;
-    const baseRows = remainingCsfRows.length
-      ? remainingCsfRows
-      : showCsfOnFirstPage
-        ? []
-        : [
-            {
-              office: 'N/A',
-              commendations: [],
-              suggestions: [],
-            },
-          ];
-
-    if (!baseRows.length) return [];
-
-    const totalPages = Math.ceil(baseRows.length / rowsPerPage) || 1;
-
-    return Array.from({ length: totalPages }).map((_, pageIndex) =>
-      baseRows.slice(pageIndex * rowsPerPage, pageIndex * rowsPerPage + rowsPerPage)
-    );
-  }, [remainingCsfRows, showCsfOnFirstPage]);
+    return pages.length ? pages : [[]];
+  }, [charterRowsForPrint, summaryRowsForPrint, csfRowsForPrint]);
 
   // --- Export Functions ---
   const exportToPDF = () => {
@@ -1762,17 +1837,23 @@ const Analytics = ({ setActiveTab }) => {
           }
           .print-only-section {
             position: absolute;
-            left: 0;
             top: 0;
+            left: 0;
             width: 100%;
             background: #fff;
+            margin: 0;
+            padding: 0;
+          }
+
+          .print-section {
+            display: block !important;
           }
           .no-print {
             display: none !important;
           }
           @page {
             size: 13in 8.5in;
-            margin: 0.5in;
+            margin: 1.27cm;
           }
 
           html,
@@ -1786,6 +1867,8 @@ const Analytics = ({ setActiveTab }) => {
             padding: 14px 18px;
             font-family: "Times New Roman", Times, serif;
             color: #111;
+            width: 100%;
+            box-sizing: border-box;
           }
 
           .analytics-report-title {
@@ -1868,11 +1951,24 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .page-break {
+            break-after: page;
             page-break-after: always;
+            break-inside: avoid-page;
+            page-break-inside: avoid;
           }
 
           .page-break:last-child {
+            break-after: auto;
             page-break-after: auto;
+          }
+
+          table thead {
+            display: table-header-group;
+          }
+
+          table tr {
+            break-inside: avoid-page;
+            page-break-inside: avoid;
           }
 
           * {
@@ -1889,7 +1985,7 @@ const Analytics = ({ setActiveTab }) => {
             const renderHeader = () => (
               <div className="flex items-start justify-between mb-4 gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-20 h-16 flex items-ceniter justify-center">
+                  <div className="w-20 h-16 flex items-center justify-center">
                     <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                   </div>
                   <div className="leading-tight">
@@ -1931,11 +2027,6 @@ const Analytics = ({ setActiveTab }) => {
                 </ul>
               );
             };
-
-            const totalCsfPages = commendationSuggestionPages.length;
-            const showSignatoriesOnFirstPage =
-              showCsfOnFirstPage && totalCsfPages === 0 && summaryPages.length === 1;
-
             const renderSignatories = () => (
               <div className="analytics-signatories">
                 <div className="grid grid-cols-2 gap-24 mb-6">
@@ -2013,261 +2104,260 @@ const Analytics = ({ setActiveTab }) => {
               );
             };
 
+            const renderCharterTable = (entries, pageKey, showHeader = true) => (
+              <table className="w-full border-collapse analytics-table analytics-table-a">
+                <colgroup>
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '4%' }} />
+                </colgroup>
+                {showHeader && (
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} className="w-[18%]">Office</th>
+                      <th rowSpan={2} className="w-[6%]">Number of Customers(f)</th>
+                      <th colSpan={2} className="w-[8%]">Sex</th>
+                      <th colSpan={3} className="w-[12%]">Client Type</th>
+                      <th colSpan={4} className="w-[16%]">CC1</th>
+                      <th colSpan={5} className="w-[20%]">CC2</th>
+                      <th colSpan={4} className="w-[16%]">CC3</th>
+                    </tr>
+                    <tr>
+                      <th>M</th>
+                      <th>F</th>
+                      <th>Citizens</th>
+                      <th>Business</th>
+                      <th>Government</th>
+                      <th>CC 1-1</th>
+                      <th>CC 1-2</th>
+                      <th>CC 1-3</th>
+                      <th>CC 1-4</th>
+                      <th>CC 2-1</th>
+                      <th>CC 2-2</th>
+                      <th>CC 2-3</th>
+                      <th>CC 2-4</th>
+                      <th>CC 2-5</th>
+                      <th>CC 3-1</th>
+                      <th>CC 3-2</th>
+                      <th>CC 3-3</th>
+                      <th>CC 3-4</th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {entries.map((entry, rowIndex) => {
+                    if (entry.kind === 'overall') {
+                      return (
+                        <tr key={`charter-overall-${pageKey}-${rowIndex}`} className="font-bold">
+                          <td>Overall Rating</td>
+                          <td>{charterOverallTotals.customerCount}</td>
+                          <td>{charterOverallTotals.maleCount}</td>
+                          <td>{charterOverallTotals.femaleCount}</td>
+                          <td>{charterOverallTotals.citizensCount}</td>
+                          <td>{charterOverallTotals.businessCount}</td>
+                          <td>{charterOverallTotals.governmentCount}</td>
+                          <td>{charterOverallTotals.cc1Counts[0]}</td>
+                          <td>{charterOverallTotals.cc1Counts[1]}</td>
+                          <td>{charterOverallTotals.cc1Counts[2]}</td>
+                          <td>{charterOverallTotals.cc1Counts[3]}</td>
+                          <td>{charterOverallTotals.cc2Counts[0]}</td>
+                          <td>{charterOverallTotals.cc2Counts[1]}</td>
+                          <td>{charterOverallTotals.cc2Counts[2]}</td>
+                          <td>{charterOverallTotals.cc2Counts[3]}</td>
+                          <td>{charterOverallTotals.cc2Counts[4]}</td>
+                          <td>{charterOverallTotals.cc3Counts[0]}</td>
+                          <td>{charterOverallTotals.cc3Counts[1]}</td>
+                          <td>{charterOverallTotals.cc3Counts[2]}</td>
+                          <td>{charterOverallTotals.cc3Counts[3]}</td>
+                        </tr>
+                      );
+                    }
+
+                    const row = entry.row;
+                    return (
+                      <tr key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}>
+                        <td>{row.office}</td>
+                        <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.maleCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.femaleCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.citizensCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.businessCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.governmentCount, row.hasVisitData)}</td>
+                        <td>{formatCountCell(row.cc1Counts[0], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc1Counts[1], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc1Counts[2], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc1Counts[3], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc2Counts[0], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc2Counts[1], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc2Counts[2], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc2Counts[3], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc2Counts[4], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc3Counts[0], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc3Counts[1], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc3Counts[2], row.hasCharterData)}</td>
+                        <td>{formatCountCell(row.cc3Counts[3], row.hasCharterData)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+
+            const renderSummaryTable = (entries, pageKey, showHeader = true) => (
+              <table className="w-full border-collapse analytics-table analytics-table-b">
+                <colgroup>
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '8%' }} />
+                </colgroup>
+                {showHeader && (
+                  <thead>
+                    <tr>
+                      <th className="w-[18%]">Office</th>
+                      <th className="w-[6%]">Number of Customer rs(f)</th>
+                      <th className="w-[7%]">Responsiveness</th>
+                      <th className="w-[7%]">Reliability (Quality)</th>
+                      <th className="w-[7%]">Access &amp; Facilities</th>
+                      <th className="w-[7%]">Communication</th>
+                      <th className="w-[6%]">Costs</th>
+                      <th className="w-[6%]">Integrity</th>
+                      <th className="w-[6%]">Assurance</th>
+                      <th className="w-[6%]">Outcome</th>
+                      <th className="w-[6%]">Mean Satisfaction</th>
+                      <th className="w-[8%]">Description</th>
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {entries.map((entry, rowIndex) => {
+                    if (entry.kind === 'overall') {
+                      return (
+                        <tr key={`summary-overall-${pageKey}-${rowIndex}`} className="font-bold">
+                          <td>Overall Rating</td>
+                          <td>{summaryOverallRow.customerCount}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[0])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[1])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[2])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[3])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[4])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[5])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[6])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.dimensionMeans[7])}</td>
+                          <td>{formatScoreCell(summaryOverallRow.meanSatisfaction)}</td>
+                          <td>{summaryOverallRow.satisfactionDescription}</td>
+                        </tr>
+                      );
+                    }
+
+                    const row = entry.row;
+                    return (
+                      <tr key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}>
+                        <td>{row.office}</td>
+                        <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[0])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[1])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[2])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[3])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[4])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[5])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[6])}</td>
+                        <td>{formatScoreCell(row.dimensionMeans[7])}</td>
+                        <td>{formatScoreCell(row.meanSatisfaction)}</td>
+                        <td>{row.satisfactionDescription}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+
             return (
               <>
-                {summaryPages.map((summaryRows, summaryPageIndex) => {
-                  const isLastSummaryPage = summaryPageIndex === summaryPages.length - 1;
-                  const hasMorePages = !isLastSummaryPage || totalCsfPages > 0;
-                  const showCsfOnThisPage = summaryPageIndex === 0 && showCsfOnFirstPage;
-                  const showSummaryOverallRows = isLastSummaryPage;
-                  const showSummarySignatories =
-                    !showSignatoriesOnFirstPage && totalCsfPages === 0 && isLastSummaryPage;
-                  const showSummarySectionTitles = true;
-                  const showSummaryColumnHeaders = true;
+                {printPages.map((segments, pageIndex) => {
+                  const hasMorePages = pageIndex < printPages.length - 1;
 
                   return (
                     <div
-                      key={`summary-page-${summaryPageIndex}`}
+                      key={`print-page-${pageIndex}`}
                       className={hasMorePages ? "analytics-print-page page-break" : "analytics-print-page"}
                     >
-                      {renderHeader()}
+                      <div>
+                        {renderHeader()}
+                        <h2 className="analytics-report-title">
+                          Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
+                        </h2>
+                      </div>
 
-                      <h2 className="analytics-report-title">
-                        Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
-                      </h2>
+                      {segments.map((segment, segmentIndex) => {
+                        const blockClass = segmentIndex > 0 ? "mt-6" : "";
+                        const segmentKey = `page-${pageIndex}-segment-${segmentIndex}`;
 
-                      {showSummarySectionTitles && (
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="analytics-section-label">A. Citizen&apos;s Charter Summary Result</p>
-                          <p className="analytics-section-label">
-                            Campus: <span className="underline">Balilihan Campus</span>
-                          </p>
-                        </div>
-                      )}
+                        if (segment.section === 'A') {
+                          return (
+                            <div key={`segment-a-${segmentKey}`} className={blockClass}>
+                              {segment.showSectionTitle && (
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="analytics-section-label">A. Citizen&apos;s Charter Summary Result</p>
+                                  <p className="analytics-section-label">
+                                    Campus: <span className="underline">Balilihan Campus</span>
+                                  </p>
+                                </div>
+                              )}
+                              {renderCharterTable(segment.rows, segmentKey, segment.showTableHeader)}
+                            </div>
+                          );
+                        }
 
-                      <table className="w-full border-collapse analytics-table analytics-table-a">
-                        <colgroup>
-                          <col style={{ width: '18%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                          <col style={{ width: '4%' }} />
-                        </colgroup>
-                        {showSummaryColumnHeaders && (
-                          <thead>
-                            <tr>
-                              <th rowSpan={2} className="w-[18%]">Office</th>
-                              <th rowSpan={2} className="w-[6%]">Number of Customers(f)</th>
-                              <th colSpan={2} className="w-[8%]">Sex</th>
-                              <th colSpan={3} className="w-[12%]">Client Type</th>
-                              <th colSpan={4} className="w-[16%]">CC1</th>
-                              <th colSpan={5} className="w-[20%]">CC2</th>
-                              <th colSpan={4} className="w-[16%]">CC3</th>
-                            </tr>
-                            <tr>
-                              <th>M</th>
-                              <th>F</th>
-                              <th>Citizens</th>
-                              <th>Business</th>
-                              <th>Government</th>
-                              <th>CC 1-1</th>
-                              <th>CC 1-2</th>
-                              <th>CC 1-3</th>
-                              <th>CC 1-4</th>
-                              <th>CC 2-1</th>
-                              <th>CC 2-2</th>
-                              <th>CC 2-3</th>
-                              <th>CC 2-4</th>
-                              <th>CC 2-5</th>
-                              <th>CC 3-1</th>
-                              <th>CC 3-2</th>
-                              <th>CC 3-3</th>
-                              <th>CC 3-4</th>
-                            </tr>
-                          </thead>
-                        )}
-                        <tbody>
-                          {summaryRows.map((row) => (
-                            <tr key={`charter-${summaryPageIndex}-${row.office}`}>
-                              <td>{row.office}</td>
-                              <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.maleCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.femaleCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.citizensCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.businessCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.governmentCount, row.hasVisitData)}</td>
-                              <td>{formatCountCell(row.cc1Counts[0], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc1Counts[1], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc1Counts[2], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc1Counts[3], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc2Counts[0], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc2Counts[1], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc2Counts[2], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc2Counts[3], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc2Counts[4], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc3Counts[0], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc3Counts[1], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc3Counts[2], row.hasCharterData)}</td>
-                              <td>{formatCountCell(row.cc3Counts[3], row.hasCharterData)}</td>
-                            </tr>
-                          ))}
-                          {showSummaryOverallRows && (
-                            <tr className="font-bold">
-                              <td>Overall Rating</td>
-                              <td>{charterOverallTotals.customerCount}</td>
-                              <td>{charterOverallTotals.maleCount}</td>
-                              <td>{charterOverallTotals.femaleCount}</td>
-                              <td>{charterOverallTotals.citizensCount}</td>
-                              <td>{charterOverallTotals.businessCount}</td>
-                              <td>{charterOverallTotals.governmentCount}</td>
-                              <td>{charterOverallTotals.cc1Counts[0]}</td>
-                              <td>{charterOverallTotals.cc1Counts[1]}</td>
-                              <td>{charterOverallTotals.cc1Counts[2]}</td>
-                              <td>{charterOverallTotals.cc1Counts[3]}</td>
-                              <td>{charterOverallTotals.cc2Counts[0]}</td>
-                              <td>{charterOverallTotals.cc2Counts[1]}</td>
-                              <td>{charterOverallTotals.cc2Counts[2]}</td>
-                              <td>{charterOverallTotals.cc2Counts[3]}</td>
-                              <td>{charterOverallTotals.cc2Counts[4]}</td>
-                              <td>{charterOverallTotals.cc3Counts[0]}</td>
-                              <td>{charterOverallTotals.cc3Counts[1]}</td>
-                              <td>{charterOverallTotals.cc3Counts[2]}</td>
-                              <td>{charterOverallTotals.cc3Counts[3]}</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                        if (segment.section === 'B') {
+                          return (
+                            <div key={`segment-b-${segmentKey}`} className={blockClass}>
+                              {segment.showSectionTitle && (
+                                <p className="analytics-section-label mb-2">B. CSF Monthly Summary Rating</p>
+                              )}
+                              {renderSummaryTable(segment.rows, segmentKey, segment.showTableHeader)}
+                            </div>
+                          );
+                        }
 
-                      {showSummarySectionTitles && (
-                        <p className="analytics-section-label mt-6 mb-2">B. CSF Monthly Summary Rating</p>
-                      )}
-                      <table className="w-full border-collapse analytics-table analytics-table-b">
-                        <colgroup>
-                          <col style={{ width: '18%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '7%' }} />
-                          <col style={{ width: '7%' }} />
-                          <col style={{ width: '7%' }} />
-                          <col style={{ width: '7%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '6%' }} />
-                          <col style={{ width: '8%' }} />
-                        </colgroup>
-                        {showSummaryColumnHeaders && (
-                          <thead>
-                            <tr>
-                              <th className="w-[18%]">Office</th>
-                              <th className="w-[6%]">Number of Customer rs(f)</th>
-                              <th className="w-[7%]">Responsiveness</th>
-                              <th className="w-[7%]">Reliability (Quality)</th>
-                              <th className="w-[7%]">Access &amp; Facilities</th>
-                              <th className="w-[7%]">Communication</th>
-                              <th className="w-[6%]">Costs</th>
-                              <th className="w-[6%]">Integrity</th>
-                              <th className="w-[6%]">Assurance</th>
-                              <th className="w-[6%]">Outcome</th>
-                              <th className="w-[6%]">Mean Satisfaction</th>
-                              <th className="w-[8%]">Description</th>
-                            </tr>
-                          </thead>
-                        )}
-                        <tbody>
-                          {summaryRows.map((row) => (
-                            <tr key={`summary-${summaryPageIndex}-${row.office}`}>
-                              <td>{row.office}</td>
-                              <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[0])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[1])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[2])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[3])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[4])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[5])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[6])}</td>
-                              <td>{formatScoreCell(row.dimensionMeans[7])}</td>
-                              <td>{formatScoreCell(row.meanSatisfaction)}</td>
-                              <td>{row.satisfactionDescription}</td>
-                            </tr>
-                          ))}
-                          {showSummaryOverallRows && (
-                            <tr className="font-bold">
-                              <td>Overall Rating</td>
-                              <td>{summaryOverallRow.customerCount}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[0])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[1])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[2])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[3])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[4])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[5])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[6])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.dimensionMeans[7])}</td>
-                              <td>{formatScoreCell(summaryOverallRow.meanSatisfaction)}</td>
-                              <td>{summaryOverallRow.satisfactionDescription}</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                        return (
+                          <div key={`segment-c-${segmentKey}`} className={blockClass}>
+                            {segment.showSectionTitle && (
+                              <p className="analytics-section-label mb-2">
+                                C. CSF Monthly Commendations &amp; Suggestions
+                              </p>
+                            )}
+                            {renderCsfTable(segment.rows, segmentKey, segment.showTableHeader)}
+                          </div>
+                        );
+                      })}
 
-                      {showCsfOnThisPage && (
-                        <>
-                          <p className="analytics-section-label mt-6 mb-2">
-                            C. CSF Monthly Commendations &amp; Suggestions
-                          </p>
-                          {renderCsfTable(firstPageCsfRows, 'first', true)}
-                        </>
-                      )}
-
-                      {(showSignatoriesOnFirstPage || showSummarySignatories) && renderSignatories()}
-                    </div>
-                  );
-                })}
-
-                {commendationSuggestionPages.map((pageRows, pageIndex) => {
-                  const isLastPage = pageIndex === totalCsfPages - 1;
-                  const isContinuationPage = showCsfOnFirstPage || pageIndex > 0;
-                  const showCsfTitle = !isContinuationPage;
-                  const showCsfHeader = !isContinuationPage;
-                  const pageClassName = [
-                    "analytics-print-page",
-                    isLastPage ? "" : "page-break",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-
-                  return (
-                    <div
-                      key={`commendation-page-${pageIndex}`}
-                      className={pageClassName}
-                    >
-                      {renderHeader()}
-                      <h2 className="analytics-report-title">
-                        Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
-                      </h2>
-                      {showCsfTitle && (
-                        <p className="analytics-section-label mb-2">
-                          C. CSF Monthly Commendations &amp; Suggestions
-                        </p>
-                      )}
-
-                      {renderCsfTable(pageRows, `next-${pageIndex}`, showCsfHeader)}
-                      {isLastPage && renderSignatories()}
+                      {!hasMorePages && renderSignatories()}
                     </div>
                   );
                 })}
