@@ -1,7 +1,29 @@
 const sanitizeMultilineSecret = (value = "") => {
   if (!value) return "";
-  const trimmed = String(value).trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
-  return trimmed.includes("\\n") ? trimmed.replace(/\\n/g, "\n") : trimmed;
+  const trimmed = String(value)
+    .trim()
+    .replace(/^"(.*)"$/, "$1")
+    .replace(/^'(.*)'$/, "$1");
+
+  const expanded = trimmed.includes("\\n")
+    ? trimmed.replace(/\\n/g, "\n")
+    : trimmed;
+
+  // Normalize private key PEM that was pasted as one line or with random spaces.
+  if (
+    expanded.includes("-----BEGIN PRIVATE KEY-----") &&
+    expanded.includes("-----END PRIVATE KEY-----")
+  ) {
+    const body = expanded
+      .replace("-----BEGIN PRIVATE KEY-----", "")
+      .replace("-----END PRIVATE KEY-----", "")
+      .replace(/\s+/g, "");
+
+    const wrappedBody = body.match(/.{1,64}/g)?.join("\n") || body;
+    return `-----BEGIN PRIVATE KEY-----\n${wrappedBody}\n-----END PRIVATE KEY-----\n`;
+  }
+
+  return expanded;
 };
 
 const parseServiceAccountFromEnv = () => {

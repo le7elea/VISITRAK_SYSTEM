@@ -14,6 +14,18 @@ const fromBase64 = (value) => Buffer.from(String(value || ""), "base64");
 export const isValidPassword = (value, minLength = MIN_PASSWORD_LENGTH) =>
   typeof value === "string" && value.trim().length >= minLength;
 
+/*************  ✨ Windsurf Command ⭐  *************/
+/**
+ * Hashes the given password using the PBKDF2 algorithm
+ * and returns the resulting hash along with the used salt,
+ * algorithm, iterations, and key length.
+ *
+ * @throws {Error} If the password is empty or null.
+ *
+ * @param {string} password The password to hash.
+ * @returns {Object} An object containing the resulting hash, salt, algorithm, iterations, and key length.
+ */
+/*******  cc2ab7ee-de21-470e-8f3f-190de568047c  *******/
 export const hashOfficePassword = (password) => {
   const cleanPassword = String(password || "");
   if (!cleanPassword) {
