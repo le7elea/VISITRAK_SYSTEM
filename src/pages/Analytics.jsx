@@ -2153,7 +2153,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table thead {
-            display: table-header-group !important;
+            display: table-row-group !important;
           }
 
           .analytics-table tfoot {
