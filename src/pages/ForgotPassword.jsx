@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 import {
   cancelOfficePasswordResetRequest,
@@ -7,6 +8,7 @@ import {
   lookupOfficePasswordResetAccount,
   requestOfficePasswordReset,
 } from "../lib/info.services";
+import { auth } from "../lib/firebase";
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/bisulogo01.png";
@@ -310,29 +312,25 @@ const ForgotPassword = () => {
 
     try {
       // Super admin flow (email/password in Firebase Auth):
-      // send custom branded reset email through backend.
+      // use Firebase Auth built-in reset email (no custom email API needed).
       if (isEmailIdentifier) {
-        const response = await fetch("/api/super-password-reset-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: cleanIdentifier,
-          }),
-        });
-
-        let payload = {};
         try {
-          payload = await response.json();
-        } catch {
-          // Ignore parse errors and use fallback message.
-        }
-
-        if (!response.ok || payload.success === false) {
-          throw new Error(
-            payload.message || "Unable to send password reset email right now."
-          );
+          await sendPasswordResetEmail(auth, cleanIdentifier);
+        } catch (emailError) {
+          const code = String(emailError?.code || "");
+          if (code === "auth/invalid-email") {
+            throw new Error("Please enter a valid email address.");
+          }
+          if (code === "auth/too-many-requests") {
+            throw new Error("Too many requests. Please try again later.");
+          }
+          if (code === "auth/network-request-failed") {
+            throw new Error("Network error. Please try again.");
+          }
+          // Keep generic success for unknown users to avoid account enumeration.
+          if (code !== "auth/user-not-found") {
+            throw emailError;
+          }
         }
 
         setModal({
