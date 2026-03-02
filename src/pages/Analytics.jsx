@@ -383,6 +383,39 @@ const normalizeOfficeName = (officeName) => {
   return normalized;
 };
 
+const toComparableOfficeKey = (officeName) =>
+  normalizeOfficeName(officeName)
+    .toLowerCase()
+    .replace(/[^\w\s/.-]/g, '');
+
+const findOfficeRecordByName = (officeName, officeRecords = []) => {
+  const normalized = normalizeOfficeName(officeName);
+  if (!normalized || !Array.isArray(officeRecords) || officeRecords.length === 0) return null;
+
+  const sourceKey = toComparableOfficeKey(normalized);
+  if (!sourceKey) return null;
+
+  return (
+    officeRecords.find((office) => {
+      const nameKey = toComparableOfficeKey(office?.name);
+      const officialKey = toComparableOfficeKey(office?.officialName);
+      return sourceKey === nameKey || sourceKey === officialKey;
+    }) || null
+  );
+};
+
+const toOfficialOfficeDisplayName = (officeName, officeRecords = []) => {
+  const normalized = normalizeOfficeName(officeName);
+  if (!normalized) return "";
+
+  const matchedOffice = findOfficeRecordByName(normalized, officeRecords);
+  return (
+    normalizeOfficeName(matchedOffice?.officialName) ||
+    normalizeOfficeName(matchedOffice?.name) ||
+    normalized
+  );
+};
+
 // Add a comparison function that's more flexible
 const compareOfficeNames = (office1, office2) => {
   if (!office1 || !office2) return false;
@@ -859,9 +892,10 @@ const Analytics = ({ setActiveTab }) => {
 
   const getDefaultMonthRange = () => {
     const defaults = getDefaultDateRange();
+    const monthValue = defaults.end.slice(0, 7);
     return {
-      start: defaults.start.slice(0, 7),
-      end: defaults.end.slice(0, 7),
+      start: monthValue,
+      end: monthValue,
     };
   };
 
@@ -869,6 +903,7 @@ const Analytics = ({ setActiveTab }) => {
   const [dateRangeMode, setDateRangeMode] = useState("day");
   const [monthRange, setMonthRange] = useState(getDefaultMonthRange());
   const [pendingDayRange, setPendingDayRange] = useState(getDefaultDateRange());
+  const [selectedOfficeFilter, setSelectedOfficeFilter] = useState("all");
   const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
@@ -906,6 +941,16 @@ const Analytics = ({ setActiveTab }) => {
     }
   };
 
+  const formatCompactDateDisplay = (dateStr) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const formatDateInputValue = (date) => {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
     const year = date.getFullYear();
@@ -922,6 +967,12 @@ const Analytics = ({ setActiveTab }) => {
       return new Date(year, month, 0);
     }
     return new Date(year, month - 1, 1);
+  };
+
+  const formatMonthDisplay = (monthValue) => {
+    const monthDate = monthValueToBoundaryDate(monthValue, "start");
+    if (!monthDate) return monthValue || "";
+    return monthDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   };
 
   const applyMonthRangeToDateRange = (range) => {
@@ -950,19 +1001,24 @@ const Analytics = ({ setActiveTab }) => {
 
     if (nextMode === "month") {
       const monthValue = dateRange.start ? dateRange.start.slice(0, 7) : monthRange.start;
-      const nextMonthRange = {
+      setMonthRange({
         start: monthValue,
         end: monthValue,
-      };
-      setMonthRange(nextMonthRange);
-      applyMonthRangeToDateRange(nextMonthRange);
-      setShowDayRangeDropdown(false);
+      });
       return;
     }
 
     setPendingDayRange({
       start: dateRange.start,
       end: dateRange.end,
+    });
+  };
+
+  const handleMonthRangeChange = (value) => {
+    if (!value) return;
+    setMonthRange({
+      start: value,
+      end: value,
     });
   };
 
@@ -995,15 +1051,27 @@ const Analytics = ({ setActiveTab }) => {
     setShowDayRangeDropdown(false);
   };
 
-  const handleSingleMonthChange = (value) => {
-    if (!value) return;
-    const next = {
-      start: value,
-      end: value,
-    };
-    setMonthRange(next);
-    applyMonthRangeToDateRange(next);
+  const applyMonthRangeSelection = () => {
+    if (!monthRange.start) return;
+    applyMonthRangeToDateRange({
+      start: monthRange.start,
+      end: monthRange.start,
+    });
+    setShowDayRangeDropdown(false);
   };
+
+  const dateRangeDropdownLabel = (() => {
+    if (dateRangeMode === "month") {
+      if (!monthRange.start) return "Select month";
+      return `Month: ${formatMonthDisplay(monthRange.start)}`;
+    }
+
+    if (dateRange.start && dateRange.end) {
+      return `Day: ${formatCompactDateDisplay(dateRange.start)} - ${formatCompactDateDisplay(dateRange.end)}`;
+    }
+
+    return "Select date range";
+  })();
 
   const parseLocalDate = (dateStr) => {
     if (!dateStr) return null;
@@ -1013,6 +1081,43 @@ const Analytics = ({ setActiveTab }) => {
     if (!year || !month || !day) return null;
     return new Date(year, month - 1, day);
   };
+
+  const officeFilterOptions = useMemo(() => {
+    const officeMap = new Map();
+
+    const addOffice = (value) => {
+      const normalized = normalizeOfficeName(value);
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (!officeMap.has(key)) {
+        officeMap.set(key, normalized);
+      }
+    };
+
+    if (currentUser?.type === "OfficeAdmin") {
+      addOffice(currentUser.originalOffice || currentUser.office);
+    }
+
+    offices
+      .filter((office) => (office?.role || '').toLowerCase() !== 'super')
+      .forEach((office) => addOffice(office?.name || office?.officialName));
+
+    visits.forEach((visit) => addOffice(visit?.office));
+    feedbacks.forEach((feedback) => addOffice(feedback?.office));
+
+    return [...officeMap.values()].sort((a, b) => a.localeCompare(b));
+  }, [currentUser, offices, visits, feedbacks]);
+
+  useEffect(() => {
+    if (selectedOfficeFilter === "all") return;
+    const stillExists = officeFilterOptions.some((officeName) =>
+      compareOfficeNames(officeName, selectedOfficeFilter)
+    );
+
+    if (!stillExists) {
+      setSelectedOfficeFilter("all");
+    }
+  }, [officeFilterOptions, selectedOfficeFilter]);
 
   // --- Filter visits based on date range ---
   const filteredVisits = useMemo(() => {
@@ -1029,13 +1134,17 @@ const Analytics = ({ setActiveTab }) => {
         if (!startDate || !endDate) return false;
         startDate.setHours(0, 0, 0, 0);
         endDate.setHours(23, 59, 59, 999);
-        
-        return checkInDate >= startDate && checkInDate <= endDate;
+
+        const inDateRange = checkInDate >= startDate && checkInDate <= endDate;
+        if (!inDateRange) return false;
+
+        if (selectedOfficeFilter === "all") return true;
+        return compareOfficeNames(v?.office, selectedOfficeFilter);
       } catch {
         return false;
       }
     });
-  }, [visits, dateRange]);
+  }, [visits, dateRange, selectedOfficeFilter]);
 
   // --- Filter feedbacks based on date range ---
   const filteredFeedbacks = useMemo(() => {
@@ -1111,7 +1220,9 @@ const Analytics = ({ setActiveTab }) => {
 
     const userOffice = currentUser.originalOffice || currentUser.office;
     if (userOffice) {
-      const byOfficeName = offices.find(o => compareOfficeNames(o.name, userOffice));
+      const byOfficeName = offices.find(
+        (o) => compareOfficeNames(o.name, userOffice) || compareOfficeNames(o.officialName, userOffice)
+      );
       if (byOfficeName) return byOfficeName;
     }
 
@@ -1122,19 +1233,30 @@ const Analytics = ({ setActiveTab }) => {
     return null;
   }, [currentUser, offices]);
 
+  const officialOfficeDisplayName = toOfficialOfficeDisplayName(
+    currentOfficeRecord?.officialName ||
+      currentOfficeRecord?.name ||
+      currentUser?.originalOffice ||
+      currentUser?.office ||
+      "",
+    offices
+  );
+
   const printOfficeName = useMemo(() => {
     const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
 
     if (!currentUser) return fallbackOfficeName;
+    if (selectedOfficeFilter !== "all") return toOfficialOfficeDisplayName(selectedOfficeFilter, offices);
 
-    return (
+    return toOfficialOfficeDisplayName(
       currentOfficeRecord?.officialName ||
-      currentOfficeRecord?.name ||
-      currentUser.originalOffice ||
-      currentUser.office ||
-      fallbackOfficeName
+        currentOfficeRecord?.name ||
+        currentUser.originalOffice ||
+        currentUser.office ||
+        fallbackOfficeName,
+      offices
     );
-  }, [currentUser, currentOfficeRecord]);
+  }, [currentUser, currentOfficeRecord, selectedOfficeFilter, offices]);
 
   const reportDateRangeLabel = useMemo(() => {
     const startDate = parseLocalDate(dateRange.start);
@@ -1205,6 +1327,9 @@ const Analytics = ({ setActiveTab }) => {
     const officeMap = new Map();
 
     const addOfficeName = (value) => {
+      if (selectedOfficeFilter !== "all" && !compareOfficeNames(value, selectedOfficeFilter)) {
+        return;
+      }
       const normalized = normalizeOfficeName(value);
       if (!normalized) return;
       const key = normalized.toLowerCase();
@@ -1213,7 +1338,9 @@ const Analytics = ({ setActiveTab }) => {
       }
     };
 
-    if (currentUser?.type === "OfficeAdmin") {
+    if (selectedOfficeFilter !== "all") {
+      addOfficeName(selectedOfficeFilter);
+    } else if (currentUser?.type === "OfficeAdmin") {
       addOfficeName(currentUser.originalOffice || currentUser.office);
     } else {
       offices
@@ -1225,7 +1352,7 @@ const Analytics = ({ setActiveTab }) => {
     feedbackRecordsForPrint.forEach((feedback) => addOfficeName(feedback?.office));
 
     return [...officeMap.values()].sort((a, b) => a.localeCompare(b));
-  }, [currentUser, offices, filteredVisits, feedbackRecordsForPrint]);
+  }, [currentUser, offices, filteredVisits, feedbackRecordsForPrint, selectedOfficeFilter]);
 
   const officeAnalyticsRows = useMemo(() => {
     return officeNamesForPrint.map((officeName) => {
@@ -1388,6 +1515,28 @@ const Analytics = ({ setActiveTab }) => {
     });
   }, [officeNamesForPrint, filteredVisits, feedbackRecordsForPrint]);
 
+  const officeConcernedNameForPrint = useMemo(() => {
+    const sourceOfficeName =
+      selectedOfficeFilter !== "all"
+        ? selectedOfficeFilter
+        : officeAnalyticsRows[0]?.office ||
+          currentOfficeRecord?.name ||
+          currentUser?.originalOffice ||
+          currentUser?.office ||
+          "";
+
+    const matchedOffice = findOfficeRecordByName(sourceOfficeName, offices);
+
+    return (
+      normalizeOfficeName(matchedOffice?.name) ||
+      normalizeOfficeName(sourceOfficeName) ||
+      normalizeOfficeName(currentOfficeRecord?.name) ||
+      normalizeOfficeName(currentUser?.originalOffice) ||
+      normalizeOfficeName(currentUser?.office) ||
+      "N/A"
+    );
+  }, [selectedOfficeFilter, officeAnalyticsRows, currentOfficeRecord, currentUser, offices]);
+
   const charterOverallTotals = useMemo(() => {
     const totals = {
       customerCount: 0,
@@ -1465,19 +1614,29 @@ const Analytics = ({ setActiveTab }) => {
     ];
   }, [commendationSuggestionRows]);
 
+  const isSingleOffice = officeAnalyticsRows.length === 1;
+
   const charterRowsForPrint = useMemo(() => {
+    if (isSingleOffice) {
+      return officeAnalyticsRows.map((row) => ({ kind: 'office', row }));
+    }
+
     return [
       ...officeAnalyticsRows.map((row) => ({ kind: 'office', row })),
       { kind: 'overall', row: charterOverallTotals },
     ];
-  }, [officeAnalyticsRows, charterOverallTotals]);
+  }, [officeAnalyticsRows, charterOverallTotals, isSingleOffice]);
 
   const summaryRowsForPrint = useMemo(() => {
+    if (isSingleOffice) {
+      return officeAnalyticsRows.map((row) => ({ kind: 'office', row }));
+    }
+
     return [
       ...officeAnalyticsRows.map((row) => ({ kind: 'office', row })),
       { kind: 'overall', row: summaryOverallRow },
     ];
-  }, [officeAnalyticsRows, summaryOverallRow]);
+  }, [officeAnalyticsRows, summaryOverallRow, isSingleOffice]);
 
   // --- Export Functions ---
   const exportToPDF = () => {
@@ -1830,7 +1989,7 @@ const Analytics = ({ setActiveTab }) => {
           <p className="mt-4 text-gray-600">Loading analytics data...</p>
           {currentUser && currentUser.type === "OfficeAdmin" && (
             <p className="text-sm text-gray-500 mt-2">
-              Loading data for {currentUser.originalOffice || currentUser.office}...
+              Loading data for {officialOfficeDisplayName}...
             </p>
           )}
         </div>
@@ -1882,14 +2041,29 @@ const Analytics = ({ setActiveTab }) => {
             print-color-adjust: exact;
           }
 
-          .analytics-print-page {
+          .print-wrapper {
             padding: 10px 14px;
             font-family: "Times New Roman", Times, serif;
             color: #111;
             width: 100%;
             max-width: calc(${PRINT_PAGE_WIDTH_IN}in - ${PRINT_MARGIN_TOTAL_CM}cm);
             box-sizing: border-box;
-            page-break-after: auto;
+            border-collapse: collapse;
+          }
+
+          .print-wrapper > thead {
+            display: table-header-group;
+          }
+
+          .print-wrapper > tbody {
+            display: table-row-group;
+          }
+
+          .print-wrapper > thead > tr > td,
+          .print-wrapper > tbody > tr > td {
+            border: none !important;
+            padding: 0;
+            vertical-align: top;
           }
 
           .analytics-report-title {
@@ -1901,7 +2075,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-section-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             break-after: avoid-page;
             page-break-after: avoid;
@@ -1910,6 +2084,8 @@ const Analytics = ({ setActiveTab }) => {
           .analytics-table {
             width: 100%;
             table-layout: fixed;
+            page-break-inside: auto;
+            break-inside: auto;
           }
 
           .analytics-table th,
@@ -1919,7 +2095,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table th {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             text-align: center;
             padding: 3px 2px;
@@ -1929,7 +2105,7 @@ const Analytics = ({ setActiveTab }) => {
           }
 
           .analytics-table td {
-            font-size: 10.5px;
+            font-size: 12px;
             line-height: 1.2;
             padding: 2px 2px;
             text-align: center;
@@ -1952,6 +2128,12 @@ const Analytics = ({ setActiveTab }) => {
             text-align: center;
           }
 
+          .analytics-table tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            page-break-after: auto;
+          }
+
           .analytics-table-c tr {
             page-break-inside: avoid;
           }
@@ -1967,11 +2149,15 @@ const Analytics = ({ setActiveTab }) => {
 
           .analytics-signatories {
             margin-top: 24px;
-            font-size: 13px;
+            font-size: 16px;
           }
 
           .analytics-table thead {
-            display: table-header-group;
+            display: table-header-group !important;
+          }
+
+          .analytics-table tfoot {
+            display: table-footer-group;
           }
 
           * {
@@ -1987,11 +2173,11 @@ const Analytics = ({ setActiveTab }) => {
           {(() => {
             const renderHeader = () => (
               <div className="flex items-start justify-between mb-4 gap-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <div className="w-20 h-16 flex items-center justify-center">
                     <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                   </div>
-                  <div className="leading-tight">
+                  <div className="leading-tight text-left">
                     <p className="text-[14.67px]" style={{ fontFamily: "Arial, sans-serif" }}>Republic of the Philippines</p>
                     <h1 className="text-[16px] font-bold tracking-wide leading-none" style={{ fontFamily: "Arial, sans-serif" }}>BOHOL ISLAND STATE UNIVERSITY</h1>
                     <p className="text-[13.33px]" style={{ fontFamily: "Arial, sans-serif" }}>Magsija, Balilihan 6342, Bohol, Philippines</p>
@@ -2000,7 +2186,7 @@ const Analytics = ({ setActiveTab }) => {
                   </div>
                 </div>
 
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 items-start">
                   <div className="w-20 h-14 flex items-center justify-center">
                     <img
                       src={bagongPilipinasLogo}
@@ -2031,7 +2217,7 @@ const Analytics = ({ setActiveTab }) => {
               );
             };
             const renderSignatories = () => (
-              <div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif" }}>
+              <div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
                 <div className="grid grid-cols-2 gap-24 mb-6">
                   <div className="text-center">
                     <p className="text-left mb-3">Prepared:</p>
@@ -2110,8 +2296,8 @@ const Analytics = ({ setActiveTab }) => {
             const renderCharterTable = (entries, pageKey, showHeader = true) => (
               <table className="w-full border-collapse analytics-table analytics-table-a">
                 <colgroup>
-                  <col style={{ width: '18%' }} />
-                  <col style={{ width: '6%' }} />
+                  {!isSingleOffice && <col style={{ width: '18%' }} />}
+                  <col style={{ width: isSingleOffice ? '8%' : '6%' }} />
                   <col style={{ width: '4%' }} />
                   <col style={{ width: '4%' }} />
                   <col style={{ width: '4%' }} />
@@ -2134,8 +2320,8 @@ const Analytics = ({ setActiveTab }) => {
                 {showHeader && (
                   <thead>
                     <tr>
-                      <th rowSpan={2} className="w-[18%]">Office</th>
-                      <th rowSpan={2} className="w-[6%]">Number of Customers(f)</th>
+                      {!isSingleOffice && <th rowSpan={2} className="w-[18%]">Office</th>}
+                      <th rowSpan={2} className={isSingleOffice ? "w-[8%]" : "w-[6%]"}>Number of Customers(f)</th>
                       <th colSpan={2} className="w-[8%]">Sex</th>
                       <th colSpan={3} className="w-[12%]">Client Type</th>
                       <th colSpan={4} className="w-[16%]">CC1</th>
@@ -2169,7 +2355,7 @@ const Analytics = ({ setActiveTab }) => {
                     if (entry.kind === 'overall') {
                       return (
                         <tr key={`charter-overall-${pageKey}-${rowIndex}`} className="font-bold">
-                          <td>Overall Rating</td>
+                          {!isSingleOffice && <td>Overall Rating</td>}
                           <td>{charterOverallTotals.customerCount}</td>
                           <td>{charterOverallTotals.maleCount}</td>
                           <td>{charterOverallTotals.femaleCount}</td>
@@ -2196,7 +2382,7 @@ const Analytics = ({ setActiveTab }) => {
                     const row = entry.row;
                     return (
                       <tr key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{row.office}</td>
+                        {!isSingleOffice && <td>{row.office}</td>}
                         <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
                         <td>{formatCountCell(row.maleCount, row.hasVisitData)}</td>
                         <td>{formatCountCell(row.femaleCount, row.hasVisitData)}</td>
@@ -2226,8 +2412,8 @@ const Analytics = ({ setActiveTab }) => {
             const renderSummaryTable = (entries, pageKey, showHeader = true) => (
               <table className="w-full border-collapse analytics-table analytics-table-b">
                 <colgroup>
-                  <col style={{ width: '18%' }} />
-                  <col style={{ width: '6%' }} />
+                  {!isSingleOffice && <col style={{ width: '18%' }} />}
+                  <col style={{ width: isSingleOffice ? '8%' : '6%' }} />
                   <col style={{ width: '7%' }} />
                   <col style={{ width: '7%' }} />
                   <col style={{ width: '7%' }} />
@@ -2242,8 +2428,8 @@ const Analytics = ({ setActiveTab }) => {
                 {showHeader && (
                   <thead>
                     <tr>
-                      <th className="w-[18%]">Office</th>
-                      <th className="w-[6%]">Number of Customer rs(f)</th>
+                      {!isSingleOffice && <th className="w-[18%]">Office</th>}
+                      <th className={isSingleOffice ? "w-[8%]" : "w-[6%]"}>Number of Customer rs(f)</th>
                       <th className="w-[7%]">Responsiveness</th>
                       <th className="w-[7%]">Reliability (Quality)</th>
                       <th className="w-[7%]">Access &amp; Facilities</th>
@@ -2262,7 +2448,7 @@ const Analytics = ({ setActiveTab }) => {
                     if (entry.kind === 'overall') {
                       return (
                         <tr key={`summary-overall-${pageKey}-${rowIndex}`} className="font-bold">
-                          <td>Overall Rating</td>
+                          {!isSingleOffice && <td>Overall Rating</td>}
                           <td>{summaryOverallRow.customerCount}</td>
                           <td>{formatScoreCell(summaryOverallRow.dimensionMeans[0])}</td>
                           <td>{formatScoreCell(summaryOverallRow.dimensionMeans[1])}</td>
@@ -2281,7 +2467,7 @@ const Analytics = ({ setActiveTab }) => {
                     const row = entry.row;
                     return (
                       <tr key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{row.office}</td>
+                        {!isSingleOffice && <td>{row.office}</td>}
                         <td>{formatCountCell(row.customerCount, row.hasVisitData)}</td>
                         <td>{formatScoreCell(row.dimensionMeans[0])}</td>
                         <td>{formatScoreCell(row.dimensionMeans[1])}</td>
@@ -2301,48 +2487,85 @@ const Analytics = ({ setActiveTab }) => {
             );
 
             return (
-              <div className="analytics-print-page">
-                <div>
-                  {renderHeader()}
-                  <h2
-                    className="analytics-report-title font-Arial"
-                    style={{ fontFamily: "Arial, sans-serif" }}
-                  >
-                    Monthly Customer Satisfaction Summary Form - <span className="underline">{reportPeriodLabel}</span>
-                  </h2>
-                </div>
+              <table className="print-wrapper w-full border-collapse">
+                <thead>
+                  <tr>
+                    <td>
+                      {renderHeader()}
+                      {isSingleOffice ? (
+                        <>
+                          <h2
+                            className="analytics-report-title font-Arial"
+                            style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
+                          >
+                            MONTHLY REPORT CARD
+                          </h2>
+                          <div
+                            className="flex justify-between mt-3 mb-4"
+                            style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
+                          >
+                            <p>
+                              Office Concerned :
+                              <span className="underline ml-2">
+                                {officeConcernedNameForPrint}
+                              </span>
+                            </p>
+                            <p>
+                              Month :
+                              <span className="underline ml-2">{reportPeriodLabel}</span>
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <h2
+                          className="analytics-report-title font-Arial"
+                          style={{ fontFamily: "Arial, sans-serif" }}
+                        >
+                          MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
+                        </h2>
+                      )}
+                    </td>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div className="mt-4">
+                        <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
+                          <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                            A. Citizen&apos;s Charter Summary Result
+                          </p>
+                          {!isSingleOffice && (
+                            <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                              Campus: <span className="underline">Balilihan Campus</span>
+                            </p>
+                          )}
+                        </div>
+                        {renderCharterTable(charterRowsForPrint, 'section-a', true)}
+                      </div>
 
-                <div className="mt-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="analytics-section-label" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
-                      A. Citizen&apos;s Charter Summary Result
-                    </p>
-                    <p className="analytics-section-label" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
-                      Campus: <span className="underline">Balilihan Campus</span>
-                    </p>
-                  </div>
-                  {renderCharterTable(charterRowsForPrint, 'section-a', true)}
-                </div>
+                      <div className="mt-6">
+                        <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                          B. CSF Monthly Summary Rating
+                        </p>
+                        {renderSummaryTable(summaryRowsForPrint, 'section-b', true)}
+                      </div>
 
-                <div className="mt-6">
-                  <p className="analytics-section-label mb-2" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
-                    B. CSF Monthly Summary Rating
-                  </p>
-                  {renderSummaryTable(summaryRowsForPrint, 'section-b', true)}
-                </div>
+                      <div className="mt-6">
+                        <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
+                          C.
+                          <span style={{ fontFamily: "Arial, sans-serif" }}>
+                            {' '}CSF Monthly Commendations &amp; Suggestions
+                          </span>
+                        </p>
+                        {renderCsfTable(csfRowsForPrint, 'section-c', true)}
+                      </div>
 
-                <div className="mt-6">
-                  <p className="analytics-section-label mb-2" style={{ fontSize: "11px", fontFamily: "Arial, sans-serif" }}>
-                    C.
-                    <span style={{ fontFamily: "Arial, sans-serif" }}>
-                      {' '}CSF Monthly Commendations &amp; Suggestions
-                    </span>
-                  </p>
-                  {renderCsfTable(csfRowsForPrint, 'section-c', true)}
-                </div>
-
-                {renderSignatories()}
-              </div>
+                      {renderSignatories()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             );
           })()}
         </div>
@@ -2360,7 +2583,7 @@ const Analytics = ({ setActiveTab }) => {
                     Data insights and visitor patterns
                     {currentUser && currentUser.type === "OfficeAdmin" && (
                       <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                        {currentUser.originalOffice || currentUser.office} Office
+                        {officialOfficeDisplayName} Office
                       </span>
                     )}
                     {currentUser && currentUser.type === "SuperAdmin" && (
@@ -2372,7 +2595,7 @@ const Analytics = ({ setActiveTab }) => {
                   </p>
                </div>
 
-               <div className="flex gap-3 items-center no-print">
+               <div className="flex flex-wrap justify-start sm:justify-end items-center gap-2.5 no-print">
                  {/* <div className="relative">
                    <button 
                      onClick={() => setShowOverallModal(true)}
@@ -2383,103 +2606,130 @@ const Analytics = ({ setActiveTab }) => {
                    </button>
                  </div> */}
 
-                 <div className="relative">
-                    <button
-                      onClick={exportToPDF}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  <div className="relative">
+                     <button
+                       onClick={exportToPDF}
+                       className="h-[46px] inline-flex items-center gap-2 px-4 bg-white border border-gray-300 rounded-xl shadow-sm hover:shadow-md transition-shadow text-sm font-semibold text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                     >
+                       <Printer size={18} className="text-gray-600" />
+                       <span>Print Report</span>
+                     </button>
+                   </div>
+
+                 <div className="relative w-[170px]">
+                    <select
+                      className="h-[46px] w-full border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      value={selectedOfficeFilter}
+                      onChange={(e) => setSelectedOfficeFilter(e.target.value)}
                     >
-                      <Printer size={18} className="text-gray-600" />
-                      <span>Print Report</span>
-                    </button>
-                  </div>
-
-                 <div className="flex items-center gap-3">
-                   <select
-                     className="h-[42px] min-w-[140px] border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                     value={dateRangeMode}
-                     onChange={(e) => handleDateRangeModeChange(e.target.value)}
-                   >
-                     <option value="month">Month</option>
-                     <option value="day">Day</option>
+                     <option value="all">All Offices</option>
+                     {officeFilterOptions.map((officeName) => (
+                       <option key={`office-filter-${officeName}`} value={officeName}>
+                         {officeName}
+                       </option>
+                     ))}
                    </select>
+                 </div>
 
-                    {dateRangeMode === "month" ? (
-                      <div className="relative min-w-[260px]">
-                        <input
-                          type="month"
-                          className="h-[42px] w-full border border-gray-300 rounded-xl pl-4 pr-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                         value={monthRange.start}
-                         onChange={(e) => handleSingleMonthChange(e.target.value)}
-                        />
+                 <div className="relative w-[260px] sm:w-[280px]" ref={dayRangeDropdownRef}>
+                    <button
+                      type="button"
+                     onClick={() => {
+                       if (!showDayRangeDropdown) {
+                         setPendingDayRange({
+                           start: dateRange.start,
+                           end: dateRange.end,
+                         });
+                       }
+                       setShowDayRangeDropdown((prev) => !prev);
+                     }}
+                      className="h-[46px] w-full border border-gray-300 rounded-xl px-4 bg-white text-gray-800 shadow-sm flex items-center justify-between hover:bg-gray-50"
+                    >
+                      <span className="inline-flex items-center gap-2 text-sm font-medium min-w-0">
+                        <Calendar size={16} className="text-gray-600" />
+                        <span className="truncate">{dateRangeDropdownLabel}</span>
+                      </span>
+                      <ChevronDown
+                        size={16}
+                       className={`text-gray-600 transition-transform ${
+                         showDayRangeDropdown ? "rotate-180" : ""
+                       }`}
+                     />
+                   </button>
+
+                   {showDayRangeDropdown && (
+                     <div className="absolute right-0 top-full mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50">
+                       <div className="space-y-3">
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Range Type</label>
+                           <select
+                             className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                             value={dateRangeMode}
+                             onChange={(e) => handleDateRangeModeChange(e.target.value)}
+                           >
+                             <option value="month">Month</option>
+                             <option value="day">Day</option>
+                           </select>
+                         </div>
+
+                         {dateRangeMode === "month" ? (
+                           <>
+                             <div>
+                               <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                               <input
+                                 type="month"
+                                 className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                 value={monthRange.start}
+                                 onChange={(e) => handleMonthRangeChange(e.target.value)}
+                               />
+                             </div>
+
+                             <button
+                               type="button"
+                               onClick={applyMonthRangeSelection}
+                               className="w-full bg-[#6B46C1] text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-[#5B34B8] transition-colors"
+                             >
+                               Apply
+                             </button>
+                           </>
+                         ) : (
+                           <>
+                             <div>
+                               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                               <input
+                                 type="date"
+                                 className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                 value={pendingDayRange.start}
+                                 max={pendingDayRange.end || undefined}
+                                 onChange={(e) => handleDayRangeChange("start", e.target.value)}
+                               />
+                             </div>
+
+                             <div>
+                               <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                               <input
+                                 type="date"
+                                 className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                 value={pendingDayRange.end}
+                                 min={pendingDayRange.start || undefined}
+                                 onChange={(e) => handleDayRangeChange("end", e.target.value)}
+                               />
+                             </div>
+
+                             <button
+                               type="button"
+                               onClick={applyDayRangeSelection}
+                               className="w-full bg-[#6B46C1] text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-[#5B34B8] transition-colors"
+                             >
+                               Apply
+                             </button>
+                           </>
+                         )}
                        </div>
-                    ) : (
-                      <div className="relative" ref={dayRangeDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPendingDayRange({
-                              start: dateRange.start,
-                              end: dateRange.end,
-                            });
-                            setShowDayRangeDropdown((prev) => !prev);
-                          }}
-                          className="h-[46px] min-w-[260px] border-2 border-gray-800 rounded-xl px-4 bg-white text-gray-800 flex items-center justify-between"
-                        >
-                          <span className="inline-flex items-center gap-2 text-sm font-medium">
-                            <Calendar size={16} className="text-gray-600" />
-                            <span>
-                              {dateRange.start && dateRange.end
-                                ? `${formatDateDisplay(dateRange.start)} - ${formatDateDisplay(dateRange.end)}`
-                                : "Select date range"}
-                            </span>
-                          </span>
-                          <ChevronDown
-                            size={16}
-                            className={`text-gray-600 transition-transform ${
-                              showDayRangeDropdown ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-
-                        {showDayRangeDropdown && (
-                          <div className="absolute left-0 top-full mt-2 w-[260px] bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50">
-                            <div className="space-y-3">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                                <input
-                                  type="date"
-                                  className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                  value={pendingDayRange.start}
-                                  max={pendingDayRange.end || undefined}
-                                  onChange={(e) => handleDayRangeChange("start", e.target.value)}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                                <input
-                                  type="date"
-                                  className="h-[42px] w-full border border-gray-300 rounded-lg px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                  value={pendingDayRange.end}
-                                  min={pendingDayRange.start || undefined}
-                                  onChange={(e) => handleDayRangeChange("end", e.target.value)}
-                                />
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={applyDayRangeSelection}
-                                className="w-full bg-[#6B46C1] text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-[#5B34B8] transition-colors"
-                              >
-                                Apply
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-             </div>
+                     </div>
+                   )}
+                 </div>
+              </div>
             </div>
 
             {/* Charts */}
@@ -2598,7 +2848,7 @@ const Analytics = ({ setActiveTab }) => {
                     <p className="text-purple-100 text-sm">
                       {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)} | 
                       {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks
-                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${currentUser.originalOffice || currentUser.office} Office`}
+                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${officialOfficeDisplayName} Office`}
                     </p>
                   </div>
                   <button 
@@ -2660,7 +2910,7 @@ const Analytics = ({ setActiveTab }) => {
                     </h2>
                     <p className="text-purple-100 text-sm">
                       Comprehensive Report | {formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}
-                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${currentUser.originalOffice || currentUser.office} Office`}
+                      {currentUser && currentUser.type === "OfficeAdmin" && ` | ${officialOfficeDisplayName} Office`}
                     </p>
                     <p className="text-purple-200 text-xs mt-1">
                       {filteredVisits.length} Total Visitors | {filteredFeedbacks.length} Feedbacks | Avg Satisfaction: {avgSatisfaction}/5.0
