@@ -508,35 +508,110 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
     });
   }
 
+  const displayName = getSuperAdminDisplayName(officeData).toUpperCase();
+  const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Reset Your VisiTrak Password</title>
+      </head>
+      <body style="margin:0;padding:0;background:#ececef;font-family:Arial,Helvetica,sans-serif;color:#202020;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ececef;padding:0;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="500" cellspacing="0" cellpadding="0" style="max-width:500px;background:#f2f2f2;">
+                <tr>
+                  <td style="background:#7a4ea0;padding:38px 24px;text-align:center;">
+                    <h1 style="margin:0;font-size:48px;line-height:1;color:#ffffff;font-weight:700;">VisiTrak</h1>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding:34px 26px 22px;">
+                    <p style="margin:0 0 22px;font-size:40px;line-height:1.2;color:#222;">
+                      Hi <span style="color:#563480;font-weight:800;">${displayName},</span>
+                    </p>
+
+                    <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:#333;">
+                      You recently requested to reset your password for your VisiTrak account. To complete the reset process,
+                      click the button below. This link is valid for 15 minutes.
+                    </p>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
+                      <tr>
+                        <td style="background:#e9e9ed;border-left:4px solid #5B3886;border-radius:0 8px 8px 0;padding:14px 14px;">
+                          <p style="margin:0;font-size:14px;line-height:1.6;color:#3a3a3a;">
+                            <strong>Important:</strong> For your security, this link will expire in 15 minutes. If you don't use it
+                            within that time, you'll need to request a new reset link.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
+                      <tr>
+                        <td>
+                          <a href="${resetLink}" style="display:block;width:100%;box-sizing:border-box;background:#7a4ea0;border-radius:38px;padding:16px 18px;text-align:center;text-decoration:none;color:#0f57ca;font-size:36px;line-height:1.1;font-weight:800;">
+                            &#128273; RESET YOUR PASSWORD
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:0 0 22px;text-align:center;font-size:13px;line-height:1.6;color:#666;">
+                      This link confirms your email address associated with your VisiTrak account.
+                    </p>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px;border:1px solid #efb93d;border-radius:8px;background:#fbf2df;">
+                      <tr>
+                        <td style="padding:14px 14px;">
+                          <p style="margin:0 0 8px;font-size:16px;line-height:1.4;color:#e28e00;">Not you?</p>
+                          <p style="margin:0;font-size:13px;line-height:1.65;color:#4d4d4d;">
+                            If you didn't request a password reset, don't worry. Your email address may have been entered by mistake.
+                            You can safely ignore or delete this email, and continue using your existing password to log in.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 26px;">
+                      <tr>
+                        <td style="background:#e9e9ed;border-radius:3px;padding:10px 12px;text-align:center;">
+                          <p style="margin:0;font-size:11px;line-height:1.2;color:#777;">Reset link valid for 15 minutes</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="background:#e6e6e9;padding:24px 22px 18px;text-align:center;">
+                    <p style="margin:0 0 6px;font-size:14px;color:#666;">Thank you for using VisiTrak,</p>
+                    <p style="margin:0 0 10px;font-size:30px;color:#563480;">The VisiTrak Team</p>
+                    <p style="margin:0 0 8px;font-size:11px;color:#7a7a7a;">This is an automated message, please do not reply to this email.</p>
+                    <p style="margin:0;font-size:10px;color:#8a8a8a;">&copy; 2026 VisiTrak System - BISU MASID</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+
   sgMail.setApiKey(sendgridApiKey);
   await sgMail.send({
     to: email,
     from: {
       email: fromEmail,
       name: "VisiTrak System",
-    },
-    subject: "Reset Your VisiTrak Password",
-    html: `
-      <div style="font-family:Arial,sans-serif;color:#222;line-height:1.6">
-        <h2 style="margin:0 0 12px;color:#5B3886">VisiTrak Password Reset</h2>
-        <p style="margin:0 0 10px;">Hi ${getSuperAdminDisplayName(officeData)},</p>
-        <p style="margin:0 0 14px;">
-          You requested to reset your password. This link is valid for 15 minutes.
-        </p>
-        <p style="margin:0 0 16px;">
-          <a href="${resetLink}" style="background:#5B3886;color:#fff;text-decoration:none;padding:10px 18px;border-radius:999px;display:inline-block;font-weight:700;">
-            Reset Your Password
-          </a>
-        </p>
-        <p style="margin:0 0 6px;font-size:12px;color:#666;word-break:break-all;">
-          ${resetLink}
-        </p>
-        <p style="margin:0;font-size:12px;color:#666;">
-          If you did not request this, you may ignore this email.
-        </p>
-      </div>
-    `,
-  });
+      },
+      subject: "Reset Your VisiTrak Password",
+      html: emailHtml,
+    });
 
   return genericResponse();
 };
