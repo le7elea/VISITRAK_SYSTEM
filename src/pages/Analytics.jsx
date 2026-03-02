@@ -1109,6 +1109,23 @@ const Analytics = ({ setActiveTab }) => {
   }, [currentUser, offices, visits, feedbacks]);
 
   useEffect(() => {
+    if (currentUser?.type !== "OfficeAdmin") return;
+
+    const officeFromUser = normalizeOfficeName(currentUser.originalOffice || currentUser.office);
+    if (!officeFromUser) return;
+
+    const matchedOffice = officeFilterOptions.find((officeName) =>
+      compareOfficeNames(officeName, officeFromUser)
+    );
+    const nextOfficeFilter = matchedOffice || officeFromUser;
+
+    setSelectedOfficeFilter((prev) =>
+      compareOfficeNames(prev, nextOfficeFilter) ? prev : nextOfficeFilter
+    );
+  }, [currentUser, officeFilterOptions]);
+
+  useEffect(() => {
+    if (currentUser?.type === "OfficeAdmin") return;
     if (selectedOfficeFilter === "all") return;
     const stillExists = officeFilterOptions.some((officeName) =>
       compareOfficeNames(officeName, selectedOfficeFilter)
@@ -1117,7 +1134,7 @@ const Analytics = ({ setActiveTab }) => {
     if (!stillExists) {
       setSelectedOfficeFilter("all");
     }
-  }, [officeFilterOptions, selectedOfficeFilter]);
+  }, [currentUser, officeFilterOptions, selectedOfficeFilter]);
 
   // --- Filter visits based on date range ---
   const filteredVisits = useMemo(() => {
@@ -2616,20 +2633,22 @@ const Analytics = ({ setActiveTab }) => {
                      </button>
                    </div>
 
-                 <div className="relative w-[170px]">
-                    <select
-                      className="h-[46px] w-full border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      value={selectedOfficeFilter}
-                      onChange={(e) => setSelectedOfficeFilter(e.target.value)}
-                    >
-                     <option value="all">All Offices</option>
-                     {officeFilterOptions.map((officeName) => (
-                       <option key={`office-filter-${officeName}`} value={officeName}>
-                         {officeName}
-                       </option>
-                     ))}
-                   </select>
-                 </div>
+                 {currentUser?.type === "SuperAdmin" && (
+                   <div className="relative w-[170px]">
+                      <select
+                        className="h-[46px] w-full border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        value={selectedOfficeFilter}
+                        onChange={(e) => setSelectedOfficeFilter(e.target.value)}
+                      >
+                       <option value="all">All Offices</option>
+                       {officeFilterOptions.map((officeName) => (
+                         <option key={`office-filter-${officeName}`} value={officeName}>
+                           {officeName}
+                         </option>
+                       ))}
+                     </select>
+                   </div>
+                 )}
 
                  <div className="relative w-[260px] sm:w-[280px]" ref={dayRangeDropdownRef}>
                     <button
