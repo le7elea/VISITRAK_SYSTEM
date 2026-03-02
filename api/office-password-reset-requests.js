@@ -523,18 +523,18 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
             <td align="center">
               <table role="presentation" width="500" cellspacing="0" cellpadding="0" style="max-width:500px;background:#f2f2f2;">
                 <tr>
-                  <td style="background:#7a4ea0;padding:38px 24px;text-align:center;">
-                    <h1 style="margin:0;font-size:48px;line-height:1;color:#ffffff;font-weight:700;">VisiTrak</h1>
+                  <td style="background:#7a4ea0;padding:28px 20px;text-align:center;">
+                    <h1 style="margin:0;font-size:34px;line-height:1.1;color:#ffffff;font-weight:700;">VisiTrak</h1>
                   </td>
                 </tr>
 
                 <tr>
-                  <td style="padding:34px 26px 22px;">
-                    <p style="margin:0 0 22px;font-size:40px;line-height:1.2;color:#222;">
+                  <td style="padding:28px 24px 20px;">
+                    <p style="margin:0 0 18px;font-size:22px;line-height:1.3;color:#222;">
                       Hi <span style="color:#563480;font-weight:800;">${displayName},</span>
                     </p>
 
-                    <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:#333;">
+                    <p style="margin:0 0 18px;font-size:16px;line-height:1.65;color:#333;">
                       You recently requested to reset your password for your VisiTrak account. To complete the reset process,
                       click the button below. This link is valid for 15 minutes.
                     </p>
@@ -550,10 +550,10 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
                       </tr>
                     </table>
 
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
                       <tr>
                         <td>
-                          <a href="${resetLink}" style="display:block;width:100%;box-sizing:border-box;background:#7a4ea0;border-radius:38px;padding:16px 18px;text-align:center;text-decoration:none;color:#0f57ca;font-size:36px;line-height:1.1;font-weight:800;">
+                          <a href="${resetLink}" style="display:block;width:100%;box-sizing:border-box;background:#7a4ea0;border-radius:36px;padding:14px 16px;text-align:center;text-decoration:none;color:#0f57ca;font-size:24px;line-height:1.2;font-weight:800;">
                             &#128273; RESET YOUR PASSWORD
                           </a>
                         </td>
@@ -576,7 +576,7 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
                       </tr>
                     </table>
 
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 26px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 22px;">
                       <tr>
                         <td style="background:#e9e9ed;border-radius:3px;padding:10px 12px;text-align:center;">
                           <p style="margin:0;font-size:11px;line-height:1.2;color:#777;">Reset link valid for 15 minutes</p>
@@ -589,7 +589,7 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
                 <tr>
                   <td style="background:#e6e6e9;padding:24px 22px 18px;text-align:center;">
                     <p style="margin:0 0 6px;font-size:14px;color:#666;">Thank you for using VisiTrak,</p>
-                    <p style="margin:0 0 10px;font-size:30px;color:#563480;">The VisiTrak Team</p>
+                    <p style="margin:0 0 10px;font-size:20px;color:#563480;">The VisiTrak Team</p>
                     <p style="margin:0 0 8px;font-size:11px;color:#7a7a7a;">This is an automated message, please do not reply to this email.</p>
                     <p style="margin:0;font-size:10px;color:#8a8a8a;">&copy; 2026 VisiTrak System - BISU MASID</p>
                   </td>
