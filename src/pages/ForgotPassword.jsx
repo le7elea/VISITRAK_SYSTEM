@@ -312,12 +312,13 @@ const ForgotPassword = () => {
       // Super admin flow (email/password in Firebase Auth):
       // send custom token link email (15-minute expiration).
       if (isEmailIdentifier) {
-        const response = await fetch("/api/super-password-reset-email", {
+        const response = await fetch("/api/office-password-reset-requests", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            intent: "super-email-reset",
             email: cleanIdentifier,
           }),
         });
