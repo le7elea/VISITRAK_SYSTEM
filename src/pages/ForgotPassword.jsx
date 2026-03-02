@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { sendPasswordResetEmail } from "firebase/auth";
 
 import {
   cancelOfficePasswordResetRequest,
@@ -8,7 +7,6 @@ import {
   lookupOfficePasswordResetAccount,
   requestOfficePasswordReset,
 } from "../lib/info.services";
-import { auth } from "../lib/firebase";
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/bisulogo01.png";
@@ -312,19 +310,29 @@ const ForgotPassword = () => {
 
     try {
       // Super admin flow (email/password in Firebase Auth):
-      // send Firebase reset link directly using email.
+      // send custom branded email reset link through backend.
       if (isEmailIdentifier) {
+        const response = await fetch("/api/super-password-reset-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: cleanIdentifier,
+          }),
+        });
+
+        let payload = {};
         try {
-          await sendPasswordResetEmail(auth, cleanIdentifier);
-        } catch (error) {
-          const code = String(error?.code || "");
-          // Keep generic success behavior for unknown emails.
-          if (
-            code !== "auth/user-not-found" &&
-            code !== "auth/invalid-email"
-          ) {
-            throw error;
-          }
+          payload = await response.json();
+        } catch {
+          // Ignore parse errors and use fallback message.
+        }
+
+        if (!response.ok || payload.success === false) {
+          throw new Error(
+            payload.message || "Unable to send password reset email right now."
+          );
         }
 
         setModal({
