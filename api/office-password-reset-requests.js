@@ -182,7 +182,7 @@ const markResetRequestCancelled = async (
   };
 };
 
-const findOfficeByIdentifier = async (db, identifier) => {
+const findOfficeByIdentifier = async (db, identifier, admin = null) => {
   const normalizedIdentifier = normalizeIdentifier(identifier);
   if (!normalizedIdentifier) {
     return {
@@ -205,6 +205,26 @@ const findOfficeByIdentifier = async (db, identifier) => {
     );
     if (matched) {
       officeDoc = matched;
+    }
+
+    // Fallback: resolve office doc through Firebase Auth email -> UID.
+    // This supports office records where email is not mirrored in offices.email.
+    if (!officeDoc && admin) {
+      try {
+        const authUser = await admin.auth().getUserByEmail(normalizedIdentifier);
+        if (authUser?.uid) {
+          const byUid = await db.collection("offices").doc(authUser.uid).get();
+          if (byUid.exists && (byUid.data()?.role || "office") === "office") {
+            officeDoc = byUid;
+          }
+        }
+      } catch (error) {
+        const code = String(error?.code || "");
+        const isNotFound = code === "auth/user-not-found";
+        if (!isNotFound) {
+          console.error("findOfficeByIdentifier auth email lookup error:", error);
+        }
+      }
     }
   }
 
@@ -483,7 +503,7 @@ const createRequest = async (req, res, admin, db) => {
     return genericResponse();
   }
 
-  const lookup = await findOfficeByIdentifier(db, identifier);
+  const lookup = await findOfficeByIdentifier(db, identifier, admin);
   if (!lookup.officeDoc || !lookup.usernameNormalized) {
     return genericResponse();
   }
@@ -557,7 +577,7 @@ const createRequest = async (req, res, admin, db) => {
   return genericResponse();
 };
 
-const lookupAccount = async (req, res, db) => {
+const lookupAccount = async (req, res, admin, db) => {
   const identifier = normalizeIdentifier(
     req.body?.identifier || req.body?.username || ""
   );
@@ -572,7 +592,7 @@ const lookupAccount = async (req, res, db) => {
     });
   }
 
-  const lookup = await findOfficeByIdentifier(db, identifier);
+  const lookup = await findOfficeByIdentifier(db, identifier, admin);
   if (!lookup.officeDoc || !lookup.usernameNormalized) {
     return res.status(200).json({
       success: true,
@@ -645,7 +665,7 @@ const cancelPendingRequest = async (req, res, admin, db) => {
   }
 
   if (identifier) {
-    const lookup = await findOfficeByIdentifier(db, identifier);
+    const lookup = await findOfficeByIdentifier(db, identifier, admin);
     if (!lookup.officeDoc) {
       return res.status(200).json({
         success: true,
@@ -718,7 +738,7 @@ const getRequestStatus = async (req, res, admin, db) => {
     });
   }
 
-  const lookup = await findOfficeByIdentifier(db, identifier);
+  const lookup = await findOfficeByIdentifier(db, identifier, admin);
   if (!lookup.officeDoc) {
     return res.status(200).json({
       success: true,
@@ -845,7 +865,7 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const intent = String(req.body?.intent || "").trim().toLowerCase();
       if (intent === "lookup") {
-        return await lookupAccount(req, res, db);
+        return await lookupAccount(req, res, admin, db);
       }
       if (intent === "status") {
         return await getRequestStatus(req, res, admin, db);
