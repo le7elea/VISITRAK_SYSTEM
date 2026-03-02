@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sendPasswordResetEmail } from "firebase/auth";
 
 import {
   cancelOfficePasswordResetRequest,
@@ -7,6 +8,7 @@ import {
   lookupOfficePasswordResetAccount,
   requestOfficePasswordReset,
 } from "../lib/info.services";
+import { auth } from "../lib/firebase";
 import bgImage from "../assets/patternBG.png";
 import bisuLogo from "../assets/bisulogo.png";
 import masidLogo from "../assets/bisulogo01.png";
@@ -309,6 +311,34 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
+      // Super admin flow (email/password in Firebase Auth):
+      // send Firebase reset link directly using email.
+      if (isEmailIdentifier) {
+        try {
+          await sendPasswordResetEmail(auth, cleanIdentifier);
+        } catch (error) {
+          const code = String(error?.code || "");
+          // Keep generic success behavior for unknown emails.
+          if (
+            code !== "auth/user-not-found" &&
+            code !== "auth/invalid-email"
+          ) {
+            throw error;
+          }
+        }
+
+        setModal({
+          show: true,
+          title: "Reset Email Sent",
+          message:
+            "If this email is registered, a password reset link has been sent. Please check your inbox.",
+        });
+        setIdentifier("");
+        return;
+      }
+
+      // Office admin flow (username/password in Firestore-backed credentials):
+      // submit request for super admin approval.
       const lookup = await lookupOfficePasswordResetAccount(cleanIdentifier);
       if (!lookup?.exists || !lookup?.usernameNormalized) {
         setModal({
@@ -397,8 +427,8 @@ const ForgotPassword = () => {
             </div>
 
             <p className="text-gray-500 text-sm mb-10">
-              Enter your registered username or email below and we will send a secure reset request to the super admin.
-              Once approved, you can continue password reset using the one-time link.
+              Office admins: enter your username to send a secure reset request to the super admin.
+              Super admins: enter your email to receive a direct password reset link.
             </p>
 
             <form onSubmit={handleResetPassword} className="space-y-6">
@@ -407,7 +437,7 @@ const ForgotPassword = () => {
                   htmlFor="username"
                   className="absolute -top-2.5 left-4 bg-white px-2 text-xs font-medium text-purple-700 z-10"
                 >
-                  Username or Email *
+                  Office Username or Super Admin Email *
                 </label>
 
                 <input
@@ -416,7 +446,7 @@ const ForgotPassword = () => {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
                   disabled={loading}
-                  placeholder={loading ? "Processing..." : "Enter your office username or email"}
+                  placeholder={loading ? "Processing..." : "Enter username (office) or email (super admin)"}
                   className="w-full h-14 px-4 rounded-xl border border-purple-300 focus:ring-4 focus:ring-purple-200 focus:border-purple-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   required
                 />
