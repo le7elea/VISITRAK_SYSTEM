@@ -10,6 +10,7 @@ import officePasswordResetRequests from "./api/office-password-reset-requests.js
 import officeChangePassword from "./api/office-change-password.js";
 import officeLogin from "./api/office-login.js";
 import resolveOfficePasswordResetRequest from "./api/resolve-office-password-reset-request.js";
+import superPasswordResetEmail from "./api/super-password-reset-email.js";
 import updateOfficeAccount from "./api/update-office-account.js";
 
 const PORT = Number(process.env.PORT || 5001);
@@ -23,6 +24,7 @@ const routes = {
   "/api/office-change-password": officeChangePassword,
   "/api/office-password-reset-requests": officePasswordResetRequests,
   "/api/resolve-office-password-reset-request": resolveOfficePasswordResetRequest,
+  "/api/super-password-reset-email": superPasswordResetEmail,
   "/api/complete-password-reset": completePasswordReset,
   "/api/cleanup-tokens": cleanupTokens,
   "/api/firestore-usage": firestoreUsage,
