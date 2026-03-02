@@ -315,11 +315,24 @@ const ForgotPassword = () => {
       // use Firebase Auth built-in reset email (no custom email API needed).
       if (isEmailIdentifier) {
         try {
-          await sendPasswordResetEmail(auth, cleanIdentifier);
+          const actionCodeSettings = {
+            url: `${window.location.origin}/reset-password`,
+            handleCodeInApp: true,
+          };
+          await sendPasswordResetEmail(auth, cleanIdentifier, actionCodeSettings);
         } catch (emailError) {
           const code = String(emailError?.code || "");
           if (code === "auth/invalid-email") {
             throw new Error("Please enter a valid email address.");
+          }
+          if (
+            code === "auth/invalid-continue-uri" ||
+            code === "auth/unauthorized-continue-uri" ||
+            code === "auth/missing-continue-uri"
+          ) {
+            throw new Error(
+              "Reset link configuration is invalid. Add your app domain to Firebase Authentication authorized domains."
+            );
           }
           if (code === "auth/too-many-requests") {
             throw new Error("Too many requests. Please try again later.");

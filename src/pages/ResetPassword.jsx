@@ -42,7 +42,7 @@ const ResetPassword = () => {
   const oobCode = params.get("oobCode");
   const token = params.get("token");
   const tokenEmail = (params.get("email") || "").trim().toLowerCase();
-  const isFirebaseResetFlow = mode === "resetPassword" && !!oobCode;
+  const isFirebaseResetFlow = !!oobCode && (!mode || mode === "resetPassword");
   const isTokenResetFlow = !!token;
 
   const [validating, setValidating] = useState(true);
