@@ -188,7 +188,7 @@ export default async function handler(req, res) {
       uid: userRecord.uid,
       name: cleanName,
       officialName,
-      email: allowedRole === "super" ? cleanEmail : "",
+      ...(allowedRole === "super" ? { email: cleanEmail } : {}),
       username: allowedRole === "office" ? normalizedUsername : "",
       usernameNormalized: allowedRole === "office" ? normalizedUsername : "",
       role: allowedRole,

@@ -753,7 +753,7 @@ const validateOfficeData = (office) => {
     const usernameNormalized = normalizeUsername(validatedOffice.username || "");
     validatedOffice.username = usernameNormalized;
     validatedOffice.usernameNormalized = usernameNormalized;
-    validatedOffice.email = "";
+    delete validatedOffice.email;
   } else {
     validatedOffice.username = "";
     validatedOffice.usernameNormalized = "";
@@ -817,7 +817,9 @@ export const addOffice = async (office) => {
     const officePayload = {
       name: validatedOffice.name,
       officialName: validatedOffice.officialName,
-      email: validatedOffice.email,
+      ...(validatedOffice.role === "super"
+        ? { email: validatedOffice.email }
+        : {}),
       username: validatedOffice.username,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
@@ -839,7 +841,7 @@ export const addOffice = async (office) => {
       userEmail: currentUser.email,
       userName: currentUser.name,
       userRole: currentUser.role,
-      officeEmail: validatedOffice.email,
+      officeEmail: validatedOffice.email || "",
       officeUsername: validatedOffice.username || "",
       officeRole: office.role,
       officialOfficeName: office.officialName || '',
@@ -1004,7 +1006,9 @@ export const updateOffice = async (office) => {
     const updateData = {
       name: validatedOffice.name,
       officialName: validatedOffice.officialName,
-      email: validatedOffice.email,
+      ...(validatedOffice.role === "super"
+        ? { email: validatedOffice.email }
+        : {}),
       username: validatedOffice.username,
       role: validatedOffice.role,
       purposes: validatedOffice.purposes,
@@ -1027,7 +1031,10 @@ export const updateOffice = async (office) => {
     if (office.officialName !== currentData.officialName) {
       changes.push(`official name changed from "${currentData.officialName || 'none'}" to "${office.officialName || 'none'}"`);
     }
-    if (office.email !== currentData.email) {
+    if (
+      (validatedOffice.role === "super" || (currentData.role || "office") === "super") &&
+      normalizeEmail(office.email || "") !== normalizeEmail(currentData.email || "")
+    ) {
       changes.push(`email changed from "${currentData.email}" to "${office.email}"`);
     }
     if ((office.username || "") !== (currentData.username || "")) {

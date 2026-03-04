@@ -108,6 +108,7 @@ export default async function handler(req, res) {
 
     await officeRef.update({
       uid,
+      email: admin.firestore.FieldValue.delete(),
       ...credentialFields,
       credentialAlgo: admin.firestore.FieldValue.delete(),
       credentialIterations: admin.firestore.FieldValue.delete(),

@@ -141,6 +141,7 @@ export default async function handler(req, res) {
     const customToken = await admin.auth().createCustomToken(uid, { role: "office" });
     const updatePayload = {
       uid,
+      email: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
     };

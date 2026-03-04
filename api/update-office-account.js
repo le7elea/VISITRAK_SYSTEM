@@ -188,7 +188,10 @@ export default async function handler(req, res) {
       uid,
       name: cleanName,
       officialName,
-      email: cleanRole === "super" ? cleanEmail : "",
+      email:
+        cleanRole === "super"
+          ? cleanEmail
+          : admin.firestore.FieldValue.delete(),
       username: cleanRole === "office" ? normalizedUsername : "",
       usernameNormalized: cleanRole === "office" ? normalizedUsername : "",
       role: cleanRole,
@@ -201,14 +204,20 @@ export default async function handler(req, res) {
 
     await officeRef.update(updateData);
 
+    const responseData = {
+      id,
+      ...existing,
+      ...updateData,
+    };
+
+    if (cleanRole !== "super") {
+      delete responseData.email;
+    }
+
     return res.status(200).json({
       success: true,
       message: "Office account updated successfully.",
-      data: {
-        id,
-        ...existing,
-        ...updateData,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error("update-office-account error:", error);

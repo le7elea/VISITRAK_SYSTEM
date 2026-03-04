@@ -178,6 +178,7 @@ export default async function handler(req, res) {
       await officeRef.set(
         {
           uid,
+          email: admin.firestore.FieldValue.delete(),
           ...hashOfficePassword(newPassword),
           credentialAlgo: admin.firestore.FieldValue.delete(),
           credentialIterations: admin.firestore.FieldValue.delete(),
