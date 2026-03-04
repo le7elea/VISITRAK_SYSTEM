@@ -90,13 +90,18 @@ const StatItem = memo(({ icon, label, value, color = "gray" }) => {
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={`p-1.5 rounded-md ${colorClasses[color]}`}>
+    <div className="flex items-center gap-2 min-w-0">
+      <div className={`p-1.5 rounded-md shrink-0 ${colorClasses[color]}`}>
         <IconComponent size={14} />
       </div>
-      <div>
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-medium">{value}</p>
+      <div className="min-w-0">
+        <p className="text-xs text-gray-500 truncate">{label}</p>
+        <p
+          className="text-sm font-medium truncate"
+          title={value === null || value === undefined ? "" : String(value)}
+        >
+          {value}
+        </p>
       </div>
     </div>
   );
