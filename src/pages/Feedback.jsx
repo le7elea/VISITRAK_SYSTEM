@@ -70,8 +70,7 @@ const normalizeQuestionRatings = (answers, questions = []) => {
 
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
-  const [date, setDate] = useState("");
-  const [dateMode, setDateMode] = useState("month");
+  const [dayRange, setDayRange] = useState({ start: "", end: "" });
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [offices, setOffices] = useState([]);
@@ -130,12 +129,6 @@ const Feedback = ({ user }) => {
     }
     
     return "";
-  };
-
-  const getSafeMonthString = (createdAt) => {
-    const dayString = getSafeDateString(createdAt);
-    if (!dayString) return "";
-    return dayString.slice(0, 7);
   };
 
   // Get formatted display date
@@ -197,12 +190,15 @@ const Feedback = ({ user }) => {
           const visitIdMatch = (f.visitId || "").toLowerCase().includes(searchLower);
           const matchesSearch = nameMatch || suggestionMatch || commendationMatch || visitIdMatch;
           
-          // Handle date filter safely
+          // Handle date range filter safely
           const dayString = getSafeDateString(f.createdAt);
-          const monthString = getSafeMonthString(f.createdAt);
-          const matchesDate = !date || (
-            dateMode === "day" ? dayString === date : monthString === date
-          );
+          const matchesDate = (() => {
+            if (!dayRange.start && !dayRange.end) return true;
+            if (!dayString) return false;
+            if (dayRange.start && dayString < dayRange.start) return false;
+            if (dayRange.end && dayString > dayRange.end) return false;
+            return true;
+          })();
           
           // Handle office filter based on user role
           let matchesOffice = true;
@@ -245,7 +241,7 @@ const Feedback = ({ user }) => {
       console.error("Error filtering feedbacks:", err);
       return [];
     }
-  }, [feedbacks, search, date, dateMode, office, user]);
+  }, [feedbacks, search, dayRange, office, user]);
 
   // Generate unique office options
   const officeOptions = useMemo(() => {
@@ -398,8 +394,9 @@ const Feedback = ({ user }) => {
   const reportMonthLabel = useMemo(() => {
     let sourceDate = null;
 
-    if (date) {
-      const [year, month] = date.split("-").map(Number);
+    const rangeDate = dayRange.start || dayRange.end;
+    if (rangeDate) {
+      const [year, month] = rangeDate.split("-").map(Number);
       if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
         sourceDate = new Date(year, month - 1, 1);
       }
@@ -427,7 +424,7 @@ const Feedback = ({ user }) => {
     return sourceDate
       .toLocaleDateString("en-US", { month: "long", year: "numeric" })
       .toUpperCase();
-  }, [date, filteredFeedbacks]);
+  }, [dayRange.start, dayRange.end, filteredFeedbacks]);
 
   // Show loading state
   if (loading) {
@@ -487,10 +484,8 @@ const Feedback = ({ user }) => {
           <FilterBar
             search={search}
             setSearch={setSearch}
-            date={date}
-            setDate={setDate}
-            dateMode={dateMode}
-            setDateMode={setDateMode}
+            dayRange={dayRange}
+            setDayRange={setDayRange}
             office={office}
             setOffice={setOffice}
             exportCSV={exportCSV}
