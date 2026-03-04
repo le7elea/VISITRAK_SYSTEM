@@ -151,7 +151,10 @@ export default async function handler(req, res) {
       !officeData.credentialSalt
     ) {
       Object.assign(updatePayload, hashOfficePassword(password), {
-        credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        credentialAlgo: admin.firestore.FieldValue.delete(),
+        credentialIterations: admin.firestore.FieldValue.delete(),
+        credentialKeyLength: admin.firestore.FieldValue.delete(),
+        credentialUpdatedAt: admin.firestore.FieldValue.delete(),
         password: admin.firestore.FieldValue.delete(),
       });
     }

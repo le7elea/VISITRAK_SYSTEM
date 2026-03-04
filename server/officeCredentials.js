@@ -1,7 +1,6 @@
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from "crypto";
 import { Buffer } from "node:buffer";
 
-const CREDENTIAL_ALGO = "pbkdf2-sha512";
 const CREDENTIAL_ITERATIONS = 210000;
 const CREDENTIAL_KEY_LENGTH = 32;
 const CREDENTIAL_DIGEST = "sha512";
@@ -32,9 +31,6 @@ export const hashOfficePassword = (password) => {
   return {
     credentialHash: toBase64(derivedKey),
     credentialSalt: toBase64(salt),
-    credentialAlgo: CREDENTIAL_ALGO,
-    credentialIterations: CREDENTIAL_ITERATIONS,
-    credentialKeyLength: CREDENTIAL_KEY_LENGTH,
   };
 };
 

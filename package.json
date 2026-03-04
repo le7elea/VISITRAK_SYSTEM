@@ -8,7 +8,8 @@
     "dev:api": "node dev-api.js",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cleanup:office-credential-metadata": "node scripts/remove-office-credential-metadata.mjs"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

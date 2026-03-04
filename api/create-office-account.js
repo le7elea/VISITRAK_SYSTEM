@@ -181,7 +181,6 @@ export default async function handler(req, res) {
       allowedRole === "office"
         ? {
             ...hashOfficePassword(initialPassword),
-            credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }
         : {};
 

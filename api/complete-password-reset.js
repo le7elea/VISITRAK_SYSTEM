@@ -179,7 +179,10 @@ export default async function handler(req, res) {
         {
           uid,
           ...hashOfficePassword(newPassword),
-          credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          credentialAlgo: admin.firestore.FieldValue.delete(),
+          credentialIterations: admin.firestore.FieldValue.delete(),
+          credentialKeyLength: admin.firestore.FieldValue.delete(),
+          credentialUpdatedAt: admin.firestore.FieldValue.delete(),
           passwordChanged: true,
           passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -223,6 +226,10 @@ export default async function handler(req, res) {
           {
             uid: userRecord.uid,
             email: fallbackEmail,
+            credentialAlgo: admin.firestore.FieldValue.delete(),
+            credentialIterations: admin.firestore.FieldValue.delete(),
+            credentialKeyLength: admin.firestore.FieldValue.delete(),
+            credentialUpdatedAt: admin.firestore.FieldValue.delete(),
             passwordChanged: true,
             passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),

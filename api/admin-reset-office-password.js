@@ -109,7 +109,10 @@ export default async function handler(req, res) {
     await officeRef.update({
       uid,
       ...credentialFields,
-      credentialUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      credentialAlgo: admin.firestore.FieldValue.delete(),
+      credentialIterations: admin.firestore.FieldValue.delete(),
+      credentialKeyLength: admin.firestore.FieldValue.delete(),
+      credentialUpdatedAt: admin.firestore.FieldValue.delete(),
       passwordChanged: false,
       passwordChangedAt: null,
       lastAdminPasswordResetAt: admin.firestore.FieldValue.serverTimestamp(),
