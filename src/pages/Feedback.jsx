@@ -629,25 +629,27 @@ const Feedback = ({ user }) => {
                 </table>
 
                 {isLastPage && (
-                  <div className="mt-10 text-[13px]">
-                    <div className="grid grid-cols-2 gap-24 mb-6">
-                      <div className="text-center">
+                  <div className="mt-10 text-[13px] feedback-signatories">
+                    <div className="grid grid-cols-2 gap-24 mb-6 feedback-signatories-row">
+                      <div className="text-center feedback-signatory-group">
                         <p className="text-left mb-3">Prepared:</p>
-                        <p className="font-semibold underline">MA. MAELITH L. BUCHAN</p>
+                        <p className="font-semibold underline feedback-signatory-name">MA. MAELITH L. BUCHAN</p>
                         <p>Administrative Aide VI</p>
                       </div>
 
-                      <div className="text-center">
+                      <div className="text-center feedback-signatory-group">
                         <p className="text-left mb-3">Verified:</p>
-                        <p className="font-semibold underline">HORONORIO O. UEHARA</p>
+                        <p className="font-semibold underline feedback-signatory-name">HORONORIO O. UEHARA</p>
                         <p>Human Resource Management Officer II</p>
                       </div>
                     </div>
 
-                    <div className="max-w-md mx-auto text-center">
-                      <p className="mb-3 text-left pl-10">Approved:</p>
-                      <p className="font-semibold underline">MARRIETA C. MACALOLOT, PhD</p>
-                      <p>Campus Director</p>
+                    <div className="max-w-md mx-auto text-center feedback-signatories-row">
+                      <div className="feedback-signatory-group">
+                        <p className="mb-3 text-left pl-10">Approved:</p>
+                        <p className="font-semibold underline feedback-signatory-name">MARRIETA C. MACALOLOT, PhD</p>
+                        <p>Campus Director</p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -730,6 +732,17 @@ const Feedback = ({ user }) => {
           
           .page-break:last-child {
             page-break-after: auto;
+          }
+
+          .feedback-signatories,
+          .feedback-signatories-row,
+          .feedback-signatory-group {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .feedback-signatory-name {
+            white-space: nowrap;
           }
           
           * {

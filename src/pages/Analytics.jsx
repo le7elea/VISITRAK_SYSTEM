@@ -2115,11 +2115,26 @@ const Analytics = ({ setActiveTab }) => {
             display: table-row-group;
           }
 
+          .print-wrapper > thead > tr > th,
           .print-wrapper > thead > tr > td,
           .print-wrapper > tbody > tr > td {
             border: none !important;
             padding: 0;
             vertical-align: top;
+          }
+
+          .print-header-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14.67px;
+            font-weight: 400;
+          }
+
+          .print-header-meta p {
+            margin: 0;
           }
 
           .analytics-report-title {
@@ -2206,6 +2221,18 @@ const Analytics = ({ setActiveTab }) => {
           .analytics-signatories {
             margin-top: 24px;
             font-size: 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .analytics-signatories-row,
+          .analytics-signatory-group {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .analytics-signatory-name {
+            white-space: nowrap;
           }
 
           .analytics-table thead {
@@ -2274,23 +2301,23 @@ const Analytics = ({ setActiveTab }) => {
             };
             const renderSignatories = () => (
               <div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
-                <div className="grid grid-cols-2 gap-24 mb-6">
-                  <div className="text-center">
+                <div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-6">
+                  <div className="analytics-signatory-group text-center">
                     <p className="text-left mb-3">Prepared:</p>
-                    <p className="font-semibold underline">{preparedByNameForPrint}</p>
+                    <p className="font-semibold underline analytics-signatory-name">{preparedByNameForPrint}</p>
                     <p>Administrative Aide VI</p>
                   </div>
 
-                  <div className="text-center">
+                  <div className="analytics-signatory-group text-center">
                     <p className="text-left mb-3">Verified:</p>
-                    <p className="font-semibold underline">{verifiedByNameForPrint}</p>
+                    <p className="font-semibold underline analytics-signatory-name">{verifiedByNameForPrint}</p>
                     <p>Human Resource Management Officer II</p>
                   </div>
                 </div>
 
-                <div className="max-w-md mx-auto text-center">
+                <div className="analytics-signatory-group max-w-md mx-auto text-center">
                   <p className="mb-3 text-left pl-8">Approved:</p>
-                  <p className="font-semibold underline">{approvedByNameForPrint}</p>
+                  <p className="font-semibold underline analytics-signatory-name">{approvedByNameForPrint}</p>
                   <p>Campus Director</p>
                 </div>
               </div>
@@ -2546,32 +2573,19 @@ const Analytics = ({ setActiveTab }) => {
               <table className="print-wrapper w-full border-collapse">
                 <thead>
                   <tr>
-                    <td>
+                    <th colSpan={20}>
                       {renderHeader()}
+                    </th>
+                  </tr>
+                  <tr>
+                    <th colSpan={20}>
                       {isSingleOffice ? (
-                        <>
-                          <h2
-                            className="analytics-report-title font-Arial"
-                            style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
-                          >
-                            MONTHLY REPORT CARD
-                          </h2>
-                          <div
-                            className="flex justify-between mt-3 mb-4"
-                            style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
-                          >
-                            <p>
-                              Office Concerned :
-                              <span className="underline ml-2">
-                                {officeConcernedNameForPrint}
-                              </span>
-                            </p>
-                            <p>
-                              Month :
-                              <span className="underline ml-2">{reportPeriodLabel}</span>
-                            </p>
-                          </div>
-                        </>
+                        <h2
+                          className="analytics-report-title font-Arial"
+                          style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
+                        >
+                          MONTHLY REPORT CARD
+                        </h2>
                       ) : (
                         <h2
                           className="analytics-report-title font-Arial"
@@ -2580,12 +2594,26 @@ const Analytics = ({ setActiveTab }) => {
                           MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
                         </h2>
                       )}
-                    </td>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td>
+                      {isSingleOffice && (
+                        <div className="print-header-meta">
+                          <p>
+                            Office Concerned :
+                            <span className="underline ml-2">
+                              {officeConcernedNameForPrint}
+                            </span>
+                          </p>
+                          <p>
+                            Month :
+                            <span className="underline ml-2">{reportPeriodLabel}</span>
+                          </p>
+                        </div>
+                      )}
                       <div className="mt-4">
                         <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
                           <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
@@ -2599,14 +2627,20 @@ const Analytics = ({ setActiveTab }) => {
                         </div>
                         {renderCharterTable(charterRowsForPrint, 'section-a', true)}
                       </div>
-
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
                       <div className="mt-6">
                         <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
                           B. CSF Monthly Summary Rating
                         </p>
                         {renderSummaryTable(summaryRowsForPrint, 'section-b', true)}
                       </div>
-
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
                       <div className="mt-6">
                         <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
                           C.
@@ -2616,9 +2650,10 @@ const Analytics = ({ setActiveTab }) => {
                         </p>
                         {renderCsfTable(csfRowsForPrint, 'section-c', true)}
                       </div>
-
-                      {renderSignatories()}
                     </td>
+                  </tr>
+                  <tr>
+                    <td>{renderSignatories()}</td>
                   </tr>
                 </tbody>
               </table>
