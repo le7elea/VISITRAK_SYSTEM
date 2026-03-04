@@ -907,7 +907,20 @@ const Analytics = ({ setActiveTab }) => {
   const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
+  const [showPrintSignatoryModal, setShowPrintSignatoryModal] = useState(false);
+  const [printSignatories, setPrintSignatories] = useState({
+    prepared: "MA. MAELITH L. BUCHAN",
+    verified: "HORONORIO O. UEHARA",
+    approved: "MARRIETA C. MACALOLOT, PhD",
+  });
   const dayRangeDropdownRef = useRef(null);
+
+  const handlePrintSignatoryChange = (role, value) => {
+    setPrintSignatories((previous) => ({
+      ...previous,
+      [role]: value,
+    }));
+  };
 
   useEffect(() => {
     if (!showDayRangeDropdown) return undefined;
@@ -1263,6 +1276,17 @@ const Analytics = ({ setActiveTab }) => {
     const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
 
     if (!currentUser) return fallbackOfficeName;
+    if (currentUser.type === "SuperAdmin") {
+      return toOfficialOfficeDisplayName(
+        currentOfficeRecord?.officialName ||
+          currentOfficeRecord?.name ||
+          currentUser.originalOffice ||
+          currentUser.office ||
+          fallbackOfficeName,
+        offices
+      );
+    }
+
     if (selectedOfficeFilter !== "all") return toOfficialOfficeDisplayName(selectedOfficeFilter, offices);
 
     return toOfficialOfficeDisplayName(
@@ -1655,10 +1679,25 @@ const Analytics = ({ setActiveTab }) => {
     ];
   }, [officeAnalyticsRows, summaryOverallRow, isSingleOffice]);
 
+  const preparedByNameForPrint =
+    toTrimmedText(printSignatories.prepared) || "________________________";
+  const verifiedByNameForPrint =
+    toTrimmedText(printSignatories.verified) || "________________________";
+  const approvedByNameForPrint =
+    toTrimmedText(printSignatories.approved) || "________________________";
+
   // --- Export Functions ---
   const exportToPDF = () => {
+    setShowPrintSignatoryModal(true);
+  };
+
+  const handleConfirmPrint = () => {
+    setShowPrintSignatoryModal(false);
+
     try {
-      window.print();
+      setTimeout(() => {
+        window.print();
+      }, 0);
     } catch (error) {
       console.error('Error printing:', error);
       alert('Failed to print. Please try again.');
@@ -2238,20 +2277,20 @@ const Analytics = ({ setActiveTab }) => {
                 <div className="grid grid-cols-2 gap-24 mb-6">
                   <div className="text-center">
                     <p className="text-left mb-3">Prepared:</p>
-                    <p className="font-semibold underline">MA. MAELITH L. BUCHAN</p>
+                    <p className="font-semibold underline">{preparedByNameForPrint}</p>
                     <p>Administrative Aide VI</p>
                   </div>
 
                   <div className="text-center">
                     <p className="text-left mb-3">Verified:</p>
-                    <p className="font-semibold underline">HORONORIO O. UEHARA</p>
+                    <p className="font-semibold underline">{verifiedByNameForPrint}</p>
                     <p>Human Resource Management Officer II</p>
                   </div>
                 </div>
 
                 <div className="max-w-md mx-auto text-center">
                   <p className="mb-3 text-left pl-8">Approved:</p>
-                  <p className="font-semibold underline">MARRIETA C. MACALOLOT, PhD</p>
+                  <p className="font-semibold underline">{approvedByNameForPrint}</p>
                   <p>Campus Director</p>
                 </div>
               </div>
@@ -2854,6 +2893,72 @@ const Analytics = ({ setActiveTab }) => {
 
           </div>
         </div>
+
+        {showPrintSignatoryModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/10 backdrop-blur-[2px] p-4 no-print print:hidden">
+            <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Print Signatories</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Enter the names for the printed report, then continue printing.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                  <span>Prepared</span>
+                  <input
+                    type="text"
+                    value={printSignatories.prepared}
+                    onChange={(e) => handlePrintSignatoryChange("prepared", e.target.value)}
+                    placeholder="Enter name"
+                    className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                  <span>Verified</span>
+                  <input
+                    type="text"
+                    value={printSignatories.verified}
+                    onChange={(e) => handlePrintSignatoryChange("verified", e.target.value)}
+                    placeholder="Enter name"
+                    className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                  <span>Approved</span>
+                  <input
+                    type="text"
+                    value={printSignatories.approved}
+                    onChange={(e) => handlePrintSignatoryChange("approved", e.target.value)}
+                    placeholder="Enter name"
+                    className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintSignatoryModal(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmPrint}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#553C9A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#44307B]"
+                >
+                  <Printer size={16} />
+                  <span>Continue to Print</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Integrated Insights Modal */}
         {showIntegratedModal && (

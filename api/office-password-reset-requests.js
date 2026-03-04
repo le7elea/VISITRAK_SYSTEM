@@ -553,7 +553,7 @@ const createSuperEmailResetRequest = async (req, res, admin, db) => {
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
                       <tr>
                         <td>
-                          <a href="${resetLink}" style="display:block;width:100%;box-sizing:border-box;background:#7a4ea0;border-radius:36px;padding:14px 16px;text-align:center;text-decoration:none;color:#0f57ca;font-size:24px;line-height:1.2;font-weight:800;">
+                          <a href="${resetLink}" style="display:block;width:100%;box-sizing:border-box;background:#7a4ea0;border-radius:36px;padding:14px 16px;text-align:center;text-decoration:none;color:#ffffff;font-size:20px;line-height:1.2;font-weight:800;">
                             &#128273; RESET YOUR PASSWORD
                           </a>
                         </td>
