@@ -175,7 +175,14 @@ const Profile = () => {
           const completeUser = {
             id: userOffice.id,
             name: userOffice.name,
-            email: userOffice.email,
+            email: userOffice.email || parsedUser.email || "",
+            username:
+              userOffice.role === "office"
+                ? userOffice.username ||
+                  parsedUser.username ||
+                  parsedUser.loginIdentifier ||
+                  ""
+                : "",
             role: userOffice.role,
             type: type,
             office: userOffice.name,
@@ -193,7 +200,14 @@ const Profile = () => {
             ...parsedUser,
             id: userOffice.id,
             name: userOffice.name,
-            email: userOffice.email, // This updates the email if it changed!
+            email: userOffice.email || parsedUser.email || "", // This updates the email if it changed!
+            username:
+              userOffice.role === "office"
+                ? userOffice.username ||
+                  parsedUser.username ||
+                  parsedUser.loginIdentifier ||
+                  ""
+                : "",
             role: userOffice.role,
             office: userOffice.name,
             type: type
@@ -242,6 +256,7 @@ const Profile = () => {
               id: parsedUser.id || "temp-" + Date.now(),
               name: parsedUser.name || parsedUser.office || "User",
               email: parsedUser.email,
+              username: parsedUser.username || parsedUser.loginIdentifier || "",
               role: parsedUser.role || "office",
               type: parsedUser.type || "OfficeAdmin",
               office: parsedUser.office || "Not Assigned",
@@ -266,6 +281,7 @@ const Profile = () => {
             id: parsedUser.id || "error-fallback",
             name: parsedUser.name || parsedUser.office || "User",
             email: parsedUser.email,
+            username: parsedUser.username || parsedUser.loginIdentifier || "",
             role: parsedUser.role || (parsedUser.type === "SuperAdmin" ? "super" : "office"),
             type: parsedUser.type || "OfficeAdmin",
             office: parsedUser.office || "Not Assigned",
@@ -320,7 +336,14 @@ const Profile = () => {
         const completeUser = {
           id: userOffice.id,
           name: userOffice.name,
-          email: userOffice.email,
+          email: userOffice.email || parsedUser.email || "",
+          username:
+            userOffice.role === "office"
+              ? userOffice.username ||
+                parsedUser.username ||
+                parsedUser.loginIdentifier ||
+                ""
+              : "",
           role: userOffice.role,
           type: type,
           office: userOffice.name,
@@ -337,7 +360,14 @@ const Profile = () => {
           ...parsedUser,
           id: userOffice.id,
           name: userOffice.name,
-          email: userOffice.email,
+          email: userOffice.email || parsedUser.email || "",
+          username:
+            userOffice.role === "office"
+              ? userOffice.username ||
+                parsedUser.username ||
+                parsedUser.loginIdentifier ||
+                ""
+              : "",
           role: userOffice.role,
           office: userOffice.name,
           type: type
@@ -572,10 +602,16 @@ const Profile = () => {
 
   const officePersonalInfo = useMemo(() => {
     if (!user) return [];
-    
+
+    const isOfficeAdmin = user.role === "office" || user.type === "OfficeAdmin";
+    const usernameValue = user.username || user.loginIdentifier || "Not set";
+
     const baseInfo = [
       { label: "Full Name:", value: user.name || "Not set" },
-      { label: "Email Address:", value: user.email || "Not set" },
+      {
+        label: isOfficeAdmin ? "Username:" : "Email Address:",
+        value: isOfficeAdmin ? usernameValue : user.email || "Not set",
+      },
       { label: "User Role:", value: user.role === "super" ? "Super Administrator" : "Office Administrator" },
     ];
     
