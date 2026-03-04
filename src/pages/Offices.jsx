@@ -18,6 +18,45 @@ const isValidUsername = (username) =>
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
 const normalizeEditList = (items = []) =>
   (Array.isArray(items) ? items : []).map((item) => String(item?.name || "").trim());
+const isSuperOffice = (office = {}) =>
+  String(office?.role || "").trim().toLowerCase() === "super";
+const getOfficeSortLabel = (office = {}) =>
+  String(
+    office?.name ||
+      office?.officialName ||
+      office?.username ||
+      office?.email ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+const prioritizeSuperAdmins = (officeList = []) => {
+  const offices = Array.isArray(officeList) ? [...officeList] : [];
+  return offices.sort((a, b) => {
+    const aIsSuper = isSuperOffice(a);
+    const bIsSuper = isSuperOffice(b);
+    if (aIsSuper !== bIsSuper) return aIsSuper ? -1 : 1;
+
+    const aLabel = getOfficeSortLabel(a);
+    const bLabel = getOfficeSortLabel(b);
+    if (!aLabel && !bLabel) return 0;
+    if (!aLabel) return 1;
+    if (!bLabel) return -1;
+
+    const byLabel = aLabel.localeCompare(bLabel, "en", {
+      sensitivity: "base",
+      numeric: true,
+    });
+    if (byLabel !== 0) return byLabel;
+
+    const aId = String(a?.id || "").trim().toLowerCase();
+    const bId = String(b?.id || "").trim().toLowerCase();
+    if (!aId && !bId) return 0;
+    if (!aId) return 1;
+    if (!bId) return -1;
+    return aId.localeCompare(bId, "en", { sensitivity: "base", numeric: true });
+  });
+};
 const createEditSnapshot = (data = {}) => ({
   name: String(data.name || "").trim(),
   officialName: String(data.officialName || "").trim(),
@@ -1021,7 +1060,7 @@ const Offices = () => {
       setError(null);
       try {
         const officeData = await fetchOffices();
-        setOffices(officeData);
+        setOffices(prioritizeSuperAdmins(officeData));
 
         await loadPendingResetRequests({ showLoader: true });
       } catch (err) {
@@ -1145,10 +1184,12 @@ const Offices = () => {
         role: "office",
       });
 
-      setOffices(prev => [
-        ...prev,
-        { ...newOffice, createdAt: newOffice.createdAt || new Date() },
-      ]);
+      setOffices((prev) =>
+        prioritizeSuperAdmins([
+          ...prev,
+          { ...newOffice, createdAt: newOffice.createdAt || new Date() },
+        ])
+      );
       setShowAddModal(false);
       
       // Reset form
@@ -1308,14 +1349,16 @@ const Offices = () => {
       const response = await adminResetOfficePassword(editData.id, nextPassword);
 
       setOffices((prev) =>
-        prev.map((office) =>
-          office.id === editData.id
-            ? {
-                ...office,
-                passwordChanged: false,
-                passwordChangedAt: null,
-              }
-            : office
+        prioritizeSuperAdmins(
+          prev.map((office) =>
+            office.id === editData.id
+              ? {
+                  ...office,
+                  passwordChanged: false,
+                  passwordChangedAt: null,
+                }
+              : office
+          )
         )
       );
 
@@ -1513,7 +1556,7 @@ const Offices = () => {
       // Update local state immediately
       const updatedOffices = [...offices];
       updatedOffices[editIndex] = updatedOffice;
-      setOffices(updatedOffices);
+      setOffices(prioritizeSuperAdmins(updatedOffices));
       closeEditModal();
       
       showNotification(`Office "${editData.name}" updated successfully!`, {
@@ -1529,7 +1572,7 @@ const Offices = () => {
           console.error("Error updating office in Firestore:", err);
           const revertedOffices = [...offices];
           revertedOffices[editIndex] = originalOffice;
-          setOffices(revertedOffices);
+          setOffices(prioritizeSuperAdmins(revertedOffices));
           showNotification(
             `Warning: Changes to "${editData.name}" were reverted due to database error: ${err.message}`,
             {
@@ -1573,7 +1616,7 @@ const Offices = () => {
     try {
       // Update local state immediately
       const updatedOffices = offices.filter((_, i) => i !== deleteIndex);
-      setOffices(updatedOffices);
+      setOffices(prioritizeSuperAdmins(updatedOffices));
       setDeleteIndex(null);
       setDeleteConfirmed(false);
       
@@ -1588,11 +1631,7 @@ const Offices = () => {
           await deleteOffice(officeToDelete.id);
         } catch (err) {
           console.error("Error deleting office from Firestore:", err);
-          setOffices(prev => {
-            const restored = [...prev];
-            restored.splice(deleteIndex, 0, originalOffice);
-            return restored;
-          });
+          setOffices((prev) => prioritizeSuperAdmins([...prev, originalOffice]));
           showNotification(
             `Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`,
             {
@@ -2401,9 +2440,9 @@ const Offices = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
             {/* Modal Header */}
-            <div className="bg-red-50 p-6 text-center">
-              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <Trash2 className="text-red-600" size={28} />
+            <div className="bg-gradient-to-r from-[#7400EA]/10 to-[#5B2D8B]/10 p-6 text-center">
+              <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="text-[#7400EA]" size={28} />
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2">Delete Office Account</h3>
               <p className="text-gray-600">This action cannot be undone</p>
@@ -2488,12 +2527,12 @@ const Offices = () => {
                   </div>
                 </div>
               ) : (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
                   <div className="flex items-start">
-                    <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <AlertTriangle className="w-5 h-5 text-purple-600 mt-0.5 mr-2 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-yellow-800 mb-1">Important Warning</p>
-                      <p className="text-sm text-yellow-700">
+                      <p className="text-sm font-medium text-purple-800 mb-1">Important Warning</p>
+                      <p className="text-sm text-purple-700">
                         All data associated with this office account will be permanently deleted. 
                         This includes any documents, files, or records created by this user.
                       </p>
@@ -2510,7 +2549,7 @@ const Offices = () => {
                       type="checkbox" 
                       checked={deleteConfirmed}
                       onChange={(e) => setDeleteConfirmed(e.target.checked)}
-                      className="h-5 w-5 text-red-600 rounded border-gray-300 mr-3 focus:ring-red-500 focus:ring-offset-0"
+                      className="h-5 w-5 text-purple-600 rounded border-gray-300 mr-3 focus:ring-purple-500 focus:ring-offset-0"
                     />
                     <div>
                       <p className="font-medium text-gray-800">I confirm I want to delete this account</p>
@@ -2554,7 +2593,7 @@ const Offices = () => {
                 ) : (
                   <button 
                     onClick={confirmDelete} 
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-[#7400EA] to-[#5B2D8B] hover:from-[#5B2D8B] hover:to-[#4A2470] text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={deleteLoading || !deleteConfirmed}
                   >
                     {deleteLoading ? (
