@@ -2591,13 +2591,13 @@ return (
             className="flex justify-between mt-3 mb-4"
             style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
           >
-            <p>
+            <p className="font-normal">
               Office Concerned :
               <span className="underline ml-2">
                 {officeConcernedNameForPrint}
               </span>
             </p>
-            <p>
+            <p className="font-normal">
               Month :
               <span className="underline ml-2">{reportPeriodLabel}</span>
             </p>
@@ -2617,20 +2617,6 @@ return (
 <tbody>
 <tr>
 <td>
-                      {isSingleOffice && (
-                        <div className="print-header-meta">
-                          <p>
-                            Office Concerned :
-                            <span className="underline ml-2">
-                              {officeConcernedNameForPrint}
-                            </span>
-                          </p>
-                          <p>
-                            Month :
-                            <span className="underline ml-2">{reportPeriodLabel}</span>
-                          </p>
-                        </div>
-                      )}
 <div className="mt-4">
 <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
 <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
