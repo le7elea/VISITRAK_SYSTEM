@@ -33,6 +33,16 @@ const getOfficeSortLabel = (office = {}) =>
   )
     .trim()
     .toLowerCase();
+const getOfficeDisplayName = (office = {}) => {
+  const label = String(
+    office?.name ||
+      office?.officialName ||
+      office?.username ||
+      office?.email ||
+      ""
+  ).trim();
+  return label || "another office";
+};
 const prioritizeSuperAdmins = (officeList = []) => {
   const offices = Array.isArray(officeList) ? [...officeList] : [];
   return offices.sort((a, b) => {
@@ -318,8 +328,8 @@ const AddOfficeModal = memo(({
   onNewPurposeChange,
   newStaff,
   onNewStaffChange,
-  existingStaffNames,
-  onNotify,
+  existingStaffLookup,
+  onDuplicateStaff,
   error,
   loading
 }) => {
@@ -356,18 +366,13 @@ const AddOfficeModal = memo(({
       (staff) => getStaffNameKey(staff) === normalizedName
     );
     if (duplicateInOffice) {
-      onNotify?.(`"${normalizedName}" is already listed for this office.`, {
-        title: "Duplicate Staff",
-        tone: "warning",
-      });
+      onDuplicateStaff?.(normalizedName, "this office");
       return;
     }
 
-    if (existingStaffNames?.has?.(normalizedName)) {
-      onNotify?.(`"${normalizedName}" is already assigned to another office.`, {
-        title: "Staff Already Assigned",
-        tone: "warning",
-      });
+    const assignedOffice = existingStaffLookup?.get?.(normalizedName);
+    if (assignedOffice) {
+      onDuplicateStaff?.(normalizedName, assignedOffice);
       return;
     }
     
@@ -940,6 +945,11 @@ const Offices = () => {
     message: "",
     tone: "info",
   });
+  const [duplicateStaffModal, setDuplicateStaffModal] = useState({
+    show: false,
+    staffName: "",
+    officeName: "",
+  });
 
   // ðŸ”¹ Delete Modal
   const [deleteIndex, setDeleteIndex] = useState(null);
@@ -997,17 +1007,18 @@ const Offices = () => {
     () => buildSuggestedUsername(addData.name),
     [addData.name, buildSuggestedUsername]
   );
-  const existingStaffNames = useMemo(() => {
-    const names = new Set();
+  const existingStaffLookup = useMemo(() => {
+    const lookup = new Map();
     offices.forEach((office) => {
+      const officeLabel = getOfficeDisplayName(office);
       (office.staffToVisit || []).forEach((staff) => {
         const key = getStaffNameKey(staff);
-        if (key) {
-          names.add(key);
+        if (key && !lookup.has(key)) {
+          lookup.set(key, officeLabel);
         }
       });
     });
-    return names;
+    return lookup;
   }, [offices]);
 
   const handleAddOfficeNameChange = useCallback((value) => {
@@ -1052,6 +1063,21 @@ const Offices = () => {
 
   const closeNotification = useCallback(() => {
     setNotificationModal((prev) => ({
+      ...prev,
+      show: false,
+    }));
+  }, []);
+
+  const openDuplicateStaffModal = useCallback((staffName, officeName) => {
+    setDuplicateStaffModal({
+      show: true,
+      staffName: normalizeStaffName(staffName),
+      officeName: String(officeName || "").trim(),
+    });
+  }, []);
+
+  const closeDuplicateStaffModal = useCallback(() => {
+    setDuplicateStaffModal((prev) => ({
       ...prev,
       show: false,
     }));
@@ -1183,6 +1209,18 @@ const Offices = () => {
     const currentSnapshot = createEditSnapshot(editData);
     return JSON.stringify(currentSnapshot) !== JSON.stringify(editBaseline);
   }, [editBaseline, editData, editIndex]);
+
+  const duplicateStaffMessage = useMemo(() => {
+    if (!duplicateStaffModal.show) return "";
+    const staffLabel = duplicateStaffModal.staffName
+      ? `"${duplicateStaffModal.staffName}"`
+      : "This staff member";
+    if (duplicateStaffModal.officeName === "this office") {
+      return `${staffLabel} is already listed for this office.`;
+    }
+    const officeLabel = duplicateStaffModal.officeName || "another office";
+    return `${staffLabel} is already assigned to ${officeLabel}. Remove it there if you want to reassign.`;
+  }, [duplicateStaffModal]);
 
   // ðŸ”¹ OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
@@ -1498,10 +1536,7 @@ const Offices = () => {
       (staff) => getStaffNameKey(staff) === normalizedName
     );
     if (duplicateInOffice) {
-      showNotification(`"${normalizedName}" is already listed for this office.`, {
-        title: "Duplicate Staff",
-        tone: "warning",
-      });
+      openDuplicateStaffModal(normalizedName, "this office");
       return;
     }
 
@@ -1513,14 +1548,8 @@ const Offices = () => {
         )
     );
     if (conflictingOffice) {
-      const officeLabel =
-        conflictingOffice.name ||
-        conflictingOffice.officialName ||
-        "another office";
-      showNotification(`"${normalizedName}" is already assigned to ${officeLabel}.`, {
-        title: "Staff Already Assigned",
-        tone: "warning",
-      });
+      const officeLabel = getOfficeDisplayName(conflictingOffice);
+      openDuplicateStaffModal(normalizedName, officeLabel);
       return;
     }
     
@@ -1533,7 +1562,7 @@ const Offices = () => {
     }));
     setEditNewStaff("");
     setEditError("");
-  }, [editData.staffToVisit, editIndex, editNewStaff, offices, showNotification]);
+  }, [editData.staffToVisit, editIndex, editNewStaff, offices, openDuplicateStaffModal]);
 
   // ðŸ”¹ Remove staff from edit list
   const removeStaffFromEditList = useCallback((id) => {
@@ -1881,8 +1910,8 @@ const Offices = () => {
         onNewPurposeChange={handleAddPurposeInput}
         newStaff={newStaff}
         onNewStaffChange={handleAddStaffInput}
-        existingStaffNames={existingStaffNames}
-        onNotify={showNotification}
+        existingStaffLookup={existingStaffLookup}
+        onDuplicateStaff={openDuplicateStaffModal}
         error={addError}
         loading={addLoading}
       />
@@ -2704,6 +2733,14 @@ const Offices = () => {
         loading={Boolean(resetRequestActionId)}
         onConfirm={confirmResolveResetRequest}
         onCancel={closeResetRequestConfirmation}
+      />
+
+      <NotificationModal
+        show={duplicateStaffModal.show}
+        title="Duplicate Staff"
+        message={duplicateStaffMessage}
+        tone="warning"
+        onClose={closeDuplicateStaffModal}
       />
 
       <NotificationModal
