@@ -16,7 +16,11 @@ const isValidEmail = (email) =>
 const isValidUsername = (username) =>
   /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/.test((username || "").trim().toLowerCase());
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
-const normalizeStaffName = (name = "") => String(name || "").trim().toUpperCase();
+const normalizeStaffName = (name = "") =>
+  String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
 const getStaffNameKey = (staff) =>
   normalizeStaffName(typeof staff === "string" ? staff : staff?.name);
 const normalizeEditList = (items = []) =>
@@ -42,6 +46,18 @@ const getOfficeDisplayName = (office = {}) => {
       ""
   ).trim();
   return label || "another office";
+};
+const findDuplicateStaffName = (staffList = []) => {
+  const seen = new Set();
+  for (const staff of staffList || []) {
+    const key = getStaffNameKey(staff);
+    if (!key) continue;
+    if (seen.has(key)) {
+      return key;
+    }
+    seen.add(key);
+  }
+  return "";
 };
 const prioritizeSuperAdmins = (officeList = []) => {
   const offices = Array.isArray(officeList) ? [...officeList] : [];
@@ -376,12 +392,23 @@ const AddOfficeModal = memo(({
       return;
     }
     
-    onDataChange({
-      ...data,
-      staffToVisit: [...data.staffToVisit, { 
-        id: Date.now().toString(), 
-        name: normalizedName
-      }]
+    onDataChange((prev) => {
+      const alreadyAdded = prev.staffToVisit.some(
+        (staff) => getStaffNameKey(staff) === normalizedName
+      );
+      if (alreadyAdded) {
+        return prev;
+      }
+      return {
+        ...prev,
+        staffToVisit: [
+          ...prev.staffToVisit,
+          {
+            id: Date.now().toString(),
+            name: normalizedName,
+          },
+        ],
+      };
     });
     onNewStaffChange("");
   };
@@ -794,6 +821,70 @@ const NotificationModal = memo(({ show, title, message, tone = "info", onClose }
 });
 NotificationModal.displayName = "NotificationModal";
 
+const DuplicateStaffModal = memo(({ show, staffName, officeName, onClose }) => {
+  if (!show) return null;
+
+  const displayStaff = staffName || "Unknown Staff";
+  const displayOffice =
+    officeName === "this office" ? "This Office" : officeName || "Another Office";
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-amber-200 bg-amber-50 shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <h4 className="text-xl font-bold">Duplicate Staff Detected</h4>
+              <p className="text-sm text-white/90">
+                This staff/instructor is already assigned.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+            <p className="text-xs uppercase tracking-wide text-amber-600 font-semibold">
+              Staff / Instructor
+            </p>
+            <p className="mt-1 text-lg font-semibold text-gray-800">
+              {displayStaff}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+            <p className="text-xs uppercase tracking-wide text-amber-600 font-semibold">
+              Assigned Office
+            </p>
+            <p className="mt-1 text-lg font-semibold text-gray-800">
+              {displayOffice}
+            </p>
+          </div>
+
+          <p className="text-sm text-amber-800">
+            Please remove this staff from the existing office if you want to
+            reassign them.
+          </p>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg bg-amber-600 hover:bg-amber-700 transition"
+            >
+              OK, Got It
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+DuplicateStaffModal.displayName = "DuplicateStaffModal";
+
 const ConfirmationModal = memo(
   ({
     show,
@@ -1021,6 +1112,29 @@ const Offices = () => {
     return lookup;
   }, [offices]);
 
+  const findStaffConflictInOtherOffices = useCallback(
+    (staffList = [], options = {}) => {
+      const excludeIndex =
+        typeof options.excludeIndex === "number" ? options.excludeIndex : null;
+      for (const staff of staffList || []) {
+        const key = getStaffNameKey(staff);
+        if (!key) continue;
+        const conflict = offices.find(
+          (office, index) =>
+            (excludeIndex === null || index !== excludeIndex) &&
+            (office.staffToVisit || []).some(
+              (officeStaff) => getStaffNameKey(officeStaff) === key
+            )
+        );
+        if (conflict) {
+          return { nameKey: key, officeLabel: getOfficeDisplayName(conflict) };
+        }
+      }
+      return null;
+    },
+    [offices]
+  );
+
   const handleAddOfficeNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
     const suggested = buildSuggestedUsername(uppercaseName);
@@ -1210,18 +1324,6 @@ const Offices = () => {
     return JSON.stringify(currentSnapshot) !== JSON.stringify(editBaseline);
   }, [editBaseline, editData, editIndex]);
 
-  const duplicateStaffMessage = useMemo(() => {
-    if (!duplicateStaffModal.show) return "";
-    const staffLabel = duplicateStaffModal.staffName
-      ? `"${duplicateStaffModal.staffName}"`
-      : "This staff member";
-    if (duplicateStaffModal.officeName === "this office") {
-      return `${staffLabel} is already listed for this office.`;
-    }
-    const officeLabel = duplicateStaffModal.officeName || "another office";
-    return `${staffLabel} is already assigned to ${officeLabel}. Remove it there if you want to reassign.`;
-  }, [duplicateStaffModal]);
-
   // ðŸ”¹ OPTIMIZED: Add Office - Update local state immediately
   const saveAddOffice = useCallback(async () => {
     if (!addData.name.trim()) {
@@ -1231,6 +1333,18 @@ const Offices = () => {
     
     if (!addData.officialName.trim()) {
       setAddError("Official office name is required");
+      return;
+    }
+
+    const duplicateStaffName = findDuplicateStaffName(addData.staffToVisit);
+    if (duplicateStaffName) {
+      openDuplicateStaffModal(duplicateStaffName, "this office");
+      return;
+    }
+
+    const staffConflict = findStaffConflictInOtherOffices(addData.staffToVisit);
+    if (staffConflict) {
+      openDuplicateStaffModal(staffConflict.nameKey, staffConflict.officeLabel);
       return;
     }
 
@@ -1295,7 +1409,7 @@ const Offices = () => {
     } finally {
       setAddLoading(false);
     }
-  }, [addData, offices, showNotification]);
+  }, [addData, findStaffConflictInOtherOffices, openDuplicateStaffModal, showNotification]);
 
   // ðŸ”¹ Open edit modal
   const openEditModal = useCallback((index) => {
@@ -1553,13 +1667,24 @@ const Offices = () => {
       return;
     }
     
-    setEditData(prev => ({
-      ...prev,
-      staffToVisit: [...prev.staffToVisit, { 
-        id: Date.now().toString(), 
-        name: normalizedName
-      }]
-    }));
+    setEditData((prev) => {
+      const alreadyAdded = prev.staffToVisit.some(
+        (staff) => getStaffNameKey(staff) === normalizedName
+      );
+      if (alreadyAdded) {
+        return prev;
+      }
+      return {
+        ...prev,
+        staffToVisit: [
+          ...prev.staffToVisit,
+          {
+            id: Date.now().toString(),
+            name: normalizedName,
+          },
+        ],
+      };
+    });
     setEditNewStaff("");
     setEditError("");
   }, [editData.staffToVisit, editIndex, editNewStaff, offices, openDuplicateStaffModal]);
@@ -1591,6 +1716,20 @@ const Offices = () => {
 
     if (!editData.officialName.trim()) {
       setEditError("Official office name is required");
+      return;
+    }
+
+    const duplicateStaffName = findDuplicateStaffName(editData.staffToVisit);
+    if (duplicateStaffName) {
+      openDuplicateStaffModal(duplicateStaffName, "this office");
+      return;
+    }
+
+    const staffConflict = findStaffConflictInOtherOffices(editData.staffToVisit, {
+      excludeIndex: editIndex,
+    });
+    if (staffConflict) {
+      openDuplicateStaffModal(staffConflict.nameKey, staffConflict.officeLabel);
       return;
     }
 
@@ -1688,7 +1827,16 @@ const Offices = () => {
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
-  }, [closeEditModal, editIndex, editData, hasEditChanges, offices, showNotification]);
+  }, [
+    closeEditModal,
+    editIndex,
+    editData,
+    findStaffConflictInOtherOffices,
+    hasEditChanges,
+    openDuplicateStaffModal,
+    offices,
+    showNotification,
+  ]);
 
   // ðŸ”¹ OPTIMIZED: Confirm delete - Update local state immediately
   const confirmDelete = useCallback(async () => {
@@ -2735,11 +2883,10 @@ const Offices = () => {
         onCancel={closeResetRequestConfirmation}
       />
 
-      <NotificationModal
+      <DuplicateStaffModal
         show={duplicateStaffModal.show}
-        title="Duplicate Staff"
-        message={duplicateStaffMessage}
-        tone="warning"
+        staffName={duplicateStaffModal.staffName}
+        officeName={duplicateStaffModal.officeName}
         onClose={closeDuplicateStaffModal}
       />
 
