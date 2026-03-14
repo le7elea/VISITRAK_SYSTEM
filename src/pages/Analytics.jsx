@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BarChart2, ChevronDown, MoreHorizontal, MessageSquare, Calendar, FileText, Printer } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -1456,115 +1456,115 @@ const Analytics = ({ setActiveTab }) => {
     ];
   }, [officeAnalyticsRows, summaryOverallRow]);
 
-  // const printPages = useMemo(() => {
-  //   const PAGE_UNITS = 20;
-  //   const sections = [
-  //     {
-  //       key: 'A',
-  //       rows: charterRowsForPrint,
-  //       rowUnits: () => 1,
-  //       firstOverhead: 4,
-  //       continuationOverhead: 1,
-  //     },
-  //     {
-  //       key: 'B',
-  //       rows: summaryRowsForPrint,
-  //       rowUnits: () => 1,
-  //       firstOverhead: 3,
-  //       continuationOverhead: 1,
-  //     },
-  //     {
-  //       key: 'C',
-  //       rows: csfRowsForPrint,
-  //       rowUnits: (row) =>
-  //         Math.ceil(
-  //           Math.max(
-  //             1,
-  //             Array.isArray(row?.commendations) ? row.commendations.length : 0,
-  //             Array.isArray(row?.suggestions) ? row.suggestions.length : 0
-  //           ) / 2
-  //         ),
-  //       firstOverhead: 3,
-  //       continuationOverhead: 1,
-  //     },
-  //   ];
+  const printPages = useMemo(() => {
+    const PAGE_UNITS = 20;
+    const sections = [
+      {
+        key: 'A',
+        rows: charterRowsForPrint,
+        rowUnits: () => 1,
+        firstOverhead: 4,
+        continuationOverhead: 1,
+      },
+      {
+        key: 'B',
+        rows: summaryRowsForPrint,
+        rowUnits: () => 1,
+        firstOverhead: 3,
+        continuationOverhead: 1,
+      },
+      {
+        key: 'C',
+        rows: csfRowsForPrint,
+        rowUnits: (row) =>
+          Math.ceil(
+            Math.max(
+              1,
+              Array.isArray(row?.commendations) ? row.commendations.length : 0,
+              Array.isArray(row?.suggestions) ? row.suggestions.length : 0
+            ) / 2
+          ),
+        firstOverhead: 3,
+        continuationOverhead: 1,
+      },
+    ];
 
-  //   const pages = [];
-  //   let sectionIndex = 0;
-  //   let sectionRowIndex = 0;
+    const pages = [];
+    let sectionIndex = 0;
+    let sectionRowIndex = 0;
 
-  //   while (sectionIndex < sections.length) {
-  //     let remaining = PAGE_UNITS;
-  //     const pageSegments = [];
+    while (sectionIndex < sections.length) {
+      let remaining = PAGE_UNITS;
+      const pageSegments = [];
 
-  //     while (sectionIndex < sections.length) {
-  //       const section = sections[sectionIndex];
-  //       const isContinuation = sectionRowIndex > 0;
-  //       const overhead = isContinuation ? section.continuationOverhead : section.firstOverhead;
+      while (sectionIndex < sections.length) {
+        const section = sections[sectionIndex];
+        const isContinuation = sectionRowIndex > 0;
+        const overhead = isContinuation ? section.continuationOverhead : section.firstOverhead;
 
-  //       if (remaining < overhead) {
-  //         break;
-  //       }
+        if (remaining < overhead) {
+          break;
+        }
 
-  //       remaining -= overhead;
-  //       const rows = [];
+        remaining -= overhead;
+        const rows = [];
 
-  //       while (sectionRowIndex < section.rows.length) {
-  //         const candidate = section.rows[sectionRowIndex];
-  //         const units = Math.max(1, section.rowUnits(candidate));
+        while (sectionRowIndex < section.rows.length) {
+          const candidate = section.rows[sectionRowIndex];
+          const units = Math.max(1, section.rowUnits(candidate));
 
-  //         if (rows.length > 0 && units > remaining) {
-  //           break;
-  //         }
+          if (rows.length > 0 && units > remaining) {
+            break;
+          }
 
-  //         rows.push(candidate);
-  //         sectionRowIndex += 1;
-  //         remaining = Math.max(0, remaining - units);
+          rows.push(candidate);
+          sectionRowIndex += 1;
+          remaining = Math.max(0, remaining - units);
 
-  //         if (remaining === 0) {
-  //           break;
-  //         }
-  //       }
+          if (remaining === 0) {
+            break;
+          }
+        }
 
-  //       if (rows.length) {
-  //         pageSegments.push({
-  //           section: section.key,
-  //           rows,
-  //           showSectionTitle: !isContinuation,
-  //           showTableHeader: !isContinuation,
-  //         });
-  //       }
+        if (rows.length) {
+          pageSegments.push({
+            section: section.key,
+            rows,
+            showSectionTitle: !isContinuation,
+            showTableHeader: !isContinuation,
+          });
+        }
 
-  //       if (sectionRowIndex >= section.rows.length) {
-  //         sectionIndex += 1;
-  //         sectionRowIndex = 0;
-  //         continue;
-  //       }
+        if (sectionRowIndex >= section.rows.length) {
+          sectionIndex += 1;
+          sectionRowIndex = 0;
+          continue;
+        }
 
-  //       break;
-  //     }
+        break;
+      }
 
-  //     if (!pageSegments.length && sectionIndex < sections.length) {
-  //       const section = sections[sectionIndex];
-  //       const fallbackRow = section.rows[sectionRowIndex];
-  //       pageSegments.push({
-  //         section: section.key,
-  //         rows: [fallbackRow],
-  //         showSectionTitle: sectionRowIndex === 0,
-  //         showTableHeader: sectionRowIndex === 0,
-  //       });
-  //       sectionRowIndex += 1;
-  //       if (sectionRowIndex >= section.rows.length) {
-  //         sectionIndex += 1;
-  //         sectionRowIndex = 0;
-  //       }
-  //     }
+      if (!pageSegments.length && sectionIndex < sections.length) {
+        const section = sections[sectionIndex];
+        const fallbackRow = section.rows[sectionRowIndex];
+        pageSegments.push({
+          section: section.key,
+          rows: [fallbackRow],
+          showSectionTitle: sectionRowIndex === 0,
+          showTableHeader: sectionRowIndex === 0,
+        });
+        sectionRowIndex += 1;
+        if (sectionRowIndex >= section.rows.length) {
+          sectionIndex += 1;
+          sectionRowIndex = 0;
+        }
+      }
 
-  //     pages.push(pageSegments);
-  //   }
+      pages.push(pageSegments);
+    }
 
-  //   return pages.length ? pages : [[]];
-  // }, [charterRowsForPrint, summaryRowsForPrint, csfRowsForPrint]);
+    return pages.length ? pages : [[]];
+  }, [charterRowsForPrint, summaryRowsForPrint, csfRowsForPrint]);
 
   // --- Export Functions ---
   const exportToPDF = () => {
