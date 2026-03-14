@@ -316,16 +316,16 @@ const calculateSatisfactionRates = (feedbacks = []) => {
   };
 
   return [
-    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
-    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '??', color: 'bg-yellow-400' },
+    { label: 'Very Satisfied', pct: Math.round((counts.verySatisfied / total) * 100), emoji: '😄', color: 'bg-yellow-400' },
+    { label: 'Satisfied', pct: Math.round((counts.satisfied / total) * 100), emoji: '🙂', color: 'bg-yellow-400' },
     {
       label: 'Neither Satisfied nor Dissatisfied',
       pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100),
-      emoji: '??',
+      emoji: '😐',
       color: 'bg-yellow-400',
     },
-    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
-    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '??', color: 'bg-green-100' },
+    { label: 'Unsatisfied', pct: Math.round((counts.unsatisfied / total) * 100), emoji: '🙁', color: 'bg-green-100' },
+    { label: 'Very Unsatisfied', pct: Math.round((counts.veryUnsatisfied / total) * 100), emoji: '😠', color: 'bg-green-100' },
   ];
 };
 
@@ -512,7 +512,7 @@ const SatisfactionChart = ({ ratings }) => {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100">
-             <span className="text-xs">??</span> 
+             <span className="text-xs">😊</span> 
           </div>
           <h3 className="font-bold text-gray-800 dark:text-white">Satisfaction Rate</h3>
         </div>
@@ -540,7 +540,7 @@ const SatisfactionChart = ({ ratings }) => {
         ) : (
           <div className="text-center text-gray-500 py-8">
             <div className="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-50 mx-auto mb-3">
-              <span className="text-xl">??</span>
+              <span className="text-xl">😕</span>
             </div>
             <p className="text-gray-600">No satisfaction data available</p>
             <p className="text-sm text-gray-500 mt-1">Ratings will appear here when visitors submit feedback</p>
@@ -2891,4 +2891,3 @@ const Analytics = ({ setActiveTab }) => {
 };
 
 export default Analytics;
-
