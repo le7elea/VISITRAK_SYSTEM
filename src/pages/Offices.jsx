@@ -16,6 +16,9 @@ const isValidEmail = (email) =>
 const isValidUsername = (username) =>
   /^[a-z0-9][a-z0-9._-]{2,30}[a-z0-9]$/.test((username || "").trim().toLowerCase());
 const normalizeUsername = (username = "") => username.trim().toLowerCase();
+const normalizeStaffName = (name = "") => String(name || "").trim().toUpperCase();
+const getStaffNameKey = (staff) =>
+  normalizeStaffName(typeof staff === "string" ? staff : staff?.name);
 const normalizeEditList = (items = []) =>
   (Array.isArray(items) ? items : []).map((item) => String(item?.name || "").trim());
 const isSuperOffice = (office = {}) =>
@@ -315,6 +318,8 @@ const AddOfficeModal = memo(({
   onNewPurposeChange,
   newStaff,
   onNewStaffChange,
+  existingStaffNames,
+  onNotify,
   error,
   loading
 }) => {
@@ -344,13 +349,33 @@ const AddOfficeModal = memo(({
   };
 
   const addStaffToList = () => {
-    if (newStaff.trim() === "") return;
+    const normalizedName = normalizeStaffName(newStaff);
+    if (!normalizedName) return;
+
+    const duplicateInOffice = data.staffToVisit.some(
+      (staff) => getStaffNameKey(staff) === normalizedName
+    );
+    if (duplicateInOffice) {
+      onNotify?.(`"${normalizedName}" is already listed for this office.`, {
+        title: "Duplicate Staff",
+        tone: "warning",
+      });
+      return;
+    }
+
+    if (existingStaffNames?.has?.(normalizedName)) {
+      onNotify?.(`"${normalizedName}" is already assigned to another office.`, {
+        title: "Staff Already Assigned",
+        tone: "warning",
+      });
+      return;
+    }
     
     onDataChange({
       ...data,
       staffToVisit: [...data.staffToVisit, { 
         id: Date.now().toString(), 
-        name: toUppercase(newStaff.trim())
+        name: normalizedName
       }]
     });
     onNewStaffChange("");
@@ -972,6 +997,18 @@ const Offices = () => {
     () => buildSuggestedUsername(addData.name),
     [addData.name, buildSuggestedUsername]
   );
+  const existingStaffNames = useMemo(() => {
+    const names = new Set();
+    offices.forEach((office) => {
+      (office.staffToVisit || []).forEach((staff) => {
+        const key = getStaffNameKey(staff);
+        if (key) {
+          names.add(key);
+        }
+      });
+    });
+    return names;
+  }, [offices]);
 
   const handleAddOfficeNameChange = useCallback((value) => {
     const uppercaseName = toUppercase(value);
@@ -1454,17 +1491,49 @@ const Offices = () => {
 
   // ðŸ”¹ Add staff to edit list
   const addStaffToEditList = useCallback(() => {
-    if (editNewStaff.trim() === "") return;
+    const normalizedName = normalizeStaffName(editNewStaff);
+    if (!normalizedName) return;
+
+    const duplicateInOffice = editData.staffToVisit.some(
+      (staff) => getStaffNameKey(staff) === normalizedName
+    );
+    if (duplicateInOffice) {
+      showNotification(`"${normalizedName}" is already listed for this office.`, {
+        title: "Duplicate Staff",
+        tone: "warning",
+      });
+      return;
+    }
+
+    const conflictingOffice = offices.find(
+      (office, index) =>
+        index !== editIndex &&
+        (office.staffToVisit || []).some(
+          (staff) => getStaffNameKey(staff) === normalizedName
+        )
+    );
+    if (conflictingOffice) {
+      const officeLabel =
+        conflictingOffice.name ||
+        conflictingOffice.officialName ||
+        "another office";
+      showNotification(`"${normalizedName}" is already assigned to ${officeLabel}.`, {
+        title: "Staff Already Assigned",
+        tone: "warning",
+      });
+      return;
+    }
     
     setEditData(prev => ({
       ...prev,
       staffToVisit: [...prev.staffToVisit, { 
         id: Date.now().toString(), 
-        name: toUppercase(editNewStaff.trim())
+        name: normalizedName
       }]
     }));
     setEditNewStaff("");
-  }, [editNewStaff, toUppercase]);
+    setEditError("");
+  }, [editData.staffToVisit, editIndex, editNewStaff, offices, showNotification]);
 
   // ðŸ”¹ Remove staff from edit list
   const removeStaffFromEditList = useCallback((id) => {
@@ -1812,6 +1881,8 @@ const Offices = () => {
         onNewPurposeChange={handleAddPurposeInput}
         newStaff={newStaff}
         onNewStaffChange={handleAddStaffInput}
+        existingStaffNames={existingStaffNames}
+        onNotify={showNotification}
         error={addError}
         loading={addLoading}
       />
