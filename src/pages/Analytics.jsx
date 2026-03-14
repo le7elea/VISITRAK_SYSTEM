@@ -907,7 +907,20 @@ const [selectedOfficeFilter, setSelectedOfficeFilter] = useState("all");
 const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
 const [showIntegratedModal, setShowIntegratedModal] = useState(false);
 const [showOverallModal, setShowOverallModal] = useState(false);
+const [showPrintSignatoryModal, setShowPrintSignatoryModal] = useState(false);
+const [printSignatories, setPrintSignatories] = useState({
+prepared: "MA. MAELITH L. BUCHAN",
+verified: "HORONORIO O. UEHARA",
+approved: "MARRIETA C. MACALOLOT, PhD",
+});
 const dayRangeDropdownRef = useRef(null);
+
+const handlePrintSignatoryChange = (role, value) => {
+setPrintSignatories((previous) => ({
+...previous,
+[role]: value,
+}));
+};
 
 useEffect(() => {
 if (!showDayRangeDropdown) return undefined;
@@ -1109,6 +1122,23 @@ return [...officeMap.values()].sort((a, b) => a.localeCompare(b));
 }, [currentUser, offices, visits, feedbacks]);
 
 useEffect(() => {
+if (currentUser?.type !== "OfficeAdmin") return;
+
+const officeFromUser = normalizeOfficeName(currentUser.originalOffice || currentUser.office);
+if (!officeFromUser) return;
+
+const matchedOffice = officeFilterOptions.find((officeName) =>
+compareOfficeNames(officeName, officeFromUser)
+);
+const nextOfficeFilter = matchedOffice || officeFromUser;
+
+setSelectedOfficeFilter((prev) =>
+compareOfficeNames(prev, nextOfficeFilter) ? prev : nextOfficeFilter
+);
+}, [currentUser, officeFilterOptions]);
+
+useEffect(() => {
+if (currentUser?.type === "OfficeAdmin") return;
 if (selectedOfficeFilter === "all") return;
 const stillExists = officeFilterOptions.some((officeName) =>
 compareOfficeNames(officeName, selectedOfficeFilter)
@@ -1117,7 +1147,7 @@ compareOfficeNames(officeName, selectedOfficeFilter)
 if (!stillExists) {
 setSelectedOfficeFilter("all");
 }
-}, [officeFilterOptions, selectedOfficeFilter]);
+}, [currentUser, officeFilterOptions, selectedOfficeFilter]);
 
 // --- Filter visits based on date range ---
 const filteredVisits = useMemo(() => {
@@ -1246,6 +1276,17 @@ const printOfficeName = useMemo(() => {
 const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
 
 if (!currentUser) return fallbackOfficeName;
+if (currentUser.type === "SuperAdmin") {
+return toOfficialOfficeDisplayName(
+currentOfficeRecord?.officialName ||
+currentOfficeRecord?.name ||
+currentUser.originalOffice ||
+currentUser.office ||
+fallbackOfficeName,
+offices
+);
+}
+
 if (selectedOfficeFilter !== "all") return toOfficialOfficeDisplayName(selectedOfficeFilter, offices);
 
 return toOfficialOfficeDisplayName(
@@ -1638,10 +1679,25 @@ return [
 ];
 }, [officeAnalyticsRows, summaryOverallRow, isSingleOffice]);
 
+const preparedByNameForPrint =
+toTrimmedText(printSignatories.prepared) || "________________________";
+const verifiedByNameForPrint =
+toTrimmedText(printSignatories.verified) || "________________________";
+const approvedByNameForPrint =
+toTrimmedText(printSignatories.approved) || "________________________";
+
 // --- Export Functions ---
 const exportToPDF = () => {
+setShowPrintSignatoryModal(true);
+};
+
+const handleConfirmPrint = () => {
+setShowPrintSignatoryModal(false);
+
 try {
+setTimeout(() => {
 window.print();
+}, 0);
 } catch (error) {
 console.error('Error printing:', error);
 alert('Failed to print. Please try again.');
@@ -2059,12 +2115,27 @@ return (
            display: table-row-group;
          }
 
+          .print-wrapper > thead > tr > th,
          .print-wrapper > thead > tr > td,
          .print-wrapper > tbody > tr > td {
            border: none !important;
            padding: 0;
            vertical-align: top;
          }
+
+          .print-header-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14.67px;
+            font-weight: 400;
+          }
+
+          .print-header-meta p {
+            margin: 0;
+          }
 
          .analytics-report-title {
            font-size: 16px;
@@ -2150,11 +2221,22 @@ return (
          .analytics-signatories {
            margin-top: 24px;
            font-size: 16px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .analytics-signatories-row,
+          .analytics-signatory-group {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .analytics-signatory-name {
+            white-space: nowrap;
          }
 
          .analytics-table thead {
-            display: table-header-group !important;
-            display: table-row-group !important;
+           display: table-row-group !important;
          }
 
          .analytics-table tfoot {
@@ -2218,27 +2300,27 @@ return (
 );
 };
 const renderSignatories = () => (
-<div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
-<div className="grid grid-cols-2 gap-24 mb-6">
-<div className="text-center">
-<p className="text-left mb-3">Prepared:</p>
-<p className="font-semibold underline">MA. MAELITH L. BUCHAN</p>
-<p>Administrative Aide VI</p>
-</div>
+  <div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
+    <div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-6">
+      <div className="analytics-signatory-group text-center">
+        <p className="text-left mb-3">Prepared:</p>
+        <p className="font-semibold underline analytics-signatory-name">{preparedByNameForPrint}</p>
+        <p>Administrative Aide VI</p>
+      </div>
 
-<div className="text-center">
-<p className="text-left mb-3">Verified:</p>
-<p className="font-semibold underline">HORONORIO O. UEHARA</p>
-<p>Human Resource Management Officer II</p>
-</div>
-</div>
+      <div className="analytics-signatory-group text-center">
+        <p className="text-left mb-3">Verified:</p>
+        <p className="font-semibold underline analytics-signatory-name">{verifiedByNameForPrint}</p>
+        <p>Human Resource Management Officer II</p>
+      </div>
+    </div>
 
-<div className="max-w-md mx-auto text-center">
-<p className="mb-3 text-left pl-8">Approved:</p>
-<p className="font-semibold underline">MARRIETA C. MACALOLOT, PhD</p>
-<p>Campus Director</p>
-</div>
-</div>
+    <div className="analytics-signatory-group max-w-md mx-auto text-center">
+      <p className="mb-3 text-left pl-8">Approved:</p>
+      <p className="font-semibold underline analytics-signatory-name">{approvedByNameForPrint}</p>
+      <p>Campus Director</p>
+    </div>
+  </div>
 );
 
 const renderCsfTable = (rows, pageKey, showHeader = true) => {
@@ -2490,47 +2572,65 @@ return (
 return (
 <table className="print-wrapper w-full border-collapse">
 <thead>
-<tr>
-<td>
-{renderHeader()}
-{isSingleOffice ? (
-<>
-<h2
-className="analytics-report-title font-Arial"
-style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
->
-MONTHLY REPORT CARD
-</h2>
-<div
-className="flex justify-between mt-3 mb-4"
-style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
->
-<p>
-Office Concerned :
-<span className="underline ml-2">
-{officeConcernedNameForPrint}
-</span>
-</p>
-<p>
-Month :
-<span className="underline ml-2">{reportPeriodLabel}</span>
-</p>
-</div>
-</>
-) : (
-<h2
-className="analytics-report-title font-Arial"
-style={{ fontFamily: "Arial, sans-serif" }}
->
-MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
-</h2>
-)}
-</td>
-</tr>
+  <tr>
+    <th colSpan={20}>
+      {renderHeader()}
+    </th>
+  </tr>
+  <tr>
+    <th colSpan={20}>
+      {isSingleOffice ? (
+        <>
+          <h2
+            className="analytics-report-title font-Arial"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
+          >
+            MONTHLY REPORT CARD
+          </h2>
+          <div
+            className="flex justify-between mt-3 mb-4"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
+          >
+            <p>
+              Office Concerned :
+              <span className="underline ml-2">
+                {officeConcernedNameForPrint}
+              </span>
+            </p>
+            <p>
+              Month :
+              <span className="underline ml-2">{reportPeriodLabel}</span>
+            </p>
+          </div>
+        </>
+      ) : (
+        <h2
+          className="analytics-report-title font-Arial"
+          style={{ fontFamily: "Arial, sans-serif" }}
+        >
+          MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
+        </h2>
+      )}
+    </th>
+  </tr>
 </thead>
 <tbody>
 <tr>
 <td>
+                      {isSingleOffice && (
+                        <div className="print-header-meta">
+                          <p>
+                            Office Concerned :
+                            <span className="underline ml-2">
+                              {officeConcernedNameForPrint}
+                            </span>
+                          </p>
+                          <p>
+                            Month :
+                            <span className="underline ml-2">{reportPeriodLabel}</span>
+                          </p>
+                        </div>
+                      )}
 <div className="mt-4">
 <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
 <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
@@ -2545,6 +2645,10 @@ Campus: <span className="underline">Balilihan Campus</span>
 {renderCharterTable(charterRowsForPrint, 'section-a', true)}
 </div>
 
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
 <div className="mt-6">
 <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
 B. CSF Monthly Summary Rating
@@ -2552,6 +2656,10 @@ B. CSF Monthly Summary Rating
 {renderSummaryTable(summaryRowsForPrint, 'section-b', true)}
 </div>
 
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
 <div className="mt-6">
 <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
 C.
@@ -2561,10 +2669,11 @@ C.
 </p>
 {renderCsfTable(csfRowsForPrint, 'section-c', true)}
 </div>
-
-{renderSignatories()}
 </td>
 </tr>
+                  <tr>
+                    <td>{renderSignatories()}</td>
+                  </tr>
 </tbody>
 </table>
 );
@@ -2617,6 +2726,7 @@ className="h-[46px] inline-flex items-center gap-2 px-4 bg-white border border-g
 </button>
 </div>
 
+{currentUser?.type === "SuperAdmin" && (
 <div className="relative w-[170px]">
 <select
 className="h-[46px] w-full border border-gray-300 rounded-xl px-4 text-sm bg-white text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -2631,6 +2741,7 @@ onChange={(e) => setSelectedOfficeFilter(e.target.value)}
 ))}
 </select>
 </div>
+)}
 
 <div className="relative w-[260px] sm:w-[280px]" ref={dayRangeDropdownRef}>
 <button
@@ -2836,6 +2947,72 @@ return feedbacksWithComments.map((feedback) => (
 
 </div>
 </div>
+
+{showPrintSignatoryModal && (
+<div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/10 backdrop-blur-[2px] p-4 no-print print:hidden">
+<div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+<div className="mb-4">
+<h3 className="text-xl font-bold text-gray-900">Print Signatories</h3>
+<p className="mt-1 text-sm text-gray-600">
+Enter the names for the printed report, then continue printing.
+</p>
+</div>
+
+<div className="flex flex-col gap-4">
+<label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+<span>Prepared</span>
+<input
+type="text"
+value={printSignatories.prepared}
+onChange={(e) => handlePrintSignatoryChange("prepared", e.target.value)}
+placeholder="Enter name"
+className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+/>
+</label>
+
+<label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+<span>Verified</span>
+<input
+type="text"
+value={printSignatories.verified}
+onChange={(e) => handlePrintSignatoryChange("verified", e.target.value)}
+placeholder="Enter name"
+className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+/>
+</label>
+
+<label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+<span>Approved</span>
+<input
+type="text"
+value={printSignatories.approved}
+onChange={(e) => handlePrintSignatoryChange("approved", e.target.value)}
+placeholder="Enter name"
+className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+/>
+</label>
+</div>
+
+<div className="mt-6 flex justify-end gap-3">
+<button
+type="button"
+onClick={() => setShowPrintSignatoryModal(false)}
+className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+>
+Cancel
+</button>
+<button
+type="button"
+onClick={handleConfirmPrint}
+className="inline-flex items-center gap-2 rounded-lg bg-[#553C9A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#44307B]"
+>
+<Printer size={16} />
+<span>Continue to Print</span>
+</button>
+</div>
+</div>
+</div>
+)}
 
 {/* Integrated Insights Modal */}
 {showIntegratedModal && (
