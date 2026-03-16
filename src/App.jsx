@@ -1,5 +1,12 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
 import Login from "./pages/Login";
@@ -13,6 +20,65 @@ import {
 } from "./lib/userProfile.services";
 
 import "./App.css";
+
+const BackButtonManager = ({ user }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const lastGuardPathRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const path = location.pathname;
+    const shouldGuard = Boolean(user) || path === "/" || path === "/login";
+
+    if (shouldGuard && lastGuardPathRef.current !== path) {
+      window.history.pushState({ guard: true }, "", window.location.href);
+      lastGuardPathRef.current = path;
+      return;
+    }
+
+    if (!shouldGuard) {
+      lastGuardPathRef.current = null;
+    }
+  }, [user, location.pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const attemptCloseWindow = () => {
+      window.close();
+      setTimeout(() => {
+        if (!window.closed) {
+          window.location.replace("about:blank");
+        }
+      }, 100);
+    };
+
+    const handlePopState = () => {
+      const path = window.location.pathname;
+
+      if (user) {
+        if (path !== "/dashboard") {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+        window.history.pushState({ guard: true }, "", window.location.href);
+        return;
+      }
+
+      if (path === "/" || path === "/login") {
+        attemptCloseWindow();
+        window.history.pushState({ guard: true }, "", window.location.href);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [user, navigate]);
+
+  return null;
+};
 
 function App() {
   const [user, setUser] = useState(null);
@@ -79,6 +145,7 @@ function App() {
 
   return (
     <Router>
+      <BackButtonManager user={user} />
       <Routes>
         <Route
           path="/"

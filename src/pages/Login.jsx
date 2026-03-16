@@ -185,7 +185,7 @@ const Login = ({ onLogin }) => {
         onLogin(userData);
       }
 
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     } catch (error) {
       console.error("Login error:", error);
 
