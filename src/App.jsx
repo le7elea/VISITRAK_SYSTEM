@@ -24,22 +24,28 @@ import "./App.css";
 const BackButtonManager = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const lastGuardPathRef = useRef(null);
+  const guardTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const path = location.pathname;
-    const shouldGuard = Boolean(user) || path === "/" || path === "/login";
+    const ensureGuardState = (targetUrl) => {
+      if (!window.history.state || !window.history.state.guard) {
+        window.history.pushState(
+          { guard: true },
+          "",
+          targetUrl || window.location.href
+        );
+      }
+    };
 
-    if (shouldGuard && lastGuardPathRef.current !== path) {
-      window.history.pushState({ guard: true }, "", window.location.href);
-      lastGuardPathRef.current = path;
+    if (user) {
+      ensureGuardState("/dashboard");
       return;
     }
 
-    if (!shouldGuard) {
-      lastGuardPathRef.current = null;
+    if (location.pathname === "/" || location.pathname === "/login") {
+      ensureGuardState();
     }
   }, [user, location.pathname]);
 
@@ -61,9 +67,13 @@ const BackButtonManager = ({ user }) => {
       if (user) {
         if (path !== "/dashboard") {
           navigate("/dashboard", { replace: true });
-          return;
         }
-        window.history.pushState({ guard: true }, "", window.location.href);
+        if (guardTimeoutRef.current) {
+          clearTimeout(guardTimeoutRef.current);
+        }
+        guardTimeoutRef.current = setTimeout(() => {
+          window.history.pushState({ guard: true }, "", "/dashboard");
+        }, 0);
         return;
       }
 
@@ -74,7 +84,12 @@ const BackButtonManager = ({ user }) => {
     };
 
     window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (guardTimeoutRef.current) {
+        clearTimeout(guardTimeoutRef.current);
+      }
+    };
   }, [user, navigate]);
 
   return null;
