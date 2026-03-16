@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
+﻿﻿﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
 BarChart2,
 ChevronDown,
@@ -2061,194 +2061,194 @@ const PRINT_MARGIN_TOTAL_CM = PRINT_PAGE_MARGIN_CM * 2;
 return (
 <div className="min-h-screen bg-gray-50 font-sans text-slate-800">
 <style>{`
-       @media print {
-         body * {
-           visibility: hidden;
-         }
-         .print-only-section,
-         .print-only-section * {
-           visibility: visible;
-         }
-         .print-only-section {
-           position: absolute;
-           top: 0;
-           left: 0;
-           width: 100%;
-           background: #fff;
-           margin: 0;
-           padding: 0;
-         }
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        .print-only-section,
+        .print-only-section * {
+          visibility: visible;
+        }
+        .print-only-section {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          background: #fff;
+          margin: 0;
+          padding: 0;
+        }
 
-         .print-section {
-           display: block !important;
-         }
-         .no-print {
-           display: none !important;
-         }
-         @page {
-           size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
-           margin: ${PRINT_PAGE_MARGIN_CM}cm;
-         }
+        .print-section {
+          display: block !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+        @page {
+          size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
+          margin: ${PRINT_PAGE_MARGIN_CM}cm;
+        }
 
-         html,
-         body {
-           margin: 0;
-           -webkit-print-color-adjust: exact;
-           print-color-adjust: exact;
-         }
+        html,
+        body {
+          margin: 0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
 
-         .print-wrapper {
-           padding: 10px 14px;
-           font-family: "Times New Roman", Times, serif;
-           color: #111;
-           width: 100%;
-           max-width: calc(${PRINT_PAGE_WIDTH_IN}in - ${PRINT_MARGIN_TOTAL_CM}cm);
-           box-sizing: border-box;
-           border-collapse: collapse;
-         }
+        .print-wrapper {
+          padding: 10px 14px;
+          font-family: "Times New Roman", Times, serif;
+          color: #111;
+          width: 100%;
+          max-width: calc(${PRINT_PAGE_WIDTH_IN}in - ${PRINT_MARGIN_TOTAL_CM}cm);
+          box-sizing: border-box;
+          border-collapse: collapse;
+        }
 
-         .print-wrapper > thead {
-           display: table-header-group;
-         }
+        .print-wrapper > thead {
+          display: table-header-group;
+        }
 
-         .print-wrapper > tbody {
-           display: table-row-group;
-         }
+        .print-wrapper > tbody {
+          display: table-row-group;
+        }
 
-          .print-wrapper > thead > tr > th,
-         .print-wrapper > thead > tr > td,
-         .print-wrapper > tbody > tr > td {
-           border: none !important;
-           padding: 0;
-           vertical-align: top;
-         }
+         .print-wrapper > thead > tr > th,
+        .print-wrapper > thead > tr > td,
+        .print-wrapper > tbody > tr > td {
+          border: none !important;
+          padding: 0;
+          vertical-align: top;
+        }
 
-          .print-header-meta {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
-            margin-bottom: 8px;
-            font-family: Arial, sans-serif;
-            font-size: 14.67px;
-            font-weight: 400;
-          }
-
-          .print-header-meta p {
-            margin: 0;
-          }
-
-         .analytics-report-title {
-           font-size: 16px;
-           text-align: center;
-           letter-spacing: 0.03em;
-           text-transform: uppercase;
+         .print-header-meta {
+           display: flex;
+           justify-content: space-between;
+           margin-top: 8px;
            margin-bottom: 8px;
-         }
-
-         .analytics-section-label {
-           font-size: 12px;
-           font-weight: 700;
-           break-after: avoid-page;
-           page-break-after: avoid;
-         }
-
-         .analytics-table {
-           width: 100%;
-           table-layout: fixed;
-           page-break-inside: auto;
-           break-inside: auto;
-         }
-
-         .analytics-table th,
-         .analytics-table td {
-           border: 1px solid #000 !important;
-           vertical-align: top;
-         }
-
-         .analytics-table th {
-           font-size: 12px;
-           font-weight: 700;
-           text-align: center;
-           padding: 3px 2px;
-           vertical-align: middle;
            font-family: Arial, sans-serif;
-           word-break: break-word;
+           font-size: 14.67px;
+           font-weight: 400;
          }
 
-         .analytics-table td {
-           font-size: 12px;
-           line-height: 1.2;
-           padding: 2px 2px;
-           text-align: center;
-           font-family: Arial, sans-serif;
-           word-break: break-word;
-           white-space: normal;
+         .print-header-meta p {
+           margin: 0;
          }
 
-         .analytics-table-a td:first-child,
-         .analytics-table-b td:first-child,
-         .analytics-table-c td:first-child {
-           text-align: center;
-         }
+        .analytics-report-title {
+          font-size: 16px;
+          text-align: center;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+        }
 
-         .analytics-table-c td {
-           text-align: left;
-         }
+        .analytics-section-label {
+          font-size: 12px;
+          font-weight: 700;
+          break-after: avoid-page;
+          page-break-after: avoid;
+        }
 
-         .analytics-table-c td.text-center {
-           text-align: center;
-         }
+        .analytics-table {
+          width: 100%;
+          table-layout: fixed;
+          page-break-inside: auto;
+          break-inside: auto;
+        }
 
-         .analytics-table tr {
+        .analytics-table th,
+        .analytics-table td {
+          border: 1px solid #000 !important;
+          vertical-align: top;
+        }
+
+        .analytics-table th {
+          font-size: 12px;
+          font-weight: 700;
+          text-align: center;
+          padding: 3px 2px;
+          vertical-align: middle;
+          font-family: Arial, sans-serif;
+          word-break: break-word;
+        }
+
+        .analytics-table td {
+          font-size: 12px;
+          line-height: 1.2;
+          padding: 2px 2px;
+          text-align: center;
+          font-family: Arial, sans-serif;
+          word-break: break-word;
+          white-space: normal;
+        }
+
+        .analytics-table-a td:first-child,
+        .analytics-table-b td:first-child,
+        .analytics-table-c td:first-child {
+          text-align: center;
+        }
+
+        .analytics-table-c td {
+          text-align: left;
+        }
+
+        .analytics-table-c td.text-center {
+          text-align: center;
+        }
+
+        .analytics-table tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+          page-break-after: auto;
+        }
+
+        .analytics-table-c tr {
+          page-break-inside: avoid;
+        }
+
+        .analytics-table ul {
+          margin: 0;
+          padding-left: 14px;
+        }
+
+        .analytics-table li {
+          margin-bottom: 3px;
+        }
+
+        .analytics-signatories {
+          margin-top: 24px;
+          font-size: 16px;
            page-break-inside: avoid;
            break-inside: avoid;
-           page-break-after: auto;
          }
 
-         .analytics-table-c tr {
+         .analytics-signatories-row,
+         .analytics-signatory-group {
            page-break-inside: avoid;
+           break-inside: avoid;
          }
 
-         .analytics-table ul {
-           margin: 0;
-           padding-left: 14px;
-         }
+         .analytics-signatory-name {
+           white-space: nowrap;
+        }
 
-         .analytics-table li {
-           margin-bottom: 3px;
-         }
+        .analytics-table thead {
+          display: table-row-group !important;
+        }
 
-         .analytics-signatories {
-           margin-top: 24px;
-           font-size: 16px;
-            page-break-inside: avoid;
-            break-inside: avoid;
-          }
+        .analytics-table tfoot {
+          display: table-footer-group;
+        }
 
-          .analytics-signatories-row,
-          .analytics-signatory-group {
-            page-break-inside: avoid;
-            break-inside: avoid;
-          }
-
-          .analytics-signatory-name {
-            white-space: nowrap;
-         }
-
-         .analytics-table thead {
-           display: table-row-group !important;
-         }
-
-         .analytics-table tfoot {
-           display: table-footer-group;
-         }
-
-         * {
-           -webkit-print-color-adjust: exact !important;
-           print-color-adjust: exact !important;
-         }
-       }
-     `}</style>
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `}</style>
 
 <main className="flex flex-col print-section">
 {/* Print-Only Summary */}
@@ -2300,27 +2300,27 @@ return (
 );
 };
 const renderSignatories = () => (
-  <div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
-    <div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-6">
-      <div className="analytics-signatory-group text-center">
-        <p className="text-left mb-3">Prepared:</p>
-        <p className="font-semibold underline analytics-signatory-name">{preparedByNameForPrint}</p>
-        <p>Administrative Aide VI</p>
-      </div>
+<div className="analytics-signatories" style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}>
+<div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-6">
+<div className="analytics-signatory-group text-center">
+<p className="text-left mb-3">Prepared:</p>
+<p className="font-semibold underline analytics-signatory-name">{preparedByNameForPrint}</p>
+<p>Administrative Aide VI</p>
+</div>
 
-      <div className="analytics-signatory-group text-center">
-        <p className="text-left mb-3">Verified:</p>
-        <p className="font-semibold underline analytics-signatory-name">{verifiedByNameForPrint}</p>
-        <p>Human Resource Management Officer II</p>
-      </div>
-    </div>
+<div className="analytics-signatory-group text-center">
+<p className="text-left mb-3">Verified:</p>
+<p className="font-semibold underline analytics-signatory-name">{verifiedByNameForPrint}</p>
+<p>Human Resource Management Officer II</p>
+</div>
+</div>
 
-    <div className="analytics-signatory-group max-w-md mx-auto text-center">
-      <p className="mb-3 text-left pl-8">Approved:</p>
-      <p className="font-semibold underline analytics-signatory-name">{approvedByNameForPrint}</p>
-      <p>Campus Director</p>
-    </div>
-  </div>
+<div className="analytics-signatory-group max-w-md mx-auto text-center">
+<p className="mb-3 text-left pl-8">Approved:</p>
+<p className="font-semibold underline analytics-signatory-name">{approvedByNameForPrint}</p>
+<p>Campus Director</p>
+</div>
+</div>
 );
 
 const renderCsfTable = (rows, pageKey, showHeader = true) => {
@@ -2572,25 +2572,25 @@ return (
 return (
 <table className="print-wrapper w-full border-collapse">
 <thead>
-  <tr>
-    <th colSpan={20}>
-      {renderHeader()}
-    </th>
-  </tr>
-  <tr>
-    <th colSpan={20}>
-      {isSingleOffice ? (
-        <>
-          <h2
-            className="analytics-report-title font-Arial"
-            style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
-          >
-            MONTHLY REPORT CARD
-          </h2>
-          <div
-            className="flex justify-between mt-3 mb-4"
-            style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
-          >
+<tr>
+<th colSpan={20}>
+{renderHeader()}
+</th>
+</tr>
+<tr>
+<th colSpan={20}>
+{isSingleOffice ? (
+<>
+<h2
+className="analytics-report-title font-Arial"
+style={{ fontFamily: "Arial, sans-serif", fontSize: "21.33px" }}
+>
+MONTHLY REPORT CARD
+</h2>
+<div
+className="flex justify-between mt-3 mb-4"
+style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
+>
             <p className="font-normal">
               Office Concerned :
               <span className="underline ml-2">
@@ -2601,22 +2601,23 @@ return (
               Month :
               <span className="underline ml-2">{reportPeriodLabel}</span>
             </p>
-          </div>
-        </>
-      ) : (
-        <h2
-          className="analytics-report-title font-Arial"
-          style={{ fontFamily: "Arial, sans-serif" }}
-        >
-          MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
-        </h2>
-      )}
-    </th>
-  </tr>
+</div>
+</>
+) : (
+<h2
+className="analytics-report-title font-Arial"
+style={{ fontFamily: "Arial, sans-serif" }}
+>
+MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{reportPeriodLabel}</span>
+</h2>
+)}
+</th>
+</tr>
 </thead>
 <tbody>
 <tr>
 <td>
+                      
 <div className="mt-4">
 <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
 <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
@@ -2631,10 +2632,10 @@ Campus: <span className="underline">Balilihan Campus</span>
 {renderCharterTable(charterRowsForPrint, 'section-a', true)}
 </div>
 
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
+</td>
+</tr>
+<tr>
+<td>
 <div className="mt-6">
 <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
 B. CSF Monthly Summary Rating
@@ -2642,10 +2643,10 @@ B. CSF Monthly Summary Rating
 {renderSummaryTable(summaryRowsForPrint, 'section-b', true)}
 </div>
 
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
+</td>
+</tr>
+<tr>
+<td>
 <div className="mt-6">
 <p className="analytics-section-label mb-2" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
 C.
@@ -2657,10 +2658,12 @@ C.
 </div>
 </td>
 </tr>
-                  <tr>
-                    <td>{renderSignatories()}</td>
-                  </tr>
 </tbody>
+<tfoot>
+<tr>
+<td colSpan={20}>{renderSignatories()}</td>
+</tr>
+</tfoot>
 </table>
 );
 })()}
@@ -2693,14 +2696,14 @@ Super Admin View
 
 <div className="flex flex-wrap justify-start sm:justify-end items-center gap-2.5 no-print">
 {/* <div className="relative">
-                  <button 
-                    onClick={() => setShowOverallModal(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#6B46C1] to-[#553C9A] text-white rounded-lg shadow-lg hover:shadow-xl transition-all text-sm font-medium"
-                  >
-                    <BarChart2 size={18} />
-                    <span>Overall Integration</span>
-                  </button>
-                </div> */}
+                 <button 
+                   onClick={() => setShowOverallModal(true)}
+                   className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#6B46C1] to-[#553C9A] text-white rounded-lg shadow-lg hover:shadow-xl transition-all text-sm font-medium"
+                 >
+                   <BarChart2 size={18} />
+                   <span>Overall Integration</span>
+                 </button>
+               </div> */}
 
 <div className="relative">
 <button
@@ -2750,8 +2753,8 @@ className="h-[46px] w-full border border-gray-300 rounded-xl px-4 bg-white text-
 <ChevronDown
 size={16}
 className={`text-gray-600 transition-transform ${
-                        showDayRangeDropdown ? "rotate-180" : ""
-                      }`}
+                       showDayRangeDropdown ? "rotate-180" : ""
+                     }`}
 />
 </button>
 
@@ -2844,8 +2847,8 @@ Apply
 {/* Feedback Insights */}
 <Card
 className={`relative overflow-hidden ${
-               canOpenFeedbackTab ? "cursor-pointer hover:shadow-md transition-shadow duration-200" : ""
-             }`}
+              canOpenFeedbackTab ? "cursor-pointer hover:shadow-md transition-shadow duration-200" : ""
+            }`}
 onClick={canOpenFeedbackTab ? handleOpenFeedbackTab : undefined}
 onKeyDown={canOpenFeedbackTab ? handleFeedbackCardKeyDown : undefined}
 role={canOpenFeedbackTab ? "button" : undefined}
@@ -2867,14 +2870,14 @@ aria-label={canOpenFeedbackTab ? "Open feedback section" : undefined}
 )}
 
 {/* <div className="relative no-print">
-                 <button 
-                   onClick={() => setShowIntegratedModal(true)}
-                   className="flex items-center gap-2 px-4 py-2 bg-[#553C9A] text-white rounded-lg text-sm font-medium hover:bg-[#44307B] transition-colors shadow-lg shadow-purple-200"
-                 >
-                   <FileText size={16} />
-                   <span>Integrate</span>
-                 </button>
-               </div> */}
+                <button 
+                  onClick={() => setShowIntegratedModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#553C9A] text-white rounded-lg text-sm font-medium hover:bg-[#44307B] transition-colors shadow-lg shadow-purple-200"
+                >
+                  <FileText size={16} />
+                  <span>Integrate</span>
+                </button>
+              </div> */}
 </div>
 
 {/* Scrollable Insights */}

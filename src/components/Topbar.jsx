@@ -335,6 +335,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         visitorData={selectedVisitor}
+        showRatings={false}
       />
 
       <header className="flex justify-end items-center gap-4 mb-6">

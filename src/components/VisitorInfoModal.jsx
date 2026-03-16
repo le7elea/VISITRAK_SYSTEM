@@ -5,7 +5,13 @@ const formatRating = (value) => {
   return Number.isFinite(numeric) ? `${numeric.toFixed(1)}/5` : "N/A";
 };
 
-const VisitorInfoModal = ({ isOpen, onClose, visitorData, ratingsOnly = false }) => {
+const VisitorInfoModal = ({
+  isOpen,
+  onClose,
+  visitorData,
+  ratingsOnly = false,
+  showRatings = true,
+}) => {
   if (!isOpen || !visitorData) return null;
 
   const questionRatings = Array.isArray(visitorData.questionRatings)
@@ -19,6 +25,8 @@ const VisitorInfoModal = ({ isOpen, onClose, visitorData, ratingsOnly = false })
     .filter(({ rating }) =>
       Number.isFinite(typeof rating === "number" ? rating : parseFloat(rating))
     );
+
+  const showRatingsSection = ratingsOnly || showRatings;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -142,28 +150,29 @@ const VisitorInfoModal = ({ isOpen, onClose, visitorData, ratingsOnly = false })
             </>
           )}
 
-          {/* Ratings */}
-          <div>
-            <label className="text-sm text-gray-500 dark:text-gray-400 mb-2 block">
-              Ratings:
-            </label>
-            {numberedRatings.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {numberedRatings.map((item) => (
-                  <span
-                    key={`rating-${item.questionNumber}`}
-                    className="inline-flex items-center px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-semibold text-yellow-600 dark:text-yellow-400"
-                  >
-                    Q{item.questionNumber}: {formatRating(item.rating)}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                No ratings available for this visitor.
-              </p>
-            )}
-          </div>
+          {showRatingsSection && (
+            <div>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-2 block">
+                Ratings:
+              </label>
+              {numberedRatings.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {numberedRatings.map((item) => (
+                    <span
+                      key={`rating-${item.questionNumber}`}
+                      className="inline-flex items-center px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-semibold text-yellow-600 dark:text-yellow-400"
+                    >
+                      Q{item.questionNumber}: {formatRating(item.rating)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  No ratings available for this visitor.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

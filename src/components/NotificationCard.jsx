@@ -558,6 +558,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         visitorData={selectedVisitor}
+        showRatings={false}
       />
 
       {/* Enhanced Loading overlay */}
