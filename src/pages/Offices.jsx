@@ -1,5 +1,5 @@
 // pages/Offices.jsx
-import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { Pencil, Trash2, Plus, X, AlertTriangle, UserPlus, Target, Mail, Calendar, Users, Hash, Key, Building, User, Check, Shield, Lock, Eye, EyeOff } from "lucide-react";
 import {
   fetchOffices,
@@ -21,6 +21,11 @@ const normalizeStaffName = (name = "") =>
     .trim()
     .replace(/\s+/g, " ")
     .toUpperCase();
+const normalizeOfficeName = (name = "") =>
+  String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 const getStaffNameKey = (staff) =>
   normalizeStaffName(typeof staff === "string" ? staff : staff?.name);
 const normalizeEditList = (items = []) =>
@@ -349,6 +354,13 @@ const AddOfficeModal = memo(({
   error,
   loading
 }) => {
+  const scrollContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (!show || !error || !scrollContainerRef.current) return;
+    scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+  }, [error, show]);
+
   if (!show) return null;
 
   const toUppercase = (text) => text ? text.toUpperCase() : "";
@@ -483,7 +495,7 @@ const AddOfficeModal = memo(({
           </div>
         </div>
         
-        <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
+          <div ref={scrollContainerRef} className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
           {error && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
               <div className="flex items-center gap-3">
@@ -1009,6 +1021,7 @@ const Offices = () => {
   const [editNewStaff, setEditNewStaff] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
+  const editModalScrollRef = useRef(null);
   const [editBaseline, setEditBaseline] = useState(null);
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
   const [showResetPasswordFields, setShowResetPasswordFields] = useState(false);
@@ -1046,6 +1059,11 @@ const Offices = () => {
   const [deleteIndex, setDeleteIndex] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (editIndex === null || !editError || !editModalScrollRef.current) return;
+    editModalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+  }, [editError, editIndex]);
 
   // ðŸ”¹ Helper functions with useCallback
   const toUppercase = useCallback((text) => text ? text.toUpperCase() : "", []);
@@ -1336,6 +1354,24 @@ const Offices = () => {
       return;
     }
 
+    const nameKey = normalizeOfficeName(addData.name);
+    const officialKey = normalizeOfficeName(addData.officialName);
+    const existingOffice = offices.find((office) => {
+      const officeNameKey = normalizeOfficeName(office?.name);
+      const officeOfficialKey = normalizeOfficeName(office?.officialName);
+      return (
+        (nameKey &&
+          (nameKey === officeNameKey || nameKey === officeOfficialKey)) ||
+        (officialKey &&
+          (officialKey === officeNameKey || officialKey === officeOfficialKey))
+      );
+    });
+
+    if (existingOffice) {
+      setAddError("An office with this name already exists");
+      return;
+    }
+
     const duplicateStaffName = findDuplicateStaffName(addData.staffToVisit);
     if (duplicateStaffName) {
       openDuplicateStaffModal(duplicateStaffName, "this office");
@@ -1409,7 +1445,7 @@ const Offices = () => {
     } finally {
       setAddLoading(false);
     }
-  }, [addData, findStaffConflictInOtherOffices, openDuplicateStaffModal, showNotification]);
+  }, [addData, findStaffConflictInOtherOffices, offices, openDuplicateStaffModal, showNotification]);
 
   // ðŸ”¹ Open edit modal
   const openEditModal = useCallback((index) => {
@@ -1716,6 +1752,25 @@ const Offices = () => {
 
     if (!editData.officialName.trim()) {
       setEditError("Official office name is required");
+      return;
+    }
+
+    const nameKey = normalizeOfficeName(editData.name);
+    const officialKey = normalizeOfficeName(editData.officialName);
+    const existingOffice = offices.find((office, index) => {
+      if (index === editIndex) return false;
+      const officeNameKey = normalizeOfficeName(office?.name);
+      const officeOfficialKey = normalizeOfficeName(office?.officialName);
+      return (
+        (nameKey &&
+          (nameKey === officeNameKey || nameKey === officeOfficialKey)) ||
+        (officialKey &&
+          (officialKey === officeNameKey || officialKey === officeOfficialKey))
+      );
+    });
+
+    if (existingOffice) {
+      setEditError("An office with this name already exists");
       return;
     }
 
@@ -2103,7 +2158,7 @@ const Offices = () => {
               </div>
             </div>
             
-            <div className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div ref={editModalScrollRef} className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]">
               {editError && (
                 <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
                   <div className="flex items-center gap-3">
