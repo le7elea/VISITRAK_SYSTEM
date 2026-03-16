@@ -65,6 +65,7 @@ const BackButtonManager = ({ user }) => {
       const path = window.location.pathname;
 
       if (user) {
+        window.dispatchEvent(new CustomEvent("visitrak:logout-request"));
         if (path !== "/dashboard") {
           navigate("/dashboard", { replace: true });
         }

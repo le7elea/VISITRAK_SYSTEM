@@ -65,6 +65,13 @@ const Dashboard = ({
   const knownResetRequestIds = useRef(new Set());
   const resetAudioContextRef = useRef(null);
 
+  useEffect(() => {
+    const handleLogoutRequest = () => setShowConfirm(true);
+    window.addEventListener("visitrak:logout-request", handleLogoutRequest);
+    return () =>
+      window.removeEventListener("visitrak:logout-request", handleLogoutRequest);
+  }, []);
+
   const getResetAudioContext = useCallback(() => {
     if (typeof window === "undefined") return null;
 
