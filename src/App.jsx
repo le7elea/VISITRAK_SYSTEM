@@ -54,11 +54,6 @@ const BackButtonManager = ({ user }) => {
 
     const attemptCloseWindow = () => {
       window.close();
-      setTimeout(() => {
-        if (!window.closed) {
-          window.location.replace("about:blank");
-        }
-      }, 100);
     };
 
     const handlePopState = () => {
