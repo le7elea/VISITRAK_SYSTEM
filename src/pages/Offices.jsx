@@ -1757,21 +1757,30 @@ const Offices = () => {
 
     const nameKey = normalizeOfficeName(editData.name);
     const officialKey = normalizeOfficeName(editData.officialName);
-    const existingOffice = offices.find((office, index) => {
-      if (index === editIndex) return false;
-      const officeNameKey = normalizeOfficeName(office?.name);
-      const officeOfficialKey = normalizeOfficeName(office?.officialName);
-      return (
-        (nameKey &&
-          (nameKey === officeNameKey || nameKey === officeOfficialKey)) ||
-        (officialKey &&
-          (officialKey === officeNameKey || officialKey === officeOfficialKey))
-      );
-    });
+    const baselineNameKey = normalizeOfficeName(editBaseline?.name || "");
+    const baselineOfficialKey = normalizeOfficeName(editBaseline?.officialName || "");
+    const nameChanged =
+      !editBaseline || nameKey !== baselineNameKey || officialKey !== baselineOfficialKey;
 
-    if (existingOffice) {
-      setEditError("An office with this name already exists");
-      return;
+    if (nameChanged) {
+      const currentOfficeId = editData.id;
+      const existingOffice = offices.find((office, index) => {
+        if (currentOfficeId && office?.id === currentOfficeId) return false;
+        if (!currentOfficeId && index === editIndex) return false;
+        const officeNameKey = normalizeOfficeName(office?.name);
+        const officeOfficialKey = normalizeOfficeName(office?.officialName);
+        return (
+          (nameKey &&
+            (nameKey === officeNameKey || nameKey === officeOfficialKey)) ||
+          (officialKey &&
+            (officialKey === officeNameKey || officialKey === officeOfficialKey))
+        );
+      });
+
+      if (existingOffice) {
+        setEditError("An office with this name already exists");
+        return;
+      }
     }
 
     const duplicateStaffName = findDuplicateStaffName(editData.staffToVisit);
@@ -1886,6 +1895,7 @@ const Offices = () => {
     closeEditModal,
     editIndex,
     editData,
+    editBaseline,
     findStaffConflictInOtherOffices,
     hasEditChanges,
     openDuplicateStaffModal,
