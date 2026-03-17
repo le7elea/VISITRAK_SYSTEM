@@ -1,4 +1,4 @@
-﻿﻿﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
+﻿﻿﻿﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
 BarChart2,
 ChevronDown,
@@ -2591,16 +2591,8 @@ MONTHLY REPORT CARD
 className="flex justify-between mt-3 mb-4"
 style={{ fontFamily: "Arial, sans-serif", fontSize: "14.67px" }}
 >
-            <p className="font-normal">
-              Office Concerned :
-              <span className="underline ml-2">
-                {officeConcernedNameForPrint}
-              </span>
-            </p>
-            <p className="font-normal">
-              Month :
-              <span className="underline ml-2">{reportPeriodLabel}</span>
-            </p>
+           
+            
 </div>
 </>
 ) : (
@@ -2617,7 +2609,20 @@ MONTHLY CUSTOMER SATISFACTION SUMMARY FORM - <span className="underline">{report
 <tbody>
 <tr>
 <td>
-                      
+                      {isSingleOffice && (
+                        <div className="print-header-meta">
+                          <p>
+                            Office Concerned :
+                            <span className="underline ml-2">
+                              {officeConcernedNameForPrint}
+                            </span>
+                          </p>
+                          <p>
+                            Month :
+                            <span className="underline ml-2">{reportPeriodLabel}</span>
+                          </p>
+                        </div>
+                      )}
 <div className="mt-4">
 <div className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}>
 <p className="analytics-section-label" style={{ fontSize: "12px", fontFamily: "Arial, sans-serif" }}>
@@ -2658,12 +2663,10 @@ C.
 </div>
 </td>
 </tr>
-</tbody>
-<tfoot>
 <tr>
-<td colSpan={20}>{renderSignatories()}</td>
+<td>{renderSignatories()}</td>
 </tr>
-</tfoot>
+</tbody>
 </table>
 );
 })()}
