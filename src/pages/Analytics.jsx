@@ -2424,7 +2424,8 @@ const Analytics = ({ setActiveTab }) => {
           table-layout: fixed;
           page-break-inside: auto;
           break-inside: auto;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
         }
 
         .analytics-table th,

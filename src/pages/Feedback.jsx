@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { Printer } from "lucide-react";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -83,6 +84,12 @@ const Feedback = ({ user }) => {
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [offices, setOffices] = useState([]);
+  const [showPrintSignatoryModal, setShowPrintSignatoryModal] = useState(false);
+  const [printSignatories, setPrintSignatories] = useState({
+    prepared: "MA. MAELITH L. BUCHAN",
+    verified: "HORONORIO O. UEHARA",
+    approved: "MARRIETA C. MACALOLOT, PhD",
+  });
   const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
   
   // Use the custom hook to fetch feedbacks
@@ -94,6 +101,13 @@ const Feedback = ({ user }) => {
       setOffice(user.office);
     }
   }, [isOfficeAdmin, user?.office]);
+
+  const handlePrintSignatoryChange = (role, value) => {
+    setPrintSignatories((previous) => ({
+      ...previous,
+      [role]: value,
+    }));
+  };
 
   // Fetch offices from Firestore
   useEffect(() => {
@@ -326,11 +340,19 @@ const Feedback = ({ user }) => {
   };
 
   const exportPDF = () => {
+    setShowPrintSignatoryModal(true);
+  };
+
+  const handleConfirmPrint = () => {
+    setShowPrintSignatoryModal(false);
+
     try {
-      window.print();
+      setTimeout(() => {
+        window.print();
+      }, 0);
     } catch (error) {
-      console.error('Error printing:', error);
-      alert('Failed to print. Please try again.');
+      console.error("Error printing:", error);
+      alert("Failed to print. Please try again.");
     }
   };
 
@@ -446,6 +468,13 @@ const Feedback = ({ user }) => {
       .toLocaleDateString("en-US", { month: "long", year: "numeric" })
       .toUpperCase();
   }, [dayRange.start, dayRange.end, filteredFeedbacks]);
+
+  const preparedByNameForPrint =
+    toTrimmedText(printSignatories.prepared) || "________________________";
+  const verifiedByNameForPrint =
+    toTrimmedText(printSignatories.verified) || "________________________";
+  const approvedByNameForPrint =
+    toTrimmedText(printSignatories.approved) || "________________________";
 
   const renderPrintList = (items = []) => {
     if (!Array.isArray(items) || items.length === 0) {
@@ -658,13 +687,17 @@ const Feedback = ({ user }) => {
                     <div className="grid grid-cols-2 gap-24 mb-6 feedback-signatories-row">
                       <div className="text-center feedback-signatory-group">
                         <p className="text-left mb-3">Prepared:</p>
-                        <p className="font-semibold underline feedback-signatory-name">MA. MAELITH L. BUCHAN</p>
+                        <p className="font-semibold underline feedback-signatory-name">
+                          {preparedByNameForPrint}
+                        </p>
                         <p>Administrative Aide VI</p>
                       </div>
 
                       <div className="text-center feedback-signatory-group">
                         <p className="text-left mb-3">Verified:</p>
-                        <p className="font-semibold underline feedback-signatory-name">HORONORIO O. UEHARA</p>
+                        <p className="font-semibold underline feedback-signatory-name">
+                          {verifiedByNameForPrint}
+                        </p>
                         <p>Human Resource Management Officer II</p>
                       </div>
                     </div>
@@ -672,7 +705,9 @@ const Feedback = ({ user }) => {
                     <div className="max-w-md mx-auto text-center feedback-signatories-row">
                       <div className="feedback-signatory-group">
                         <p className="mb-3 text-left pl-10">Approved:</p>
-                        <p className="font-semibold underline feedback-signatory-name">MARRIETA C. MACALOLOT, PhD</p>
+                        <p className="font-semibold underline feedback-signatory-name">
+                          {approvedByNameForPrint}
+                        </p>
                         <p>Campus Director</p>
                       </div>
                     </div>
@@ -683,6 +718,78 @@ const Feedback = ({ user }) => {
           </table>
         </div>
       </div>
+
+      {showPrintSignatoryModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/10 backdrop-blur-[2px] p-4 no-print print:hidden">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Print Signatories</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Enter the names for the printed report, then continue printing.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                <span>Prepared</span>
+                <input
+                  type="text"
+                  value={printSignatories.prepared}
+                  onChange={(e) =>
+                    handlePrintSignatoryChange("prepared", e.target.value)
+                  }
+                  placeholder="Enter name"
+                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                <span>Verified</span>
+                <input
+                  type="text"
+                  value={printSignatories.verified}
+                  onChange={(e) =>
+                    handlePrintSignatoryChange("verified", e.target.value)
+                  }
+                  placeholder="Enter name"
+                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                <span>Approved</span>
+                <input
+                  type="text"
+                  value={printSignatories.approved}
+                  onChange={(e) =>
+                    handlePrintSignatoryChange("approved", e.target.value)
+                  }
+                  placeholder="Enter name"
+                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPrintSignatoryModal(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPrint}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#553C9A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#44307B]"
+              >
+                <Printer size={16} />
+                <span>Continue to Print</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print-specific styles */}
       <style>{`
