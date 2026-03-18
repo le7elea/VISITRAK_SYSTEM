@@ -23,8 +23,8 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
                 onClick={() => onViewFull?.(v)}
                 className="w-full rounded-lg px-2 py-3 sm:py-4 text-left transition hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:hover:bg-gray-800/70"
               >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 mr-4">
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-medium text-gray-800 dark:text-white">
                       {v.alias}{" "}
                       <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -32,7 +32,7 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
                       </span>
                     </h4>
 
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-2 break-all">
                       {v.comment || "No feedback given."}
                     </p>
 

@@ -68,22 +68,32 @@ const normalizeQuestionRatings = (answers, questions = []) => {
   return [];
 };
 
+const toLocalDateInput = (dateObj) => {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
+
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
   const [office, setOffice] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [offices, setOffices] = useState([]);
+  const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
   
   // Use the custom hook to fetch feedbacks
   const { feedbacks, loading, error } = useFeedbackRatings();
 
   // ✅ FIX: Set office to user's office if they're an Office Admin
   useEffect(() => {
-    if ((user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin") && user?.office) {
+    if (isOfficeAdmin && user?.office) {
       setOffice(user.office);
     }
-  }, [user]);
+  }, [isOfficeAdmin, user?.office]);
 
   // Fetch offices from Firestore
   useEffect(() => {
@@ -118,11 +128,11 @@ const Feedback = ({ user }) => {
     try {
       // Handle both Date objects and Firestore Timestamps
       if (createdAt.toDate) {
-        return createdAt.toDate().toISOString().split('T')[0];
-      } else if (createdAt.toISOString) {
-        return createdAt.toISOString().split('T')[0];
-      } else if (typeof createdAt === 'string') {
-        return new Date(createdAt).toISOString().split('T')[0];
+        return toLocalDateInput(createdAt.toDate());
+      } else if (createdAt instanceof Date) {
+        return toLocalDateInput(createdAt);
+      } else if (typeof createdAt === "string" || typeof createdAt === "number") {
+        return toLocalDateInput(new Date(createdAt));
       }
     } catch (err) {
       console.error("Error parsing date:", err);
@@ -142,16 +152,18 @@ const Feedback = ({ user }) => {
         dateObj = createdAt.toDate();
       } else if (createdAt instanceof Date) {
         dateObj = createdAt;
-      } else if (typeof createdAt === 'string') {
+      } else if (typeof createdAt === "string" || typeof createdAt === "number") {
         dateObj = new Date(createdAt);
-      } else {
-        dateObj = new Date();
       }
-      
-      return dateObj.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
+
+      if (!dateObj || Number.isNaN(dateObj.getTime())) {
+        return "Date not available";
+      }
+
+      return dateObj.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
       });
     } catch (err) {
       console.error("Error formatting date:", err);
@@ -202,7 +214,7 @@ const Feedback = ({ user }) => {
           
           // Handle office filter based on user role
           let matchesOffice = true;
-          if (user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin") {
+          if (isOfficeAdmin) {
             matchesOffice = feedbackOffice === (user.office || "");
           } else if (office) {
             matchesOffice = feedbackOffice === office;
@@ -241,28 +253,37 @@ const Feedback = ({ user }) => {
       console.error("Error filtering feedbacks:", err);
       return [];
     }
-  }, [feedbacks, search, dayRange, office, user]);
+  }, [feedbacks, search, dayRange, office, isOfficeAdmin, user?.office]);
 
   // Generate unique office options
   const officeOptions = useMemo(() => {
     try {
-      // Extract offices from feedbacks if they exist
-      const offices = feedbacks
-        .map(f => f.office) 
-        .filter(office => office && typeof office === 'string' && office.trim() !== '');
-      
-      // If no offices found, provide defaults
-      if (offices.length === 0) {
-        return ["Main Office", "Branch Office", "Headquarters"];
+      const officeNames = (offices || [])
+        .map((officeItem) => toTrimmedText(officeItem?.name))
+        .filter(Boolean);
+
+      const feedbackOfficeNames = Array.isArray(feedbacks)
+        ? feedbacks
+            .map((feedback) => toTrimmedText(feedback?.office))
+            .filter(Boolean)
+        : [];
+
+      const combined = [...officeNames, ...feedbackOfficeNames];
+      if (isOfficeAdmin && user?.office) {
+        combined.push(user.office);
       }
-      
-      // Return unique sorted offices
-      return [...new Set(offices)].sort();
+
+      const uniqueOffices = [...new Set(combined)].sort();
+      if (uniqueOffices.length > 0) {
+        return uniqueOffices;
+      }
+
+      return ["Main Office", "Branch Office", "Headquarters"];
     } catch (err) {
       console.error("Error generating office options:", err);
       return ["Main Office", "Branch Office", "Headquarters"];
     }
-  }, [feedbacks]);
+  }, [offices, feedbacks, isOfficeAdmin, user?.office]);
 
   const exportCSV = () => {
     try {
@@ -339,7 +360,7 @@ const Feedback = ({ user }) => {
 
   // Get the official office name for print header
   const printOfficeName = useMemo(() => {
-    if (user?.type === "OfficeAdmin" && user?.office) {
+    if (isOfficeAdmin && user?.office) {
       const officeData = offices.find(o => o.name === user.office);
       return officeData?.officialName || user.office;
     } else if (office && office !== "") {
@@ -347,7 +368,7 @@ const Feedback = ({ user }) => {
       return officeData?.officialName || office;
     }
     return "Office of the College of Computing and Information Sciences";
-  }, [user, office, offices]);
+  }, [isOfficeAdmin, user?.office, office, offices]);
 
   const printRows = useMemo(() => {
     const rowsByOffice = new Map();
@@ -425,6 +446,22 @@ const Feedback = ({ user }) => {
       .toLocaleDateString("en-US", { month: "long", year: "numeric" })
       .toUpperCase();
   }, [dayRange.start, dayRange.end, filteredFeedbacks]);
+
+  const renderPrintList = (items = []) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return <span>N/A</span>;
+    }
+
+    return (
+      <ul className="list-disc pl-4 space-y-1">
+        {items.map((item, index) => (
+          <li key={`${item}-${index}`} className="break-words">
+            {item}
+          </li>
+        ))}
+      </ul>
+    );
+  };
 
   // Show loading state
   if (loading) {
@@ -525,105 +562,98 @@ const Feedback = ({ user }) => {
 
       {/* Print View Only - CSF Monthly Commendations & Suggestions */}
       <div className="hidden print:block bg-white print-only-section text-black">
-        {(() => {
-          const rowsPerPage = 6;
-          const totalPages = Math.ceil(printRows.length / rowsPerPage) || 1;
-
-          const renderList = (items = []) => {
-            if (!Array.isArray(items) || items.length === 0) {
-              return <span>N/A</span>;
-            }
-
-            return (
-              <ul className="list-disc pl-4 space-y-1">
-                {items.map((item, index) => (
-                  <li key={`${item}-${index}`} className="break-words">
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            );
-          };
-
-          return Array.from({ length: totalPages }).map((_, pageIndex) => {
-            const startIndex = pageIndex * rowsPerPage;
-            const pageRows = printRows.slice(startIndex, startIndex + rowsPerPage);
-            const isLastPage = pageIndex === totalPages - 1;
-
-            return (
-              <div key={pageIndex} className="page-break p-6 csf-page">
-                <div className="flex items-start justify-between mb-5 gap-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 flex items-center justify-center">
-                      <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
+        <div className="csf-page p-6">
+          <table className="print-wrapper w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="print-header-cell">
+                  <div className="flex items-start justify-between mb-4 gap-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 flex items-center justify-center">
+                        <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div className="leading-tight">
+                        <p className="text-[14.67px]">Republic of the Philippines</p>
+                        <h1 className="text-[16px] font-bold tracking-wide print-header-title">
+                          BOHOL ISLAND STATE UNIVERSITY
+                        </h1>
+                        <p className="text-[13.33px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                        <p className="text-[13.33px]">{printOfficeName}</p>
+                        <p className="text-[13.33px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                      </div>
                     </div>
-                    <div className="leading-tight">
-                      <p className="text-[12px]">Republic of the Philippines</p>
-                      <h1 className="text-[22px] font-bold tracking-wide">BOHOL ISLAND STATE UNIVERSITY</h1>
-                      <p className="text-[12px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                      <p className="text-[12px]">{printOfficeName}</p>
-                      <p className="text-[12px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+
+                    <div className="flex gap-3 items-center">
+                      <div className="w-24 h-16 flex items-center justify-center">
+                        <img
+                          src={bagongPilipinasLogo}
+                          alt="Bagong Pilipinas Logo"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="w-32 h-16 flex items-center justify-center">
+                        <img src={tuvISOLogo} alt="ISO 9001:2015 Certification" className="w-full h-full object-contain" />
+                      </div>
                     </div>
                   </div>
+                </th>
+              </tr>
+              <tr>
+                <th>
+                  <h2 className="text-center text-[20px] tracking-wide uppercase mb-2">
+                    Monthly Customer Satisfaction Summary Form -{" "}
+                    <span className="underline">{reportMonthLabel}</span>
+                  </h2>
 
-                  <div className="flex gap-3 items-center">
-                    <div className="w-24 h-16 flex items-center justify-center">
-                      <img
-                        src={bagongPilipinasLogo}
-                        alt="Bagong Pilipinas Logo"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="w-32 h-16 flex items-center justify-center">
-                      <img src={tuvISOLogo} alt="ISO 9001:2015 Certification" className="w-full h-full object-contain" />
-                    </div>
-                  </div>
-                </div>
-
-                <h2 className="text-center text-[20px] tracking-wide uppercase mb-4">
-                  Monthly Customer Satisfaction Summary Form -{' '}
-                  <span className="underline">{reportMonthLabel}</span>
-                </h2>
-
-                <p className="text-[18px] font-semibold mb-2">
-                  CSF Monthly Commendations &amp; Suggestions
-                </p>
-
-                <table className="w-full border-collapse csf-table">
-                  <thead>
-                    <tr>
-                      <th rowSpan={2} className="w-[16%]">Office</th>
-                      <th rowSpan={2} className="w-[18%]">Commendation</th>
-                      <th rowSpan={2} className="w-[18%]">Detail of Suggestions</th>
-                      <th rowSpan={2} className="w-[7%]">Root Cause</th>
-                      <th rowSpan={2} className="w-[8%]">Action Plan</th>
-                      <th rowSpan={2} className="w-[9%]">Target of Implementation</th>
-                      <th colSpan={3} className="w-[24%]">Status of Implementation</th>
-                    </tr>
-                    <tr>
-                      <th className="w-[8%]">Implementation (Closed)</th>
-                      <th className="w-[8%]">On-going / To be Implemented (Open)</th>
-                      <th className="w-[8%]">Not Implemented</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageRows.map((row, rowIndex) => (
-                      <tr key={`${row.office}-${pageIndex}-${rowIndex}`}>
-                        <td>{row.office}</td>
-                        <td>{renderList(row.commendations)}</td>
-                        <td>{renderList(row.suggestions)}</td>
-                        <td className="text-center">N/A</td>
-                        <td className="text-center">N/A</td>
-                        <td className="text-center">N/A</td>
-                        <td className="text-center">N/A</td>
-                        <td className="text-center">N/A</td>
-                        <td className="text-center">N/A</td>
+                  
+                </th>
+                
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <p className="text-[18px] font-semibold mb-2 text-left">
+                    CSF Monthly Commendations &amp; Suggestions
+                  </p>
+                  <table className="w-full border-collapse csf-table">
+                    <thead>
+                      
+                      <tr>
+                        <th rowSpan={2} className="w-[16%]">Office</th>
+                        <th rowSpan={2} className="w-[18%]">Commendation</th>
+                        <th rowSpan={2} className="w-[18%]">Detail of Suggestions</th>
+                        <th rowSpan={2} className="w-[7%]">Root Cause</th>
+                        <th rowSpan={2} className="w-[8%]">Action Plan</th>
+                        <th rowSpan={2} className="w-[9%]">Target of Implementation</th>
+                        <th colSpan={3} className="w-[24%]">Status of Implementation</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {isLastPage && (
+                      <tr>
+                        <th>Implementation (Closed)</th>
+                        <th>On-going / To be Implemented (Open)</th>
+                        <th>Not Implemented</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printRows.map((row, index) => (
+                        <tr key={`${row.office}-${index}`}>
+                          <td>{row.office}</td>
+                          <td>{renderPrintList(row.commendations)}</td>
+                          <td>{renderPrintList(row.suggestions)}</td>
+                          <td className="text-center">N/A</td>
+                          <td className="text-center">N/A</td>
+                          <td className="text-center">N/A</td>
+                          <td className="text-center">N/A</td>
+                          <td className="text-center">N/A</td>
+                          <td className="text-center">N/A</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              <tr className="csf-signatories-row">
+                <td className="csf-signatories-cell">
                   <div className="mt-10 text-[13px] feedback-signatories">
                     <div className="grid grid-cols-2 gap-24 mb-6 feedback-signatories-row">
                       <div className="text-center feedback-signatory-group">
@@ -647,12 +677,11 @@ const Feedback = ({ user }) => {
                       </div>
                     </div>
                   </div>
-                )}
-
-              </div>
-            );
-          });
-        })()}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Print-specific styles */}
@@ -673,6 +702,35 @@ const Feedback = ({ user }) => {
             top: 0;
             width: 100%;
           }
+
+          .print-wrapper > thead {
+          display: table-header-group;
+        }
+
+        .print-wrapper > tbody {
+          display: table-row-group;
+        }
+
+        .print-wrapper > thead > tr > th,
+        .print-wrapper > thead > tr > td,
+        .print-wrapper > tbody > tr > td {
+          border: none !important;
+          padding: 0;
+          vertical-align: top;
+        }
+
+        .print-wrapper .print-header-cell {
+          text-align: left;
+          font-weight: normal;
+        }
+
+        .print-header-title {
+          font-family: "Arial, sans-serif";
+        }
+
+        .print-header-title {
+          font-family: Arial, sans-serif;
+        }
           
           @page {
             size: 13in 8.5in;
@@ -689,14 +747,20 @@ const Feedback = ({ user }) => {
             -webkit-print-color-adjust: exact;
           }
 
-          .csf-page {
-            min-height: 7.2in;
-          }
+          .csf-section {
+          page-break-inside: auto;
+          break-inside: auto;
+        }
 
           .csf-table th,
           .csf-table td {
             border: 1px solid #000 !important;
             vertical-align: top;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            white-space: normal;
+            box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
           }
 
           .csf-table th {
@@ -706,9 +770,32 @@ const Feedback = ({ user }) => {
             padding: 6px 4px;
           }
 
+          .csf-table {
+            width: 100%;
+            table-layout: fixed;
+            page-break-inside: auto;
+            break-inside: auto;
+            border-collapse: collapse;
+          }
+
+          .csf-table thead {
+          display: table-row-group !important;
+        }
+
+          .csf-table thead tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+
           .csf-table td {
             font-size: 10px;
             padding: 6px 6px;
+            page-break-inside: auto;
+          break-inside: auto;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          white-space: normal;
+          vertical-align: top;
           }
 
           .csf-table ul {
@@ -719,14 +806,20 @@ const Feedback = ({ user }) => {
           .csf-table li {
             margin-bottom: 3px;
           }
-          
-          .page-break {
-            page-break-after: always;
+
+          .csf-table tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+
+          .csf-signatories-row {
             page-break-inside: avoid;
+            break-inside: avoid;
           }
-          
-          .page-break:last-child {
-            page-break-after: auto;
+
+          .csf-signatories-cell {
+            border: none !important;
+            padding: 12px 0 0 !important;
           }
 
           .feedback-signatories,
@@ -751,5 +844,3 @@ const Feedback = ({ user }) => {
 };
 
 export default Feedback;
-
-
