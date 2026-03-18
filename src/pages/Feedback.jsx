@@ -882,7 +882,8 @@ const Feedback = ({ user }) => {
             table-layout: fixed;
             page-break-inside: auto;
             break-inside: auto;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
           }
 
           .csf-table thead {
@@ -890,9 +891,18 @@ const Feedback = ({ user }) => {
         }
 
           .csf-table thead tr {
-          page-break-inside: avoid;
-          break-inside: avoid;
-        }
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .csf-table tbody {
+            display: table-row-group;
+          }
+
+          .csf-table tbody tr {
+            page-break-inside: auto;
+            break-inside: auto;
+          }
 
           .csf-table td {
             font-size: 10px;
@@ -913,11 +923,6 @@ const Feedback = ({ user }) => {
           .csf-table li {
             margin-bottom: 3px;
           }
-
-          .csf-table tr {
-          page-break-inside: avoid;
-          break-inside: avoid;
-        }
 
           .csf-signatories-row {
             page-break-inside: avoid;

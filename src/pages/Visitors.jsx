@@ -100,6 +100,17 @@ const getVisitorSortTime = (visitor) => {
   return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
 };
 
+const getVisitorContactLines = (visitor) => {
+  const contactNumber = String(visitor?.contactNumber || "").trim();
+  const email = String(visitor?.email || "").trim();
+
+  return [contactNumber, email].filter(
+    (value, index, values) => value && values.indexOf(value) === index
+  );
+};
+
+const hasVisitorEmail = (visitor) => Boolean(String(visitor?.email || "").trim());
+
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [search, setSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState("All Offices");
@@ -428,7 +439,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   }
 
   return (
-    <>
+    <div className="visitors-page">
       {/* Screen View - Original Design */}
       <div className="print:hidden px-6 md:px-10 pt-2 pb-6 space-y-4 font-sans">
         <FilterBar
@@ -471,67 +482,73 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
             const startIndex = pageIndex * rowsPerPage;
             const pageVisitors = printVisitors.slice(startIndex, startIndex + rowsPerPage);
             const emptyRowsNeeded = rowsPerPage - pageVisitors.length;
+            const shouldForcePageBreak = pageIndex < totalPages - 1;
             
             return (
-              <div key={pageIndex} className="page-break p-6">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center">
-                    <div className="w-28 h-20 flex items-center justify-center">
-                      <img 
-                        src={bisuLogo} 
-                        alt="BISU Logo" 
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-[14.67px]">Republic of the Philippines</p>
-                      <p className="text-[16px] font-bold">BOHOL ISLAND STATE UNIVERSITY</p>
-                      <p className="text-[13.33px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                      <p className="text-[13.33px]">{printOfficeName}</p>
-                      <p className="text-[13.33px] italic">Balance | Integrity | Stewardship | Uprightness</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <div className="w-22 h-26 flex items-center justify-center">
-                      <img 
-                        src={bagongPilipinasLogo} 
-                        alt="Bagong Pilipinas Logo" 
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="w-42 h-26 flex items-center justify-center">
-                      <img 
-                        src={tuvISOLogo} 
-                        alt="ISO 9001:2015 Certification" 
-                        className="w-full h-full object-contain"
-                      />
+               <div
+                 key={pageIndex}
+                 className={`page-break print-page px-2 py-1${
+                   shouldForcePageBreak ? " page-break-after" : ""
+                 }`}
+               >
+                 {/* Header */}
+                 <div className="flex items-start justify-between mb-1">
+                   <div className="flex items-center">
+                     <div className="w-24 h-16 flex items-center justify-center">
+                       <img 
+                         src={bisuLogo} 
+                         alt="BISU Logo" 
+                         className="w-full h-full object-contain"
+                       />
+                     </div>
+                     <div className="leading-tight">
+                       <p className="text-[14.67px]">Republic of the Philippines</p>
+                       <p className="text-[16px] font-bold">BOHOL ISLAND STATE UNIVERSITY</p>
+                       <p className="text-[13.33px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                       <p className="text-[13.33px]">{printOfficeName}</p>
+                       <p className="text-[13.33px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                     </div>
+                   </div>
+                   
+                   <div className="flex gap-2">
+                     <div className="w-20 h-24 flex items-center justify-center">
+                       <img 
+                         src={bagongPilipinasLogo} 
+                         alt="Bagong Pilipinas Logo" 
+                         className="w-full h-full object-contain"
+                       />
+                     </div>
+                     <div className="w-36 h-24 flex items-center justify-center">
+                       <img 
+                         src={tuvISOLogo} 
+                         alt="ISO 9001:2015 Certification" 
+                         className="w-full h-full object-contain"
+                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Title */}
-                <h2 className="text-center text-base font-bold mb-3 uppercase">Visitors' Log Sheet</h2>
+                <h2 className="text-center text-base font-bold mb-1 uppercase">Visitors' Log Sheet</h2>
                 {/* <p className="text-center text-[11px] mb-3">Date Range: {selectedDateRangeLabel}</p> */}
 
                 {/* Table */}
-                <table className="w-full border-collapse border-1 border-black">
+                <table className="print-page-table w-full table-fixed border-collapse border-1 border-black">
                   <thead>
-                    <tr className="bg-white">
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[15%]">
+                    <tr className="bg-white print-header-row">
+                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[15%]">
                         Date<br/>(MM-DD-YY)
                       </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[12%]">
+                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[12%]">
                         Time In
                       </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[23%]">
+                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[23%]">
                         Name
                       </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[25%]">
+                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
                         Purpose
                       </th>
-                      <th className="border-2 border-black p-1 text-[11px] font-bold text-center w-[25%]">
+                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
                         Contact Number /<br/>email address
                       </th>
                     </tr>
@@ -541,34 +558,58 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                       const dateObj = visitor.rawDate || new Date();
                       const formattedDate = `${String(dateObj.getMonth() + 1).padStart(2, '0')} – ${String(dateObj.getDate()).padStart(2, '0')} - ${String(dateObj.getFullYear()).slice(-2)}`;
                       
+                      const contactLines = getVisitorContactLines(visitor);
+                      const hasEmailContact = hasVisitorEmail(visitor);
+
                       return (
-                        <tr key={visitor.id}>
-                          <td className="border-2 border-black p-1 text-[10px] text-center">
-                            {formattedDate}
+                        <tr
+                          key={visitor.id}
+                          className={`print-body-row${
+                            hasEmailContact ? " print-body-row-expanded" : ""
+                          }`}
+                        >
+                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                            <span className="print-cell-text">{formattedDate}</span>
                           </td>
-                          <td className="border-2 border-black p-1 text-[10px] text-center">
-                            {visitor.timeIn}
+                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                            <span className="print-cell-text">{visitor.timeIn}</span>
                           </td>
-                          <td className="border-2 border-black p-1 text-[10px] text-center">
-                            {visitor.name}
+                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                            <span className="print-cell-text">{visitor.name}</span>
                           </td>
-                          <td className="border-2 border-black p-1 text-[10px] text-center">
-                            {visitor.purpose}
+                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                            <span className="print-cell-text">{visitor.purpose}</span>
                           </td>
-                          <td className="border-2 border-black p-1 text-[10px] text-center">
-                            {visitor.contactNumber}
+                          <td
+                            className={`print-body-cell print-contact-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center${
+                              hasEmailContact ? " print-contact-cell-expanded" : ""
+                            }`}
+                          >
+                            {contactLines.length > 0 ? (
+                              <div
+                                className={`print-contact-text${
+                                  hasEmailContact ? " print-contact-text-expanded" : ""
+                                }`}
+                              >
+                                {contactLines.map((detail, detailIndex) => (
+                                  <div key={`${visitor.id}-contact-${detailIndex}`}>{detail}</div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="print-cell-text">&nbsp;</span>
+                            )}
                           </td>
                         </tr>
                       );
                     })}
                     {/* Add empty rows to complete 17 rows per page */}
                     {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
-                      <tr key={`empty-${i}`}>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
-                        <td className="border-2 border-black p-1 text-[10px] text-center">&nbsp;</td>
+                      <tr key={`empty-${i}`} className="print-body-row">
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
                       </tr>
                     ))}
                   </tbody>
@@ -582,33 +623,40 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
       {/* Print-specific styles */}
       <style>{`
         @media print {
-          /* Hide everything except the print view */
-          body * {
-            visibility: hidden;
+          aside {
+            display: none !important;
           }
-          
-          /* Only show the print section and its children */
-          .print-only-section,
-          .print-only-section * {
-            visibility: visible;
+
+          footer {
+            display: none !important;
           }
-          
-          /* Position print section at top of page */
+
+          main {
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          main > :not(.visitors-page) {
+            display: none !important;
+          }
+
+          .visitors-page > :not(.print-only-section):not(style) {
+            display: none !important;
+          }
+
+          .visitors-page {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
           .print-only-section {
-            position: absolute;
-            left: 0;
-            top: 0;
+            display: block !important;
             width: 100%;
           }
           
           @page {
             size: 13in 8.5in;
-            margin: 0.5in;
-          }
-          
-          /* Hide browser default headers and footers */
-          @page {
-            margin: 0.5in;
+            margin: 0.2in;
           }
           
           html {
@@ -620,12 +668,90 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
           
           .page-break {
-            page-break-after: always;
+            break-inside: avoid-page;
             page-break-inside: avoid;
           }
-          
-          .page-break:last-child {
-            page-break-after: auto;
+
+          .page-break-after {
+            break-after: page;
+          }
+
+          .print-page {
+            box-sizing: border-box;
+          }
+
+          .print-page-table {
+            table-layout: fixed;
+          }
+
+          .print-page-table th,
+          .print-page-table td {
+            box-sizing: border-box;
+          }
+
+          .print-header-row {
+            height: 0.42in;
+          }
+
+          .print-header-cell {
+            height: 0.42in;
+            vertical-align: middle;
+          }
+
+          .print-body-row {
+            height: 0.31in;
+          }
+
+          .print-body-row-expanded {
+            height: auto;
+          }
+
+          .print-body-cell {
+            height: 0.31in;
+            vertical-align: middle;
+            white-space: nowrap;
+            overflow: hidden;
+          }
+
+          .print-body-row-expanded .print-body-cell {
+            height: auto;
+            min-height: 0.31in;
+          }
+
+          .print-cell-text {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .print-contact-cell {
+            white-space: nowrap;
+            overflow: hidden;
+          }
+
+          .print-contact-text {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .print-contact-cell-expanded {
+            white-space: normal;
+            overflow: visible;
+          }
+
+          .print-contact-text-expanded {
+            overflow: visible;
+            text-overflow: clip;
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.1;
+            padding-top: 2px;
+            padding-bottom: 2px;
           }
           
           body {
@@ -639,7 +765,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
         }
       `}</style>
-    </>
+    </div>
   );
 };
 

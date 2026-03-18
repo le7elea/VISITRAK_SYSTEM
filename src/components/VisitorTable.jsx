@@ -121,7 +121,7 @@ const VisitorTable = ({
             <div className="overflow-x-auto">
               <div className="min-w-full inline-block align-middle">
                 <div className="overflow-hidden">
-                  <table className="min-w-full text-sm text-left">
+                  <table className="min-w-full text-[13.33px] text-left">
                     <colgroup>
                       <col className="w-[150px]" />
                       <col className="w-[120px]" />
@@ -167,7 +167,7 @@ const VisitorTable = ({
                   
                   {/* Scrollable body */}
                   <div className="overflow-y-auto max-h-80">
-                    <table className="min-w-full text-sm text-left">
+                    <table className="min-w-full text-[13.33px] text-left">
                       <colgroup>
                         <col className="w-[150px]" />
                         <col className="w-[120px]" />
@@ -185,7 +185,7 @@ const VisitorTable = ({
                             onClick={() => onViewDetails?.(v)}
                             className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer"
                           >
-                            <td className="py-3 px-4 text-gray-800 dark:text-gray-100 font-medium sticky left-0 bg-white dark:bg-gray-900 z-10">
+                            <td className="py-5 px-4 text-gray-800 dark:text-gray-100 font-medium sticky left-0 bg-white dark:bg-gray-900 z-10">
                               <div className="font-medium">{v.name}</div>
                               {v.purpose && (
                                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -193,26 +193,26 @@ const VisitorTable = ({
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
+                            <td className="py-5 px-4 text-gray-700 dark:text-gray-300">
                               {v.office}
                             </td>
-                            <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
+                            <td className="py-5 px-4 text-gray-700 dark:text-gray-300">
                               {v.date}
                             </td>
-                            <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
+                            <td className="py-5 px-4 text-gray-700 dark:text-gray-300">
                               {v.timeIn}
                             </td>
-                            <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
+                            <td className="py-5 px-4 text-gray-700 dark:text-gray-300">
                               {v.timeOut}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-5 px-4">
                               <span
                                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(v.status)}`}
                               >
                                 {formatStatus(v.status)}
                               </span>
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-5 px-4">
                               <div className="flex items-center gap-2">
                                 {renderStars(v.satisfaction)}
                                 {v.satisfaction > 0 && (
@@ -223,7 +223,7 @@ const VisitorTable = ({
                               </div>
                             </td>
                             {canDeleteVisitors && (
-                              <td className="py-3 px-4">
+                              <td className="py-5 px-4">
                                 <button
                                   onClick={(event) => {
                                     event.stopPropagation();
