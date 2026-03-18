@@ -2404,7 +2404,7 @@ const Analytics = ({ setActiveTab }) => {
           text-align: center;
           letter-spacing: 0.03em;
           text-transform: uppercase;
-          margin-bottom: 8px;
+          margin-bottom: 2px;
         }
 
         .analytics-section-label {
@@ -3064,10 +3064,10 @@ const Analytics = ({ setActiveTab }) => {
               <table className="print-wrapper w-full border-collapse">
                 <thead>
                   <tr>
-                    <th colSpan={20}>{renderHeader()}</th>
+                    <th>{renderHeader()}</th>
                   </tr>
                   <tr>
-                    <th colSpan={20}>
+                    <th>
                       {isSingleOffice ? (
                         <>
                           <h2
@@ -3090,7 +3090,10 @@ const Analytics = ({ setActiveTab }) => {
                       ) : (
                         <h2
                           className="analytics-report-title font-Arial"
-                          style={{ fontFamily: "Arial, sans-serif" }}
+                          style={{
+                            fontFamily: "Arial, sans-serif",
+                            fontSize: "19px",
+                          }}
                         >
                           MONTHLY CUSTOMER SATISFACTION SUMMARY FORM -{" "}
                           <span className="underline">{reportPeriodLabel}</span>
@@ -3118,7 +3121,8 @@ const Analytics = ({ setActiveTab }) => {
                           </p>
                         </div>
                       )}
-                      <div className="mt-4 analytics-section">
+
+                      <div className="mt-2 analytics-section">
                         <div
                           className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}
                         >
@@ -3140,9 +3144,7 @@ const Analytics = ({ setActiveTab }) => {
                               }}
                             >
                               Campus:{" "}
-                              <span className="underline">
-                                Balilihan Campus
-                              </span>
+                              <span className="underline">Balilihan Campus</span>
                             </p>
                           )}
                         </div>
@@ -3152,10 +3154,7 @@ const Analytics = ({ setActiveTab }) => {
                           true,
                         )}
                       </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
+
                       <div className="mt-6 analytics-section">
                         <p
                           className="analytics-section-label mb-2"
@@ -3172,10 +3171,7 @@ const Analytics = ({ setActiveTab }) => {
                           true,
                         )}
                       </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
+
                       <div className="mt-6 analytics-section">
                         <p
                           className="analytics-section-label mb-2"
@@ -3192,10 +3188,9 @@ const Analytics = ({ setActiveTab }) => {
                         </p>
                         {renderCsfTable(csfRowsForPrint, "section-c", true)}
                       </div>
+
+                      {renderSignatories()}
                     </td>
-                  </tr>
-                  <tr>
-                    <td>{renderSignatories()}</td>
                   </tr>
                 </tbody>
               </table>
