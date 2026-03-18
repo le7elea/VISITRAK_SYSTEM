@@ -2531,16 +2531,16 @@ const Analytics = ({ setActiveTab }) => {
         <div className="hidden print:block bg-white print-only-section text-black">
           {(() => {
             const renderHeader = () => (
-              <div className="flex items-start justify-between mb-4 gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-20 h-16 flex items-center justify-center">
+              <div className="flex items-center justify-between mb-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-24 h-16 flex items-center justify-center">
                     <img
                       src={bisuLogo}
                       alt="BISU Logo"
                       className="w-full h-full object-contain"
                     />
                   </div>
-                  <div className="leading-tight text-left">
+                  <div className="leading-tight text-left font-normal">
                     <p
                       className="text-[14.67px]"
                       style={{ fontFamily: "Arial, sans-serif" }}
@@ -2574,15 +2574,15 @@ const Analytics = ({ setActiveTab }) => {
                   </div>
                 </div>
 
-                <div className="flex gap-3 items-start">
-                  <div className="w-20 h-14 flex items-center justify-center">
+                <div className="flex gap-2 items-center">
+                  <div className="w-20 h-24 flex items-center justify-center">
                     <img
                       src={bagongPilipinasLogo}
                       alt="Bagong Pilipinas Logo"
                       className="w-full h-full object-contain"
                     />
                   </div>
-                  <div className="w-28 h-14 flex items-center justify-center">
+                  <div className="w-36 h-24 flex items-center justify-center">
                     <img
                       src={tuvISOLogo}
                       alt="ISO 9001:2015 Certification"
