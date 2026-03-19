@@ -2496,7 +2496,7 @@ const Analytics = ({ setActiveTab }) => {
         }
 
         .analytics-signatories {
-          margin-top: 24px;
+          margin-top: 30px;
           font-size: 16px;
            page-break-inside: avoid;
            break-inside: avoid;
@@ -2504,6 +2504,7 @@ const Analytics = ({ setActiveTab }) => {
 
          .analytics-signatories-row,
          .analytics-signatory-group {
+           margin-top: 60px;
            page-break-inside: avoid;
            break-inside: avoid;
          }
