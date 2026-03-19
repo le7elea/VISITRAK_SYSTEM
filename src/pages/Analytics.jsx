@@ -2349,7 +2349,7 @@ const Analytics = ({ setActiveTab }) => {
         }
         @page {
           size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
-          margin: ${PRINT_PAGE_MARGIN_CM}cm;
+           margin: ${PRINT_PAGE_MARGIN_CM}cm;
         }
 
         html,
@@ -2360,7 +2360,7 @@ const Analytics = ({ setActiveTab }) => {
         }
 
         .print-wrapper {
-          padding: 10px 14px;
+          padding: 4px 8px;
           font-family: "Times New Roman", Times, serif;
           color: #111;
           width: 100%;
@@ -2388,12 +2388,13 @@ const Analytics = ({ setActiveTab }) => {
          .print-header-meta {
            display: flex;
            justify-content: space-between;
-           margin-top: 8px;
-           margin-bottom: 8px;
+           margin-top: 0;
+           margin-bottom: 2px;
            font-family: Arial, sans-serif;
            font-size: 14.67px;
            font-weight: 400;
-         }
+           line-height: 1.15;
+          }
 
          .print-header-meta p {
            margin: 0;
@@ -2531,8 +2532,8 @@ const Analytics = ({ setActiveTab }) => {
         <div className="hidden print:block bg-white print-only-section text-black">
           {(() => {
             const renderHeader = () => (
-              <div className="flex items-center justify-between mb-4 gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center">
                   <div className="w-24 h-16 flex items-center justify-center">
                     <img
                       src={bisuLogo}
@@ -2574,7 +2575,7 @@ const Analytics = ({ setActiveTab }) => {
                   </div>
                 </div>
 
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2">
                   <div className="w-20 h-24 flex items-center justify-center">
                     <img
                       src={bagongPilipinasLogo}
@@ -3079,13 +3080,6 @@ const Analytics = ({ setActiveTab }) => {
                           >
                             MONTHLY REPORT CARD
                           </h2>
-                          <div
-                            className="flex justify-between mt-3 mb-4"
-                            style={{
-                              fontFamily: "Arial, sans-serif",
-                              fontSize: "14.67px",
-                            }}
-                          ></div>
                         </>
                       ) : (
                         <h2
@@ -3122,7 +3116,9 @@ const Analytics = ({ setActiveTab }) => {
                         </div>
                       )}
 
-                      <div className="mt-2 analytics-section">
+                      <div
+                        className={`${isSingleOffice ? "mt-1" : "mt-2"} analytics-section`}
+                      >
                         <div
                           className={`flex items-center mb-2 ${isSingleOffice ? "justify-start" : "justify-between"}`}
                         >
