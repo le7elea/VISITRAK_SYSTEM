@@ -217,7 +217,7 @@ const Login = ({ onLogin }) => {
       <div className="flex flex-col items-center mb-6 mt-5">
         <div className="flex items-center justify-center gap-6 flex-wrap">
           <img src={bisuLogo} alt="BISU Logo" className="w-20" />
-          <img src={masidLogo} alt="MASID Logo" className="w-20" />
+          <img src={masidLogo} alt="VisiTrak Logo" className="w-20" />
         </div>
         <p className="text-white text-3xl font-semibold mt-4 mb-5">Hello, Welcome!</p>
       </div>
