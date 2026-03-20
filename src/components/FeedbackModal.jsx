@@ -239,7 +239,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
     <style>
       :root {
         --print-scale: 1;
-        --font-scale: 1.1;
+        --font-scale: 1.2;
       }
 
       @page {
@@ -340,7 +340,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
       .title {
         margin: 8px 0 7px;
         text-align: center;
-        font-size: calc(19.5px * var(--font-scale));
+        font-size: calc(15px * var(--font-scale));
         font-weight: 700;
         letter-spacing: 0.01em;
       }
@@ -841,25 +841,23 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
     }
 
     const html = buildPrintableFeedbackHtml(visitor);
-    let hasPrinted = false;
+    let hasTriggeredPrint = false;
 
     const triggerPrint = () => {
-      if (hasPrinted) return;
-      hasPrinted = true;
+      if (hasTriggeredPrint) return;
+      hasTriggeredPrint = true;
 
       printWindow.focus();
       printWindow.setTimeout(() => {
         printWindow.print();
-      }, 450);
+      }, 350);
     };
 
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
+    printWindow.focus();
     printWindow.onload = triggerPrint;
-    printWindow.onafterprint = () => {
-      printWindow.close();
-    };
     printWindow.setTimeout(triggerPrint, 900);
   };
 
@@ -1018,14 +1016,7 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
           >
             Close
           </button>
-          <button
-            type="button"
-            onClick={handlePrintForm}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
-          >
-            <Printer size={16} />
-            Print Feedback Form
-          </button>
+          
         </div>
       </div>
     </div>
