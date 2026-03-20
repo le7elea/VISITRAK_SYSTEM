@@ -125,6 +125,22 @@ const formatPrintFooterDate = (value = new Date()) => {
   return `${month}/${day}/${year}`;
 };
 
+const getOfficialOfficeName = (officeValue, offices = []) => {
+  const normalizedOffice = toTrimmedText(officeValue).toLowerCase();
+  if (!normalizedOffice) return "";
+
+  const matchedOffice = offices.find((officeItem) => {
+    const officeName = toTrimmedText(officeItem?.name).toLowerCase();
+    const officialName = toTrimmedText(officeItem?.officialName).toLowerCase();
+
+    return normalizedOffice === officeName || normalizedOffice === officialName;
+  });
+
+  return (
+    toTrimmedText(matchedOffice?.officialName) || toTrimmedText(officeValue)
+  );
+};
+
 const escapeCSVValue = (value) =>
   `"${String(value ?? "").replace(/"/g, '""')}"`;
 
@@ -324,6 +340,8 @@ const Feedback = ({ user }) => {
         })
         .map(({ f, idx, suggestion, commendation, questionRatings, displayName }) => {
           const feedbackOffice = f.office || "Unspecified";
+          const officialOfficeName =
+            getOfficialOfficeName(feedbackOffice, offices) || feedbackOffice;
           const formattedDate = getDisplayDate(f.createdAt);
           const previewComment = suggestion || commendation || "No written feedback provided.";
           
@@ -333,6 +351,7 @@ const Feedback = ({ user }) => {
             alias: getAnonymousAlias(idx),
             displayName,
             office: feedbackOffice,
+            officialOfficeName,
             comment: previewComment,
             date: formattedDate,
             satisfaction: parseFloat(f.averageRating) || 0,
@@ -344,7 +363,16 @@ const Feedback = ({ user }) => {
             name: f.name || "",
             answers: f.answers || [],
             createdAt: f.createdAt || new Date(),
+            visitDateTime: f.visitDateTime || f.createdAt || null,
             visitId: f.visitId || "",
+            sex: f.sex || "",
+            clientType: f.clientType || "",
+            regionOfResidence: f.regionOfResidence || "",
+            serviceAvailed: f.serviceAvailed || f.visitPurpose || "",
+            servicedBy: f.servicedBy || "",
+            cc1Rating: f.cc1Rating ?? null,
+            cc2Rating: f.cc2Rating ?? null,
+            cc3Rating: f.cc3Rating ?? null,
             
             // Store original for reference
             originalData: f,
@@ -354,7 +382,7 @@ const Feedback = ({ user }) => {
       console.error("Error filtering feedbacks:", err);
       return [];
     }
-  }, [feedbacks, search, dayRange, office, isOfficeAdmin, user?.office]);
+  }, [feedbacks, search, dayRange, office, isOfficeAdmin, user?.office, offices]);
 
   // Generate unique office options
   const officeOptions = useMemo(() => {
@@ -459,9 +487,16 @@ const Feedback = ({ user }) => {
       if (!visitor) return;
       
       const modalData = {
+        id: visitor.id || "",
         displayName: visitor.displayName || visitor.alias || "Anonymous",
+        alias: visitor.alias || "",
         name: visitor.name || "Anonymous",
         office: visitor.office || "Unspecified",
+        officialOfficeName:
+          visitor.officialOfficeName ||
+          getOfficialOfficeName(visitor.office, offices) ||
+          visitor.office ||
+          "Unspecified",
         date: visitor.date || "Date not available",
         comment: visitor.comment || "No feedback provided.",
         commendation: visitor.commendation || "No commendation provided.",
@@ -469,7 +504,17 @@ const Feedback = ({ user }) => {
         satisfaction: visitor.satisfaction || 0,
         answers: visitor.answers || [],
         questionRatings: visitor.questionRatings || [],
+        createdAt: visitor.createdAt || new Date(),
+        visitDateTime: visitor.visitDateTime || visitor.createdAt || null,
         visitId: visitor.visitId || "",
+        sex: visitor.sex || "",
+        clientType: visitor.clientType || "",
+        regionOfResidence: visitor.regionOfResidence || "",
+        serviceAvailed: visitor.serviceAvailed || "",
+        servicedBy: visitor.servicedBy || "",
+        cc1Rating: visitor.cc1Rating ?? null,
+        cc2Rating: visitor.cc2Rating ?? null,
+        cc3Rating: visitor.cc3Rating ?? null,
       };
       setSelectedVisitor(modalData);
     } catch (err) {
@@ -481,11 +526,12 @@ const Feedback = ({ user }) => {
   // Get the official office name for print header
   const printOfficeName = useMemo(() => {
     if (isOfficeAdmin && user?.office) {
-      const officeData = offices.find(o => o.name === user.office);
-      return officeData?.officialName || user.office;
+      return (
+        getOfficialOfficeName(user.office, offices) ||
+        user.office
+      );
     } else if (office && office !== "") {
-      const officeData = offices.find(o => o.name === office);
-      return officeData?.officialName || office;
+      return getOfficialOfficeName(office, offices) || office;
     }
     return "Office of the College of Computing and Information Sciences";
   }, [isOfficeAdmin, user?.office, office, offices]);
