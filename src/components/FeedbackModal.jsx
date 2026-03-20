@@ -12,6 +12,7 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
   const questionRatings = Array.isArray(visitor.questionRatings)
     ? visitor.questionRatings
     : [];
+  const displayName = visitor.displayName || visitor.alias || "Anonymous";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
@@ -29,6 +30,9 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
             Feedback Details{" "}
             <span className="text-sm text-gray-500">({visitor.office || "Unspecified"})</span>
           </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Displayed as: <span className="font-medium text-gray-700">{displayName}</span>
+          </p>
           <p className="text-sm text-gray-500 mt-1">{visitor.date}</p>
           <p className="text-sm font-medium text-yellow-600 mt-2">
             Overall Rating: {formatRating(visitor.satisfaction)}

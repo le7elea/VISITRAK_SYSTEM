@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Printer } from "lucide-react";
+import { Printer, FileText } from "lucide-react";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -11,6 +11,43 @@ import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
 
 const toTrimmedText = (value) => (typeof value === "string" ? value.trim() : "");
+
+const getAnonymousAlias = (index) =>
+  `Anonymous${String(index + 1).padStart(3, "0")}`;
+
+const getFeedbackDisplayName = (feedback, index) => {
+  if (!feedback || typeof feedback !== "object") {
+    return getAnonymousAlias(index);
+  }
+
+  if (typeof feedback.displayName === "boolean") {
+    if (feedback.displayName) {
+      return "Anonymous";
+    }
+
+    return toTrimmedText(feedback.name) || getAnonymousAlias(index);
+  }
+
+  const storedDisplayName = toTrimmedText(feedback.displayName);
+  if (!storedDisplayName) {
+    return getAnonymousAlias(index);
+  }
+
+  const normalizedDisplayName = storedDisplayName.toLowerCase();
+  if (normalizedDisplayName === "anonymous" || normalizedDisplayName === "anon") {
+    return "Anonymous";
+  }
+
+  if (
+    normalizedDisplayName === "name" ||
+    normalizedDisplayName === "show name" ||
+    normalizedDisplayName === "display name"
+  ) {
+    return toTrimmedText(feedback.name) || getAnonymousAlias(index);
+  }
+
+  return storedDisplayName;
+};
 
 const getNumericRating = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -78,6 +115,19 @@ const toLocalDateInput = (dateObj) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatPrintFooterDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}/${day}/${year}`;
+};
+
+const escapeCSVValue = (value) =>
+  `"${String(value ?? "").replace(/"/g, '""')}"`;
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
@@ -89,6 +139,13 @@ const Feedback = ({ user }) => {
     prepared: "MA. MAELITH L. BUCHAN",
     verified: "HORONORIO O. UEHARA",
     approved: "MARRIETA C. MACALOLOT, PhD",
+  });
+  const [printFooterFields, setPrintFooterFields] = useState({
+    documentCode: "F-AQA-CSF-002",
+    revisionNumber: "Rev. 3",
+  });
+  const [printFooterSnapshot, setPrintFooterSnapshot] = useState({
+    printedDate: formatPrintFooterDate(new Date()),
   });
   const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
   
@@ -108,6 +165,27 @@ const Feedback = ({ user }) => {
       [role]: value,
     }));
   };
+
+  const handlePrintFooterFieldChange = (field, value) => {
+    setPrintFooterFields((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
+  useEffect(() => {
+    const syncPrintedDate = () => {
+      setPrintFooterSnapshot({
+        printedDate: formatPrintFooterDate(new Date()),
+      });
+    };
+
+    window.addEventListener("beforeprint", syncPrintedDate);
+
+    return () => {
+      window.removeEventListener("beforeprint", syncPrintedDate);
+    };
+  }, []);
 
   // Fetch offices from Firestore
   useEffect(() => {
@@ -197,10 +275,18 @@ const Feedback = ({ user }) => {
           const suggestion = toTrimmedText(f?.suggestion);
           const commendation = toTrimmedText(f?.commendation);
           const questionRatings = normalizeQuestionRatings(f?.answers, f?.questions);
+          const displayName = getFeedbackDisplayName(f, idx);
 
-          return { f, idx, suggestion, commendation, questionRatings };
+          return {
+            f,
+            idx,
+            suggestion,
+            commendation,
+            questionRatings,
+            displayName,
+          };
         })
-        .filter(({ f, suggestion, commendation }) => {
+        .filter(({ f, suggestion, commendation, displayName }) => {
           if (!f) return false;
           
           const hasWrittenFeedback = Boolean(commendation || suggestion);
@@ -210,7 +296,7 @@ const Feedback = ({ user }) => {
           const searchLower = (search || "").toLowerCase();
           
           // Safe search across multiple fields
-          const nameMatch = (f.name || "").toLowerCase().includes(searchLower);
+          const nameMatch = displayName.toLowerCase().includes(searchLower);
           const suggestionMatch = suggestion.toLowerCase().includes(searchLower);
           const commendationMatch = commendation.toLowerCase().includes(searchLower);
           const visitIdMatch = (f.visitId || "").toLowerCase().includes(searchLower);
@@ -236,7 +322,7 @@ const Feedback = ({ user }) => {
           
           return matchesSearch && matchesDate && matchesOffice;
         })
-        .map(({ f, idx, suggestion, commendation, questionRatings }) => {
+        .map(({ f, idx, suggestion, commendation, questionRatings, displayName }) => {
           const feedbackOffice = f.office || "Unspecified";
           const formattedDate = getDisplayDate(f.createdAt);
           const previewComment = suggestion || commendation || "No written feedback provided.";
@@ -244,7 +330,8 @@ const Feedback = ({ user }) => {
           return {
             // Data for FeedbackTable
             id: f.id || `feedback-${idx}`,
-            alias: `Anonymous${String(idx + 1).padStart(3, "0")}`,
+            alias: getAnonymousAlias(idx),
+            displayName,
             office: feedbackOffice,
             comment: previewComment,
             date: formattedDate,
@@ -254,7 +341,7 @@ const Feedback = ({ user }) => {
             questionRatings,
             
             // Additional data for FeedbackModal
-            name: f.name || "Anonymous",
+            name: f.name || "",
             answers: f.answers || [],
             createdAt: f.createdAt || new Date(),
             visitId: f.visitId || "",
@@ -307,15 +394,21 @@ const Feedback = ({ user }) => {
       }
 
       // Prepare CSV content
-      const headers = ["Alias", "Name", "Date", "Office", "Rating", "Commendation", "Suggestion"];
+      const headers = [
+        "Display Name",
+        "Date",
+        "Office",
+        "Rating",
+        "Commendation",
+        "Suggestion",
+      ];
       const csvRows = filteredFeedbacks.map(f => [
-        f.alias,
-        f.name,
-        f.date,
-        f.office || "Unspecified",
-        f.satisfaction,
-        `"${(f.commendation || "").replace(/"/g, '""')}"`,
-        `"${(f.suggestion || "").replace(/"/g, '""')}"`
+        escapeCSVValue(f.displayName || f.alias || "Anonymous"),
+        escapeCSVValue(f.date),
+        escapeCSVValue(f.office || "Unspecified"),
+        escapeCSVValue(f.satisfaction),
+        escapeCSVValue(f.commendation || ""),
+        escapeCSVValue(f.suggestion || ""),
       ]);
       
       const csvContent = [
@@ -347,6 +440,10 @@ const Feedback = ({ user }) => {
     setShowPrintSignatoryModal(false);
 
     try {
+      setPrintFooterSnapshot({
+        printedDate: formatPrintFooterDate(new Date()),
+      });
+
       setTimeout(() => {
         window.print();
       }, 0);
@@ -362,6 +459,7 @@ const Feedback = ({ user }) => {
       if (!visitor) return;
       
       const modalData = {
+        displayName: visitor.displayName || visitor.alias || "Anonymous",
         name: visitor.name || "Anonymous",
         office: visitor.office || "Unspecified",
         date: visitor.date || "Date not available",
@@ -475,6 +573,22 @@ const Feedback = ({ user }) => {
     toTrimmedText(printSignatories.verified) || "________________________";
   const approvedByNameForPrint =
     toTrimmedText(printSignatories.approved) || "________________________";
+  const documentCodeForPrint =
+    toTrimmedText(printFooterFields.documentCode) || "F-AQA-CSF-002";
+  const revisionNumberForPrint =
+    toTrimmedText(printFooterFields.revisionNumber) || "Rev. 3";
+  const printedDateForPrint =
+    printFooterSnapshot.printedDate || formatPrintFooterDate(new Date());
+  const printFooterContentPrefix = `${documentCodeForPrint} | ${revisionNumberForPrint} | ${printedDateForPrint} | Page `;
+  const printFooterPrefixCSS = JSON.stringify(printFooterContentPrefix);
+  const PRINT_PAGE_WIDTH_IN = 13;
+  const PRINT_PAGE_HEIGHT_IN = 8.5;
+  const PRINT_PAGE_MARGIN_TOP_CM = 1.27;
+  const PRINT_PAGE_MARGIN_RIGHT_CM = 1.27;
+  const PRINT_PAGE_MARGIN_BOTTOM_CM = 1.9;
+  const PRINT_PAGE_MARGIN_LEFT_CM = 1.27;
+  const PRINT_MARGIN_TOTAL_CM =
+    PRINT_PAGE_MARGIN_LEFT_CM + PRINT_PAGE_MARGIN_RIGHT_CM;
 
   const renderPrintList = (items = []) => {
     if (!Array.isArray(items) || items.length === 0) {
@@ -720,68 +834,179 @@ const Feedback = ({ user }) => {
       </div>
 
       {showPrintSignatoryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/10 backdrop-blur-[2px] p-4 no-print print:hidden">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Print Signatories</h3>
-              <p className="mt-1 text-sm text-gray-600">
-                Enter the names for the printed report, then continue printing.
-              </p>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/15 backdrop-blur-md p-4 no-print print:hidden">
+          <div className="w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+            <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#faf5ff_0%,#ffffff_58%,#f8fafc_100%)] px-5 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#553C9A] text-white shadow-lg shadow-violet-200/70">
+                    <Printer size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold tracking-tight text-slate-900">
+                      Print Settings
+                    </h3>
+                    <p className="mt-1 max-w-xl text-sm text-slate-600">
+                      Update the report signatories and footer details before
+                      printing.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden sm:flex items-center gap-2 rounded-full border border-violet-100 bg-white/80 px-3 py-1 text-xs font-medium text-violet-700">
+                  <FileText size={14} />
+                  <span>Feedback Report</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-4">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
-                <span>Prepared</span>
-                <input
-                  type="text"
-                  value={printSignatories.prepared}
-                  onChange={(e) =>
-                    handlePrintSignatoryChange("prepared", e.target.value)
-                  }
-                  placeholder="Enter name"
-                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </label>
+            <div className="max-h-[72vh] overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.95fr]">
+                <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Signatories
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      These names will appear under the printed report.
+                    </p>
+                  </div>
 
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
-                <span>Verified</span>
-                <input
-                  type="text"
-                  value={printSignatories.verified}
-                  onChange={(e) =>
-                    handlePrintSignatoryChange("verified", e.target.value)
-                  }
-                  placeholder="Enter name"
-                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                      <span>Prepared</span>
+                      <input
+                        type="text"
+                        value={printSignatories.prepared}
+                        onChange={(e) =>
+                          handlePrintSignatoryChange("prepared", e.target.value)
+                        }
+                        placeholder="Enter name"
+                        className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </label>
 
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
-                <span>Approved</span>
-                <input
-                  type="text"
-                  value={printSignatories.approved}
-                  onChange={(e) =>
-                    handlePrintSignatoryChange("approved", e.target.value)
-                  }
-                  placeholder="Enter name"
-                  className="h-[42px] rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                      <span>Verified</span>
+                      <input
+                        type="text"
+                        value={printSignatories.verified}
+                        onChange={(e) =>
+                          handlePrintSignatoryChange("verified", e.target.value)
+                        }
+                        placeholder="Enter name"
+                        className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="mt-4 flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                    <span>Approved</span>
+                    <input
+                      type="text"
+                      value={printSignatories.approved}
+                      onChange={(e) =>
+                        handlePrintSignatoryChange("approved", e.target.value)
+                      }
+                      placeholder="Enter name"
+                      className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </label>
+                </section>
+
+                <section className="rounded-2xl border border-violet-100 bg-[linear-gradient(180deg,#fcfaff_0%,#ffffff_100%)] p-4 sm:p-5">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        Footer
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Date and page number are filled in automatically.
+                      </p>
+                    </div>
+                    <div className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                      Auto
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                      <span>Document Code</span>
+                      <input
+                        type="text"
+                        value={printFooterFields.documentCode}
+                        onChange={(e) =>
+                          handlePrintFooterFieldChange(
+                            "documentCode",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Enter document code"
+                        className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                      <span>Revision Number</span>
+                      <input
+                        type="text"
+                        value={printFooterFields.revisionNumber}
+                        onChange={(e) =>
+                          handlePrintFooterFieldChange(
+                            "revisionNumber",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Enter revision number"
+                        className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          Print Date
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {formatPrintFooterDate(new Date())}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          Page Count
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          Auto on print
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-dashed border-violet-200 bg-white px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                        Footer Preview
+                      </p>
+                      <p className="mt-2 break-words text-sm text-slate-700">
+                        {documentCodeForPrint} | {revisionNumberForPrint} |{" "}
+                        {formatPrintFooterDate(new Date())} | Page 1 of N
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
               <button
                 type="button"
                 onClick={() => setShowPrintSignatoryModal(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmPrint}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#553C9A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#44307B]"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#553C9A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-200/70 hover:bg-[#44307B]"
               >
                 <Printer size={16} />
                 <span>Continue to Print</span>
@@ -794,6 +1019,21 @@ const Feedback = ({ user }) => {
       {/* Print-specific styles */}
       <style>{`
         @media print {
+          @page {
+            size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
+            margin: ${PRINT_PAGE_MARGIN_TOP_CM}cm ${PRINT_PAGE_MARGIN_RIGHT_CM}cm ${PRINT_PAGE_MARGIN_BOTTOM_CM}cm ${PRINT_PAGE_MARGIN_LEFT_CM}cm;
+            @bottom-left {
+              content: ${printFooterPrefixCSS} counter(page) " of " counter(pages);
+              font-family: Arial, sans-serif;
+              font-size: 11px;
+              font-weight: 400;
+              text-align: left;
+              vertical-align: top;
+              padding-top: 0.15cm;
+              white-space: nowrap;
+            }
+          }
+
           body * {
             visibility: hidden;
           }
@@ -808,6 +1048,9 @@ const Feedback = ({ user }) => {
             left: 0;
             top: 0;
             width: 100%;
+            background: #fff;
+            margin: 0;
+            padding: 0;
           }
 
           .print-wrapper > thead {
@@ -838,16 +1081,7 @@ const Feedback = ({ user }) => {
         .print-header-title {
           font-family: Arial, sans-serif;
         }
-          
-          @page {
-            size: 13in 8.5in;
-            margin: 0.5in;
-          }
-          
-          html {
-            margin: 0;
-          }
-          
+          html,
           body {
             margin: 0;
             print-color-adjust: exact;

@@ -62,6 +62,7 @@ const useFeedbackRatings = () => {
                   id: feedbackDoc.id || "",
                   visitId: d.visitId || "",
                   name: d.name || "",
+                  displayName: readTextField(d.displayName),
                   email: d.email || "",
                   office: officeFromVisit,
                   visitPurpose: d.visitPurpose || "",
