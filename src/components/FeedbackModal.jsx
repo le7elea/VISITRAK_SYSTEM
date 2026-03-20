@@ -325,7 +325,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
 
       .header-copy h2 {
         margin: 1px 0;
-        font-size: calc(15.5px * var(--font-scale));
+        font-size: calc(12px * var(--font-scale));
         font-weight: 700;
       }
 
@@ -486,6 +486,19 @@ const buildPrintableFeedbackHtml = (visitor) => {
         font-size: calc(8.6px * var(--font-scale));
         line-height: 1.1;
         font-weight: 700;
+      }
+
+      .score-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+
+      .score-header-emoji {
+        font-size: calc(12px * var(--font-scale));
+        line-height: 1;
       }
 
       .score-number {
@@ -756,12 +769,42 @@ const buildPrintableFeedbackHtml = (visitor) => {
             <tr>
               <th>No.</th>
               <th>Dimensions/Level of Satisfaction</th>
-              <th>Very Satisfied (Nakontento pag-ayo)</th>
-              <th>Satisfied (Nakontento)</th>
-              <th>Neither Satisfied nor Dissatisfied (Neutral)</th>
-              <th>Dissatisfied (Wala nakontento)</th>
-              <th>Very Dissatisfied (Wala gayod nakontento)</th>
-              <th>Not Applicable (Walay Mabutang)</th>
+              <th>
+                <div class="score-header">
+                  <span>Very Satisfied (Nakontento pag-ayo)</span>
+                  <span class="score-header-emoji">&#128515;</span>
+                </div>
+              </th>
+              <th>
+                <div class="score-header">
+                  <span>Satisfied (Nakontento)</span>
+                  <span class="score-header-emoji">&#128578;</span>
+                </div>
+              </th>
+              <th>
+                <div class="score-header">
+                  <span>Neither Satisfied nor Dissatisfied (Neutral)</span>
+                  <span class="score-header-emoji">&#128528;</span>
+                </div>
+              </th>
+              <th>
+                <div class="score-header">
+                  <span>Dissatisfied (Wala nakontento)</span>
+                  <span class="score-header-emoji">&#128577;</span>
+                </div>
+              </th>
+              <th>
+                <div class="score-header">
+                  <span>Very Dissatisfied (Wala gayod nakontento)</span>
+                  <span class="score-header-emoji">&#128542;</span>
+                </div>
+              </th>
+              <th>
+                <div class="score-header">
+                  <span>Not Applicable (Walay Mabutang)</span>
+                  <span class="score-header-emoji">&#128683;</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1008,7 +1051,7 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
           </section>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+        {/* <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -1017,7 +1060,7 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
             Close
           </button>
           
-        </div>
+        </div> */}
       </div>
     </div>
   );
