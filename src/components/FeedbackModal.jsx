@@ -258,6 +258,9 @@ const buildPrintableFeedbackHtml = (visitor) => {
         font-family: Arial, Helvetica, sans-serif;
         color: #111827;
         background: #ffffff;
+        font-kerning: normal;
+        font-feature-settings: "kern" 1;
+        text-rendering: geometricPrecision;
       }
 
       body {
@@ -412,6 +415,14 @@ const buildPrintableFeedbackHtml = (visitor) => {
         align-items: center;
         gap: 4px;
         font-size: calc(9.2px * var(--font-scale));
+      }
+
+      .choice-label {
+        letter-spacing: 0;
+        word-spacing: 0;
+        font-kerning: normal;
+        font-feature-settings: "kern" 1;
+        text-rendering: geometricPrecision;
       }
 
       .choice-box {

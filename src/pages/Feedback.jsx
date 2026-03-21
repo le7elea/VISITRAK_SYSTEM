@@ -106,6 +106,42 @@ const normalizeQuestionRatings = (answers, questions = []) => {
   return [];
 };
 
+const getValidSatisfactionRating = (value) => {
+  const numeric = getNumericRating(value);
+
+  if (numeric === null) return null;
+  if (numeric <= 0 || numeric > 5) return null;
+
+  return numeric;
+};
+
+const getAverageQuestionRating = (questionRatings = []) => {
+  if (!Array.isArray(questionRatings)) return null;
+
+  const numericRatings = questionRatings
+    .map((item) => getValidSatisfactionRating(item?.rating))
+    .filter((rating) => rating !== null);
+
+  if (numericRatings.length === 0) return null;
+
+  const total = numericRatings.reduce((sum, rating) => sum + rating, 0);
+  return total / numericRatings.length;
+};
+
+const getFeedbackSatisfaction = (feedback, questionRatings = []) => {
+  const rawAverageRating = getValidSatisfactionRating(feedback?._raw?.averageRating);
+  if (rawAverageRating !== null) {
+    return rawAverageRating;
+  }
+
+  const normalizedAverageRating = getValidSatisfactionRating(feedback?.averageRating);
+  if (normalizedAverageRating !== null) {
+    return normalizedAverageRating;
+  }
+
+  return getAverageQuestionRating(questionRatings);
+};
+
 const toLocalDateInput = (dateObj) => {
   if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return "";
 
@@ -292,6 +328,7 @@ const Feedback = ({ user }) => {
           const commendation = toTrimmedText(f?.commendation);
           const questionRatings = normalizeQuestionRatings(f?.answers, f?.questions);
           const displayName = getFeedbackDisplayName(f, idx);
+          const satisfaction = getFeedbackSatisfaction(f, questionRatings);
 
           return {
             f,
@@ -300,13 +337,15 @@ const Feedback = ({ user }) => {
             commendation,
             questionRatings,
             displayName,
+            satisfaction,
           };
         })
-        .filter(({ f, suggestion, commendation, displayName }) => {
+        .filter(({ f, suggestion, commendation, displayName, satisfaction }) => {
           if (!f) return false;
           
           const hasWrittenFeedback = Boolean(commendation || suggestion);
-          if (!hasWrittenFeedback) return false;
+          const hasDisplayableFeedback = hasWrittenFeedback || satisfaction !== null;
+          if (!hasDisplayableFeedback) return false;
           
           const feedbackOffice = f.office || "Unspecified";
           const searchLower = (search || "").toLowerCase();
@@ -338,12 +377,15 @@ const Feedback = ({ user }) => {
           
           return matchesSearch && matchesDate && matchesOffice;
         })
-        .map(({ f, idx, suggestion, commendation, questionRatings, displayName }) => {
+        .map(({ f, idx, suggestion, commendation, questionRatings, displayName, satisfaction }) => {
           const feedbackOffice = f.office || "Unspecified";
           const officialOfficeName =
             getOfficialOfficeName(feedbackOffice, offices) || feedbackOffice;
           const formattedDate = getDisplayDate(f.createdAt);
-          const previewComment = suggestion || commendation || "No written feedback provided.";
+          const previewComment =
+            suggestion ||
+            commendation ||
+            "No written feedback provided. Rating details are available.";
           
           return {
             // Data for FeedbackTable
@@ -354,7 +396,7 @@ const Feedback = ({ user }) => {
             officialOfficeName,
             comment: previewComment,
             date: formattedDate,
-            satisfaction: parseFloat(f.averageRating) || 0,
+            satisfaction,
             commendation: commendation || "No commendation provided.",
             suggestion: suggestion || "No suggestion provided.",
             questionRatings,
@@ -501,7 +543,7 @@ const Feedback = ({ user }) => {
         comment: visitor.comment || "No feedback provided.",
         commendation: visitor.commendation || "No commendation provided.",
         suggestion: visitor.suggestion || "No suggestion provided.",
-        satisfaction: visitor.satisfaction || 0,
+        satisfaction: visitor.satisfaction ?? null,
         answers: visitor.answers || [],
         questionRatings: visitor.questionRatings || [],
         createdAt: visitor.createdAt || new Date(),

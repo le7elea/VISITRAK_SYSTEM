@@ -4,6 +4,8 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
   // Max 6 items visible at a time, scrollable if more
   const maxVisibleItems = 6;
   const containerHeight = maxVisibleItems * 76; // Approx. each item height ~76px including padding
+  const formatSatisfaction = (value) =>
+    Number.isFinite(value) ? `${value.toFixed(1)}/5` : "N/A";
 
   return (
     <div
@@ -43,7 +45,7 @@ const FeedbackTable = ({ visitors = [], onViewFull }) => {
                   </div>
 
                   <div className="text-yellow-500 font-semibold whitespace-nowrap">
-                    {v.satisfaction?.toFixed(1) || "N/A"}/5
+                    {formatSatisfaction(v.satisfaction)}
                   </div>
                 </div>
               </button>
