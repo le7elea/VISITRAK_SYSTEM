@@ -304,25 +304,25 @@ const buildPrintableFeedbackHtml = (visitor) => {
       }
 
       .seal {
-        width: 56px;
-        height: 56px;
+        width: 65px;
+        height: 65px;
         object-fit: contain;
       }
 
       .mark {
-        width: 64px;
-        height: 50px;
+        width: 75px;
+        height: 70px;
         object-fit: contain;
       }
 
       .iso {
-        width: 74px;
-        height: 50px;
+        width: 110px;
+        height: 75px;
         object-fit: contain;
       }
 
       .header-copy {
-        font-size: calc(10.5px * var(--font-scale));
+        font-size: calc(9.5px * var(--font-scale));
         line-height: 1.16;
       }
 
