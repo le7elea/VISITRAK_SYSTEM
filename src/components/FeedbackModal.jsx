@@ -179,6 +179,49 @@ const getFieldValue = (value, fallback = "N/A") => {
 const getNarrativeValue = (value) =>
   isPlaceholderText(value) ? "N/A" : getFieldValue(value);
 
+const getFeedbackDisplayName = (visitor = {}) => {
+  if (!visitor || typeof visitor !== "object") {
+    return "Anonymous";
+  }
+
+  if (typeof visitor.displayName === "boolean") {
+    if (visitor.displayName) {
+      return "Anonymous";
+    }
+
+    return (
+      toTrimmedText(visitor.name) ||
+      toTrimmedText(visitor.alias) ||
+      "Anonymous"
+    );
+  }
+
+  const storedDisplayName = toTrimmedText(visitor.displayName);
+  if (storedDisplayName) {
+    const normalizedDisplayName = storedDisplayName.toLowerCase();
+
+    if (normalizedDisplayName === "anonymous" || normalizedDisplayName === "anon") {
+      return "Anonymous";
+    }
+
+    if (
+      normalizedDisplayName === "name" ||
+      normalizedDisplayName === "show name" ||
+      normalizedDisplayName === "display name"
+    ) {
+      return (
+        toTrimmedText(visitor.name) ||
+        toTrimmedText(visitor.alias) ||
+        "Anonymous"
+      );
+    }
+
+    return storedDisplayName;
+  }
+
+  return toTrimmedText(visitor.name) || toTrimmedText(visitor.alias) || "Anonymous";
+};
+
 const renderChoiceOptions = (options, selectedValue) =>
   options
     .map(
@@ -225,6 +268,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
   const cc1Value = normalizeCharterChoice(visitor.cc1Rating, 4);
   const cc2Value = normalizeCharterChoice(visitor.cc2Rating, 5);
   const cc3Value = normalizeCharterChoice(visitor.cc3Rating, 4);
+  const ratedBy = getFeedbackDisplayName(visitor);
   const headerOfficeName = getFieldValue(
     visitor.officialOfficeName || visitor.office,
     "Office of the College of Computing and Information Sciences",
@@ -562,14 +606,47 @@ const buildPrintableFeedbackHtml = (visitor) => {
         word-break: break-word;
       }
 
-      .note {
+      .closing-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         width: 100%;
         margin: 0;
-        padding: 4px 10px;
         border-left: 1px solid #4b5563;
         border-right: 1px solid #4b5563;
         border-bottom: 1px solid #4b5563;
         background: #ffffff;
+      }
+
+      .rated-by {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 8px 10px;
+        border-right: 1px solid #4b5563;
+      }
+
+      .rated-by-label {
+        flex: 0 0 auto;
+        font-size: calc(10px * var(--font-scale));
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .rated-by-value {
+        flex: 1;
+        min-width: 70px;
+        min-height: 15px;
+        padding: 0 3px 1px;
+        border-bottom: 1px solid #4b5563;
+        font-size: calc(9.8px * var(--font-scale));
+      }
+
+      .closing-note {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 10px;
         text-align: center;
         font-size: calc(11px * var(--font-scale));
         font-weight: 600;
@@ -839,7 +916,13 @@ const buildPrintableFeedbackHtml = (visitor) => {
         </div>
       </div>
 
-      <div class="note">&quot;Salamat sa imong Feedback&quot;</div>
+      <div class="closing-row">
+        <div class="rated-by">
+          <span class="rated-by-label">Rated by:</span>
+          <span class="rated-by-value">${escapeHtml(ratedBy)}</span>
+        </div>
+        <div class="closing-note">&quot;Salamat sa imong Feedback&quot;</div>
+      </div>
         </div>
       </div>
     </div>
@@ -884,7 +967,7 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
   const questionRatings = Array.isArray(visitor.questionRatings)
     ? visitor.questionRatings
     : [];
-  const displayName = visitor.displayName || visitor.alias || "Anonymous";
+  const displayName = getFeedbackDisplayName(visitor);
 
   const handlePrintForm = () => {
     const printWindow = window.open("", "_blank", "width=980,height=1200");
