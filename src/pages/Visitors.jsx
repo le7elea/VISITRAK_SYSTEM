@@ -3,6 +3,7 @@ import FilterBar from "../components/FilterBar";
 import VisitorTable from "../components/VisitorTable";
 import VisitorInfoModal from "../components/VisitorInfoModal";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { Printer } from "lucide-react";
 import { db } from "../lib/firebase";
 import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
@@ -59,37 +60,14 @@ const normalizeQuestionRatings = (answers) => {
   return [];
 };
 
-const parseDateValue = (dateValue) => {
-  if (!dateValue) return null;
-  const parsed = new Date(dateValue);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
+const formatPrintFooterDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
 
-const formatRangeDate = (dateValue) => {
-  const parsed = parseDateValue(dateValue);
-  if (!parsed) return "";
-
-  return parsed.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
-const formatMonthDay = (dateValue) => {
-  const parsed = parseDateValue(dateValue);
-  if (!parsed) return "";
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-};
-
-const formatYear = (dateValue) => {
-  const parsed = parseDateValue(dateValue);
-  if (!parsed) return "";
-  return parsed.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}/${day}/${year}`;
 };
 
 const getVisitorSortTime = (visitor) => {
@@ -109,7 +87,18 @@ const getVisitorContactLines = (visitor) => {
   );
 };
 
-const hasVisitorEmail = (visitor) => Boolean(String(visitor?.email || "").trim());
+const DEFAULT_PRINT_DOCUMENT_CODE = "F-AQA-CSF-002";
+const DEFAULT_PRINT_REVISION_NUMBER = "Rev. 3";
+const PRINT_PAGE_WIDTH_IN = 13;
+const PRINT_PAGE_HEIGHT_IN = 8.5;
+const PRINT_PAGE_MARGIN_TOP_CM = 0.5;
+const PRINT_PAGE_MARGIN_RIGHT_CM = 0.5;
+const PRINT_PAGE_MARGIN_BOTTOM_CM = 1.9;
+const PRINT_PAGE_MARGIN_LEFT_CM = 0.5;
+const PRINT_ROWS_PER_PAGE = 17;
+const PRINT_HEADER_ROW_HEIGHT_IN = 0.42;
+const PRINT_BODY_ROW_HEIGHT_IN = 0.31;
+const PRINT_CONTACT_FONT_SIZE_PX = 11;
 
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [search, setSearch] = useState("");
@@ -121,6 +110,14 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [loading, setLoading] = useState(true);
   const [offices, setOffices] = useState([]); 
   const [selectedVisitor, setSelectedVisitor] = useState(null);
+  const [showPrintFooterModal, setShowPrintFooterModal] = useState(false);
+  const [printFooterFields, setPrintFooterFields] = useState({
+    documentCode: DEFAULT_PRINT_DOCUMENT_CODE,
+    revisionNumber: DEFAULT_PRINT_REVISION_NUMBER,
+  });
+  const [printFooterSnapshot, setPrintFooterSnapshot] = useState(() => ({
+    printedDate: formatPrintFooterDate(new Date()),
+  }));
 
   // Fetch visits from Firestore
   useEffect(() => {
@@ -242,6 +239,27 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      setPrintFooterSnapshot({
+        printedDate: formatPrintFooterDate(new Date()),
+      });
+    };
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+    };
+  }, []);
+
+  const handlePrintFooterFieldChange = (field, value) => {
+    setPrintFooterFields((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
   // Combine visits with feedback ratings
   const visitsWithRatings = useMemo(() => {
     return visits.map(visit => {
@@ -256,8 +274,20 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   }, [visits, feedbacks]);
   // Export to PDF function
   const exportPDF = () => {
+    setShowPrintFooterModal(true);
+  };
+
+  const handleConfirmPrint = () => {
+    setShowPrintFooterModal(false);
+
     try {
-      window.print();
+      setPrintFooterSnapshot({
+        printedDate: formatPrintFooterDate(new Date()),
+      });
+
+      setTimeout(() => {
+        window.print();
+      }, 0);
     } catch (error) {
       console.error('Error printing:', error);
       alert('Failed to print. Please try again.');
@@ -344,19 +374,29 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     });
   }, [filteredVisitors]);
 
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const total = filteredVisitors.length;
-    const checkedIn = filteredVisitors.filter(v => v.status === 'checked-in').length;
-    const checkedOut = filteredVisitors.filter(v => v.status === 'checked-out').length;
-    
-    const ratedVisitors = filteredVisitors.filter(v => v.satisfaction > 0);
-    const avgSatisfaction = ratedVisitors.length > 0 
-      ? (ratedVisitors.reduce((sum, v) => sum + v.satisfaction, 0) / ratedVisitors.length).toFixed(1)
-      : "0.0";
-    
-    return { total, checkedIn, checkedOut, avgSatisfaction };
-  }, [filteredVisitors]);
+  const printPages = useMemo(() => {
+    const pages = [];
+
+    if (printVisitors.length === 0) {
+      return [{ rows: [], emptyRowCount: PRINT_ROWS_PER_PAGE }];
+    }
+
+    for (let startIndex = 0; startIndex < printVisitors.length; startIndex += PRINT_ROWS_PER_PAGE) {
+      const rows = printVisitors
+        .slice(startIndex, startIndex + PRINT_ROWS_PER_PAGE)
+        .map((visitor) => ({
+          ...visitor,
+          _printContactLines: getVisitorContactLines(visitor),
+        }));
+
+      pages.push({
+        rows,
+        emptyRowCount: PRINT_ROWS_PER_PAGE - rows.length,
+      });
+    }
+
+    return pages;
+  }, [printVisitors]);
 
   const currentOfficeRecord = useMemo(() => {
     if (!user || offices.length === 0) return null;
@@ -410,22 +450,16 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     return fallbackOfficeName;
   }, [user, officeFilter, offices, currentOfficeRecord]);
 
-  const selectedDateRangeLabel = useMemo(() => {
-    const startLabel = formatRangeDate(startDateFilter);
-    const endLabel = formatRangeDate(endDateFilter);
-    const startYear = formatYear(startDateFilter);
-    const endYear = formatYear(endDateFilter);
-
-    if (startLabel && endLabel) {
-      if (startYear && endYear && startYear === endYear) {
-        return `${formatMonthDay(startDateFilter)} - ${formatMonthDay(endDateFilter)}, ${endYear}`;
-      }
-      return `${startLabel} - ${endLabel}`;
-    }
-    if (startLabel) return `From ${startLabel}`;
-    if (endLabel) return `Up to ${endLabel}`;
-    return "All Dates";
-  }, [startDateFilter, endDateFilter]);
+  const documentCodeForPrint =
+    String(printFooterFields.documentCode || "").trim() ||
+    DEFAULT_PRINT_DOCUMENT_CODE;
+  const revisionNumberForPrint =
+    String(printFooterFields.revisionNumber || "").trim() ||
+    DEFAULT_PRINT_REVISION_NUMBER;
+  const printedDateForPrint =
+    printFooterSnapshot.printedDate || formatPrintFooterDate(new Date());
+  const printFooterContentPrefix = `${documentCodeForPrint} | ${revisionNumberForPrint} | ${printedDateForPrint} | Page `;
+  const printFooterPrefixCSS = JSON.stringify(printFooterContentPrefix);
 
   if (loading) {
     return (
@@ -471,26 +505,135 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         ratingsOnly
       />
 
+      {showPrintFooterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Print Footer Settings
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Update the footer details before printing the visitors log sheet.
+              </p>
+            </div>
+
+            <div className="max-h-[75vh] overflow-y-auto px-5 py-5 sm:px-6">
+              <section className="rounded-2xl border border-violet-100 bg-[linear-gradient(180deg,#fcfaff_0%,#ffffff_100%)] p-4 sm:p-5">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Footer
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Date and page number are filled in automatically.
+                    </p>
+                  </div>
+                  <div className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                    Auto
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                    <span>Document Code</span>
+                    <input
+                      type="text"
+                      value={printFooterFields.documentCode}
+                      onChange={(e) =>
+                        handlePrintFooterFieldChange(
+                          "documentCode",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Enter document code"
+                      className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                    <span>Revision Number</span>
+                    <input
+                      type="text"
+                      value={printFooterFields.revisionNumber}
+                      onChange={(e) =>
+                        handlePrintFooterFieldChange(
+                          "revisionNumber",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Enter revision number"
+                      className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Print Date
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {formatPrintFooterDate(new Date())}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Page Count
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        Auto on print
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-dashed border-violet-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                      Footer Preview
+                    </p>
+                    <p className="mt-2 break-words text-sm text-slate-700">
+                      {documentCodeForPrint} | {revisionNumberForPrint} |{" "}
+                      {formatPrintFooterDate(new Date())} | Page 1 of N
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+              <button
+                type="button"
+                onClick={() => setShowPrintFooterModal(false)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPrint}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#553C9A] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-200/70 hover:bg-[#44307B]"
+              >
+                <Printer size={16} />
+                <span>Continue to Print</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print View Only - BISU Format */}
       <div className="hidden print:block bg-white print-only-section">
         {/* Split visitors into pages of 17 rows each */}
-        {(() => {
-          const rowsPerPage = 17;
-          const totalPages = Math.ceil(printVisitors.length / rowsPerPage) || 1;
-          
-          return Array.from({ length: totalPages }).map((_, pageIndex) => {
-            const startIndex = pageIndex * rowsPerPage;
-            const pageVisitors = printVisitors.slice(startIndex, startIndex + rowsPerPage);
-            const emptyRowsNeeded = rowsPerPage - pageVisitors.length;
-            const shouldForcePageBreak = pageIndex < totalPages - 1;
-            
-            return (
-               <div
-                 key={pageIndex}
-                 className={`page-break print-page px-2 py-1${
-                   shouldForcePageBreak ? " page-break-after" : ""
-                 }`}
-               >
+        {printPages.map((page, pageIndex) => {
+          const shouldForcePageBreak = pageIndex < printPages.length - 1;
+          const pageVisitors = page.rows;
+          const emptyRowsNeeded = page.emptyRowCount;
+
+          return (
+            <div
+              key={pageIndex}
+              className={`page-break print-page px-2 py-1${
+                shouldForcePageBreak ? " page-break-after" : ""
+              }`}
+            >
                  {/* Header */}
                  <div className="flex items-start justify-between mb-1">
                    <div className="flex items-center">
@@ -530,8 +673,6 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
                 {/* Title */}
                 <h2 className="text-center text-base font-bold mb-1 uppercase">Visitors' Log Sheet</h2>
-                {/* <p className="text-center text-[11px] mb-3">Date Range: {selectedDateRangeLabel}</p> */}
-
                 {/* Table */}
                 <table className="print-page-table w-full table-fixed border-collapse border-1 border-black">
                   <thead>
@@ -558,16 +699,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                       const dateObj = visitor.rawDate || new Date();
                       const formattedDate = `${String(dateObj.getMonth() + 1).padStart(2, '0')} – ${String(dateObj.getDate()).padStart(2, '0')} - ${String(dateObj.getFullYear()).slice(-2)}`;
                       
-                      const contactLines = getVisitorContactLines(visitor);
-                      const hasEmailContact = hasVisitorEmail(visitor);
-
+                      const contactLines = visitor._printContactLines || [];
                       return (
-                        <tr
-                          key={visitor.id}
-                          className={`print-body-row${
-                            hasEmailContact ? " print-body-row-expanded" : ""
-                          }`}
-                        >
+                        <tr key={visitor.id} className="print-body-row">
                           <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
                             <span className="print-cell-text">{formattedDate}</span>
                           </td>
@@ -581,18 +715,17 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                             <span className="print-cell-text">{visitor.purpose}</span>
                           </td>
                           <td
-                            className={`print-body-cell print-contact-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center${
-                              hasEmailContact ? " print-contact-cell-expanded" : ""
-                            }`}
+                            className="print-body-cell print-contact-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center"
                           >
                             {contactLines.length > 0 ? (
-                              <div
-                                className={`print-contact-text${
-                                  hasEmailContact ? " print-contact-text-expanded" : ""
-                                }`}
-                              >
+                              <div className="print-contact-text">
                                 {contactLines.map((detail, detailIndex) => (
-                                  <div key={`${visitor.id}-contact-${detailIndex}`}>{detail}</div>
+                                  <div
+                                    key={`${visitor.id}-contact-${detailIndex}`}
+                                    className="print-contact-line"
+                                  >
+                                    {detail}
+                                  </div>
                                 ))}
                               </div>
                             ) : (
@@ -616,8 +749,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                 </table>
               </div>
             );
-          });
-        })()}
+        })}
       </div>
 
       {/* Print-specific styles */}
@@ -655,8 +787,18 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
           
           @page {
-            size: 13in 8.5in;
-            margin: 0.2in;
+            size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
+            margin: ${PRINT_PAGE_MARGIN_TOP_CM}cm ${PRINT_PAGE_MARGIN_RIGHT_CM}cm ${PRINT_PAGE_MARGIN_BOTTOM_CM}cm ${PRINT_PAGE_MARGIN_LEFT_CM}cm;
+            @bottom-left {
+              content: ${printFooterPrefixCSS} counter(page) " of " counter(pages);
+              font-family: Arial, sans-serif;
+              font-size: 11px;
+              font-weight: 400;
+              text-align: left;
+              vertical-align: top;
+              padding-top: 0.15cm;
+              white-space: nowrap;
+            }
           }
           
           html {
@@ -690,32 +832,23 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
 
           .print-header-row {
-            height: 0.42in;
+            height: ${PRINT_HEADER_ROW_HEIGHT_IN}in;
           }
 
           .print-header-cell {
-            height: 0.42in;
+            height: ${PRINT_HEADER_ROW_HEIGHT_IN}in;
             vertical-align: middle;
           }
 
           .print-body-row {
-            height: 0.31in;
-          }
-
-          .print-body-row-expanded {
-            height: auto;
+            height: ${PRINT_BODY_ROW_HEIGHT_IN}in;
           }
 
           .print-body-cell {
-            height: 0.31in;
+            height: ${PRINT_BODY_ROW_HEIGHT_IN}in;
             vertical-align: middle;
             white-space: nowrap;
             overflow: hidden;
-          }
-
-          .print-body-row-expanded .print-body-cell {
-            height: auto;
-            min-height: 0.31in;
           }
 
           .print-cell-text {
@@ -727,31 +860,28 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
 
           .print-contact-cell {
-            white-space: nowrap;
+            font-size: ${PRINT_CONTACT_FONT_SIZE_PX}px !important;
+            line-height: 0.95;
             overflow: hidden;
+            padding-top: 1px !important;
+            padding-bottom: 1px !important;
           }
 
           .print-contact-text {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
             width: 100%;
+            max-height: calc(${PRINT_BODY_ROW_HEIGHT_IN}in - 1px);
+            overflow: hidden;
+            gap: 0;
+          }
+
+          .print-contact-line {
+            display: block;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-          }
-
-          .print-contact-cell-expanded {
-            white-space: normal;
-            overflow: visible;
-          }
-
-          .print-contact-text-expanded {
-            overflow: visible;
-            text-overflow: clip;
-            white-space: normal;
-            word-break: break-word;
-            line-height: 1.1;
-            padding-top: 2px;
-            padding-bottom: 2px;
           }
           
           body {
