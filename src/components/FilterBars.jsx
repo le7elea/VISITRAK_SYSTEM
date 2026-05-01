@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronDown, Download } from "lucide-react";
+import { Calendar, ChevronDown, Download, QrCode, Search } from "lucide-react";
 
 const FilterBar = ({
   search,
@@ -14,17 +14,24 @@ const FilterBar = ({
   user,
   totalCount,
   filteredCount,
+  onGenerateQRCode,
+  isGeneratingQRCode = false,
 }) => {
   // Check both 'type' and 'role' fields to match Login.jsx structure
   const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
-  const safeDayRange = dayRange || { start: "", end: "" };
+  const dayRangeStart = dayRange?.start || "";
+  const dayRangeEnd = dayRange?.end || "";
+  const safeDayRange = useMemo(
+    () => ({ start: dayRangeStart, end: dayRangeEnd }),
+    [dayRangeStart, dayRangeEnd]
+  );
   const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
   const [pendingDayRange, setPendingDayRange] = useState(safeDayRange);
   const dayRangeDropdownRef = useRef(null);
 
   useEffect(() => {
     setPendingDayRange(safeDayRange);
-  }, [safeDayRange.start, safeDayRange.end]);
+  }, [safeDayRange]);
 
   useEffect(() => {
     if (!showDayRangeDropdown) return undefined;
@@ -108,9 +115,29 @@ const FilterBar = ({
       <div className="flex flex-col sm:flex-row justify-between items-center border-b border-indigo-100 px-4 sm:px-6 py-3 gap-3">
         <h3 className="font-semibold text-gray-800 text-sm sm:text-base dark:text-gray-100">
           Search & Filters
+          <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+            {filteredCount ?? 0} of {totalCount ?? 0}
+          </span>
         </h3>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-center sm:justify-end gap-2">
+          {typeof onGenerateQRCode === "function" && (
+            <button
+              type="button"
+              onClick={onGenerateQRCode}
+              disabled={isGeneratingQRCode}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
+            >
+              <QrCode size={16} /> {isGeneratingQRCode ? "Generating..." : "Manual QR"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={exportCSV}
+            className="flex items-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <Download size={16} /> CSV
+          </button>
           <button
             onClick={exportPDF}
             className="flex items-center gap-2 bg-[#7400EA] hover:bg-blue-800 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
@@ -123,6 +150,20 @@ const FilterBar = ({
       {/* Filters */}
       <div className="p-4 sm:p-6">
         <div className="flex flex-col md:flex-row md:items-center gap-4 w-full">
+          <div className="relative w-full md:flex-1 md:min-w-[260px]">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+            />
+            <input
+              type="search"
+              value={search || ""}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search feedback"
+              className="h-[46px] w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-gray-900 dark:text-gray-200"
+            />
+          </div>
+
           {/* Office Filter (DISABLED for Office Admin) */}
           <div className="w-full md:flex-1 md:min-w-[260px]">
             <select
