@@ -650,7 +650,8 @@ const Feedback = ({ user }) => {
       setQrModalOpen(true);
     } catch (err) {
       console.error("Error generating manual feedback QR token:", err);
-      alert("Failed to generate manual feedback QR code. Please try again.");
+      const errorDetail = err?.code || err?.message || "Unknown error";
+      alert(`Failed to generate manual feedback QR code: ${errorDetail}`);
     } finally {
       setIsGeneratingQr(false);
     }

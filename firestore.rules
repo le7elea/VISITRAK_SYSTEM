@@ -79,6 +79,32 @@ service cloud.firestore {
       allow update, delete: if isSuper();
     }
 
+    // Admin-generated approval tokens for anonymous manual feedback encoding.
+    match /manualFeedbackTokens/{tokenId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.mode == "manual" &&
+        request.resource.data.source == "manual-qr" &&
+        request.resource.data.status == "active" &&
+        request.resource.data.revoked == false &&
+        request.resource.data.maxUses is int &&
+        request.resource.data.maxUses >= 1 &&
+        request.resource.data.maxUses <= 500 &&
+        request.resource.data.remainingUses == request.resource.data.maxUses &&
+        request.resource.data.useCount == 0 &&
+        request.resource.data.used == false &&
+        request.resource.data.manualSubmissionDefaults.manualEntry == true &&
+        request.resource.data.manualSubmissionDefaults.source == "manual-qr" &&
+        request.resource.data.manualSubmissionDefaults.name == "Anonymous";
+      allow update: if signedIn() &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "revoked",
+          "status",
+          "updatedAt"
+        ]);
+      allow delete: if isSuper();
+    }
+
     // Append-only audit logs.
     match /activityLogs/{logId} {
       allow read: if signedIn();
