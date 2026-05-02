@@ -363,6 +363,48 @@ const normalizeFivePointRating = (value) => {
   return null;
 };
 
+const COSTS_DIMENSION_INDEX = 4;
+
+const officeIncludesCostsDimension = (officeName) => {
+  const normalized = toTrimmedText(officeName).toLowerCase();
+  if (!normalized) return false;
+
+  return ["cashier", "canteen", "production"].some((keyword) =>
+    normalized.includes(keyword),
+  );
+};
+
+const getFeedbackSatisfactionForAnalytics = (
+  feedback,
+  officeName = feedback?.office,
+) => {
+  const questionRatings = Array.isArray(feedback?.questionRatings)
+    ? feedback.questionRatings
+    : [];
+
+  const eligibleRatings = questionRatings
+    .map((item, index) => {
+      if (
+        index === COSTS_DIMENSION_INDEX &&
+        !officeIncludesCostsDimension(officeName)
+      ) {
+        return null;
+      }
+
+      return normalizeFivePointRating(item?.rating);
+    })
+    .filter((value) => value !== null);
+
+  if (eligibleRatings.length) {
+    return (
+      eligibleRatings.reduce((sum, value) => sum + value, 0) /
+      eligibleRatings.length
+    );
+  }
+
+  return normalizeFivePointRating(feedback?.averageRating);
+};
+
 const formatCountCell = (value, hasData = true) => {
   if (!hasData) return "-";
   return `${value || 0}`;
@@ -373,9 +415,9 @@ const formatScoreCell = (value) => {
   return Number(value).toFixed(2);
 };
 
-const calculateMeanSatisfaction = (feedbacks = []) => {
+const calculateMeanSatisfaction = (feedbacks = [], officeName = "") => {
   const ratings = feedbacks
-    .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+    .map((feedback) => getFeedbackSatisfactionForAnalytics(feedback, officeName))
     .filter((value) => value !== null);
 
   if (!ratings.length) return null;
@@ -384,31 +426,35 @@ const calculateMeanSatisfaction = (feedbacks = []) => {
 
 const getSatisfactionDescription = (value) => {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  if (value < 0) return "-";
-  if (value < 1) return "Very Unsatisfied";
-  if (value < 2) return "Unsatisfied";
-  if (value < 3) return "Neither Satisfied nor Dissatisfied";
-  if (value < 4) return "Satisfied";
+  if (value < 1 || value > 5) return "-";
+  if (value <= 1.79) return "Very Dissatisfied";
+  if (value <= 2.59) return "Dissatisfied";
+  if (value <= 3.39) return "Neither nor Dissatisfied";
+  if (value <= 4.19) return "Satisfied";
   return "Very Satisfied";
 };
 
 const calculateSatisfactionRates = (feedbacks = []) => {
   const ratings = feedbacks
-    .map((feedback) => getNumericRating(feedback?.averageRating))
+    .map((feedback) =>
+      getFeedbackSatisfactionForAnalytics(feedback, feedback?.office),
+    )
     .filter((rating) => rating !== null && rating >= 0 && rating <= 5);
 
   const total = ratings.length;
   if (total === 0) return [];
 
   const counts = {
-    verySatisfied: ratings.filter((rating) => rating >= 4 && rating <= 5)
+    verySatisfied: ratings.filter((rating) => rating >= 4.2 && rating <= 5)
       .length,
-    satisfied: ratings.filter((rating) => rating >= 3 && rating < 4).length,
+    satisfied: ratings.filter((rating) => rating >= 3.4 && rating <= 4.19)
+      .length,
     neitherSatisfiedNorDissatisfied: ratings.filter(
-      (rating) => rating >= 2 && rating < 3,
+      (rating) => rating >= 2.6 && rating <= 3.39,
     ).length,
-    unsatisfied: ratings.filter((rating) => rating >= 1 && rating < 2).length,
-    veryUnsatisfied: ratings.filter((rating) => rating >= 0 && rating < 1)
+    dissatisfied: ratings.filter((rating) => rating >= 1.8 && rating <= 2.59)
+      .length,
+    veryDissatisfied: ratings.filter((rating) => rating >= 1 && rating <= 1.79)
       .length,
   };
 
@@ -419,38 +465,57 @@ const calculateSatisfactionRates = (feedbacks = []) => {
     },
     { label: "Satisfied", pct: Math.round((counts.satisfied / total) * 100) },
     {
-      label: "Neither Satisfied nor Dissatisfied",
+      label: "Neither nor Dissatisfied",
       pct: Math.round((counts.neitherSatisfiedNorDissatisfied / total) * 100),
     },
     {
-      label: "Unsatisfied",
-      pct: Math.round((counts.unsatisfied / total) * 100),
+      label: "Dissatisfied",
+      pct: Math.round((counts.dissatisfied / total) * 100),
     },
     {
-      label: "Very Unsatisfied",
-      pct: Math.round((counts.veryUnsatisfied / total) * 100),
+      label: "Very Dissatisfied",
+      pct: Math.round((counts.veryDissatisfied / total) * 100),
     },
   ];
 };
 
-const calculateTrafficByDay = (visits = []) => {
+const getCsfActionRowKey = (officeName = "") =>
+  normalizeOfficeName(officeName).toLowerCase() || "unspecified-office";
+
+const countUniqueFeedbackRespondents = (feedbacks = []) => {
+  const customerKeys = new Set();
+
+  feedbacks.forEach((feedback, index) => {
+    if (feedback?.visitId) {
+      customerKeys.add(`visit:${feedback.visitId}`);
+      return;
+    }
+
+    const fallbackId = feedback?.id || `feedback-fallback:${index}`;
+    customerKeys.add(`feedback:${fallbackId}`);
+  });
+
+  return customerKeys.size;
+};
+
+const calculateTrafficByDay = (records = []) => {
   const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   const counts = days.map(() => 0);
 
-  visits.forEach((visit) => {
-    if (!visit?.checkInTime) return;
+  records.forEach((record) => {
+    const sourceDate = record?.checkInTime || record?.createdAt;
+    if (!sourceDate) return;
 
     try {
-      // Use checkInTime timestamp from visits collection
-      const checkInDate = visit.checkInTime.toDate
-        ? visit.checkInTime.toDate()
-        : new Date(visit.checkInTime);
-      if (isNaN(checkInDate.getTime())) return;
+      const recordDate = sourceDate.toDate
+        ? sourceDate.toDate()
+        : new Date(sourceDate);
+      if (isNaN(recordDate.getTime())) return;
 
-      const dayIndex = (checkInDate.getDay() + 6) % 7; // Monday=0
+      const dayIndex = (recordDate.getDay() + 6) % 7; // Monday=0
       counts[dayIndex]++;
     } catch (error) {
-      console.error("Error parsing check-in date:", visit.checkInTime, error);
+      console.error("Error parsing traffic record date:", sourceDate, error);
     }
   });
 
@@ -468,7 +533,7 @@ const SatisfactionIcon = ({ label, className = "w-4 h-4" }) => {
   if (label === "Very Satisfied" || label === "Satisfied") {
     return <Smile className={className} />;
   }
-  if (label === "Neither Satisfied nor Dissatisfied") {
+  if (label === "Neither nor Dissatisfied") {
     return <Meh className={className} />;
   }
   return <Frown className={className} />;
@@ -596,9 +661,11 @@ const VisitorTrafficChart = ({ trafficData }) => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-gray-500 py-8">
             <BarChart2 size={48} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-600">No visitors during this period</p>
+            <p className="text-gray-600">
+              No feedback respondents during this period
+            </p>
             <p className="text-sm text-gray-500 mt-1">
-              Visitor traffic will appear here when visitors check in
+              Visitor traffic will appear here when visitors submit feedback
             </p>
           </div>
         </div>
@@ -936,6 +1003,9 @@ const Analytics = ({ setActiveTab }) => {
           (feedbackSnapshot) => {
             const allFeedbacks = feedbackSnapshot.docs.map((doc) => {
               const d = doc.data();
+              const rawAnswers =
+                d.answers ?? d.questionRatings ?? d.ratings ?? [];
+              const questions = Array.isArray(d.questions) ? d.questions : [];
               return {
                 id: doc.id,
                 visitId: d.visitId,
@@ -943,17 +1013,22 @@ const Analytics = ({ setActiveTab }) => {
                 displayName: d.displayName,
                 office:
                   d.office ||
+                  d.officeName ||
                   d.unitOfficeVisited ||
                   d.officeVisited ||
                   d.unitOffice ||
+                  d.manualSubmissionDefaults?.office ||
+                  d.manualSubmissionDefaults?.officeName ||
+                  d.manualSubmissionDefaults?.unitOfficeVisited ||
                   "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
                 cc1Rating: getCharterRatingValue(d, 1),
                 cc2Rating: getCharterRatingValue(d, 2),
                 cc3Rating: getCharterRatingValue(d, 3),
-                answers: d.answers || [],
-                questions: Array.isArray(d.questions) ? d.questions : [],
+                answers: rawAnswers,
+                questions,
+                questionRatings: normalizeQuestionRatings(rawAnswers, questions),
                 averageRating: d.averageRating || 0,
                 commendation:
                   d.commendation ||
@@ -961,14 +1036,18 @@ const Analytics = ({ setActiveTab }) => {
                   d.positiveFeedback ||
                   d.compliment ||
                   "",
-                suggestion: d.suggestion || "",
+                suggestion: d.suggestion || d.recommendation || "",
                 createdAt: d.createdAt,
               };
             });
 
-            const filteredData = allFeedbacks.filter((feedback) =>
-              officeVisitIds.includes(feedback.visitId),
-            );
+            const filteredData = allFeedbacks.filter((feedback) => {
+              if (feedback?.visitId && officeVisitIds.includes(feedback.visitId)) {
+                return true;
+              }
+
+              return compareOfficeNames(feedback?.office, userOffice);
+            });
             console.log(
               `After filtering: ${filteredData.length} feedbacks for office "${userOffice}"`,
             );
@@ -989,6 +1068,9 @@ const Analytics = ({ setActiveTab }) => {
           (snapshot) => {
             const data = snapshot.docs.map((doc) => {
               const d = doc.data();
+              const rawAnswers =
+                d.answers ?? d.questionRatings ?? d.ratings ?? [];
+              const questions = Array.isArray(d.questions) ? d.questions : [];
               return {
                 id: doc.id,
                 visitId: d.visitId,
@@ -996,17 +1078,22 @@ const Analytics = ({ setActiveTab }) => {
                 displayName: d.displayName,
                 office:
                   d.office ||
+                  d.officeName ||
                   d.unitOfficeVisited ||
                   d.officeVisited ||
                   d.unitOffice ||
+                  d.manualSubmissionDefaults?.office ||
+                  d.manualSubmissionDefaults?.officeName ||
+                  d.manualSubmissionDefaults?.unitOfficeVisited ||
                   "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
                 cc1Rating: getCharterRatingValue(d, 1),
                 cc2Rating: getCharterRatingValue(d, 2),
                 cc3Rating: getCharterRatingValue(d, 3),
-                answers: d.answers || [],
-                questions: Array.isArray(d.questions) ? d.questions : [],
+                answers: rawAnswers,
+                questions,
+                questionRatings: normalizeQuestionRatings(rawAnswers, questions),
                 averageRating: d.averageRating || 0,
                 commendation:
                   d.commendation ||
@@ -1014,7 +1101,7 @@ const Analytics = ({ setActiveTab }) => {
                   d.positiveFeedback ||
                   d.compliment ||
                   "",
-                suggestion: d.suggestion || "",
+                suggestion: d.suggestion || d.recommendation || "",
                 createdAt: d.createdAt,
               };
             });
@@ -1086,6 +1173,7 @@ const Analytics = ({ setActiveTab }) => {
     documentCode: "F-AQA-CSF-002",
     revisionNumber: "Rev. 3",
   });
+  const [csfActionInputs, setCsfActionInputs] = useState({});
   const [printFooterSnapshot, setPrintFooterSnapshot] = useState({
     printedDate: formatPrintFooterDate(new Date()),
   });
@@ -1109,6 +1197,22 @@ const Analytics = ({ setActiveTab }) => {
     setPrintFooterSnapshot({
       printedDate: formatPrintFooterDate(new Date()),
     });
+  };
+
+  const handleCsfActionInputChange = (officeKey, field, value) => {
+    setCsfActionInputs((previous) => ({
+      ...previous,
+      [officeKey]: {
+        commendationDetail: "",
+        suggestionsDetail: "",
+        rootCause: "",
+        actionPlan: "",
+        targetImplementation: "",
+        implementationStatus: "",
+        ...previous[officeKey],
+        [field]: value,
+      },
+    }));
   };
 
   useEffect(() => {
@@ -1391,8 +1495,6 @@ const Analytics = ({ setActiveTab }) => {
 
   // --- Filter feedbacks based on date range ---
   const filteredFeedbacks = useMemo(() => {
-    if (!filteredVisits.length) return [];
-
     const visitIdSet = new Set(filteredVisits.map((v) => v.id).filter(Boolean));
     const startDate = parseLocalDate(dateRange.start);
     const endDate = parseLocalDate(dateRange.end);
@@ -1401,15 +1503,21 @@ const Analytics = ({ setActiveTab }) => {
     endDate.setHours(23, 59, 59, 999);
 
     return feedbacks.filter((f) => {
-      if (!visitIdSet.has(f.visitId)) return false;
       if (!f?.createdAt) return false;
       const feedbackDate = f.createdAt.toDate
         ? f.createdAt.toDate()
         : new Date(f.createdAt);
       if (isNaN(feedbackDate.getTime())) return false;
-      return feedbackDate >= startDate && feedbackDate <= endDate;
+      if (feedbackDate < startDate || feedbackDate > endDate) return false;
+
+      if (f?.visitId) {
+        return visitIdSet.has(f.visitId);
+      }
+
+      if (selectedOfficeFilter === "all") return true;
+      return compareOfficeNames(f?.office, selectedOfficeFilter);
     });
-  }, [feedbacks, filteredVisits, dateRange]);
+  }, [feedbacks, filteredVisits, dateRange, selectedOfficeFilter]);
 
   // Get visit details for each feedback using the chosen display name
   const feedbacksWithVisitDetails = useMemo(() => {
@@ -1427,28 +1535,38 @@ const Analytics = ({ setActiveTab }) => {
         ...feedback,
         displayName,
         visitorName: displayName,
-        visitorOffice: visitOfficeMap[feedback.visitId] || visit?.office,
+        visitorOffice:
+          visitOfficeMap[feedback.visitId] || visit?.office || feedback?.office,
         visitorDate: visit?.checkInTime
           ? (visit.checkInTime.toDate
               ? visit.checkInTime.toDate()
               : new Date(visit.checkInTime)
             ).toLocaleDateString()
-          : "",
+          : (feedback?.createdAt
+              ? (
+                  feedback.createdAt.toDate
+                    ? feedback.createdAt.toDate()
+                    : new Date(feedback.createdAt)
+                ).toLocaleDateString()
+              : ""),
         comment:
           feedback?.suggestion ||
+          feedback?.commendation ||
           feedback?.answers?.join?.(" ") ||
-          "No comment provided",
+          "Submitted feedback form without written comments.",
       };
     });
   }, [filteredFeedbacks, visits]);
 
-  const trafficData = calculateTrafficByDay(filteredVisits);
+  const trafficData = calculateTrafficByDay(filteredFeedbacks);
   const satisfactionRates = calculateSatisfactionRates(filteredFeedbacks);
 
   // Calculate average satisfaction from feedbacks
   const avgSatisfaction = useMemo(() => {
     const validRatings = filteredFeedbacks
-      .map((feedback) => normalizeFivePointRating(feedback?.averageRating))
+      .map((feedback) =>
+        getFeedbackSatisfactionForAnalytics(feedback, feedback?.office),
+      )
       .filter((value) => value !== null);
 
     if (!validRatings.length) return "0.0";
@@ -1651,25 +1769,11 @@ const Analytics = ({ setActiveTab }) => {
 
   const officeAnalyticsRows = useMemo(() => {
     return officeNamesForPrint.map((officeName) => {
-      const officeVisits = filteredVisits.filter((visit) =>
-        compareOfficeNames(visit?.office, officeName),
-      );
-
       const officeFeedbacks = feedbackRecordsForPrint.filter((feedback) =>
         compareOfficeNames(feedback?.office, officeName),
       );
 
-      const hasVisitData =
-        officeVisits.length > 0 || officeFeedbacks.length > 0;
       const hasFeedbackData = officeFeedbacks.length > 0;
-
-      const visitMaleCount = officeVisits.filter(
-        (visit) => normalizeSex(visit?.sex) === "M",
-      ).length;
-      const visitFemaleCount = officeVisits.filter(
-        (visit) => normalizeSex(visit?.sex) === "F",
-      ).length;
-      const hasVisitSexData = visitMaleCount + visitFemaleCount > 0;
 
       const feedbackMaleCount = officeFeedbacks.filter(
         (feedback) => normalizeSex(feedback?.sex) === "M",
@@ -1677,34 +1781,8 @@ const Analytics = ({ setActiveTab }) => {
       const feedbackFemaleCount = officeFeedbacks.filter(
         (feedback) => normalizeSex(feedback?.sex) === "F",
       ).length;
-      const hasFeedbackSexData = feedbackMaleCount + feedbackFemaleCount > 0;
-
-      const maleCount = hasVisitSexData
-        ? visitMaleCount
-        : hasFeedbackSexData
-          ? feedbackMaleCount
-          : 0;
-      const femaleCount = hasVisitSexData
-        ? visitFemaleCount
-        : hasFeedbackSexData
-          ? feedbackFemaleCount
-          : 0;
-
-      const visitClientCounts = officeVisits.reduce(
-        (acc, visit) => {
-          const type = normalizeClientType(visit?.clientType);
-          if (type === "citizens") acc.citizens += 1;
-          if (type === "business") acc.business += 1;
-          if (type === "government") acc.government += 1;
-          return acc;
-        },
-        { citizens: 0, business: 0, government: 0 },
-      );
-      const hasVisitClientTypeData =
-        visitClientCounts.citizens +
-          visitClientCounts.business +
-          visitClientCounts.government >
-        0;
+      const maleCount = feedbackMaleCount;
+      const femaleCount = feedbackFemaleCount;
 
       const feedbackClientCounts = officeFeedbacks.reduce(
         (acc, feedback) => {
@@ -1716,17 +1794,7 @@ const Analytics = ({ setActiveTab }) => {
         },
         { citizens: 0, business: 0, government: 0 },
       );
-      const hasFeedbackClientTypeData =
-        feedbackClientCounts.citizens +
-          feedbackClientCounts.business +
-          feedbackClientCounts.government >
-        0;
-
-      const clientCounts = hasVisitClientTypeData
-        ? visitClientCounts
-        : hasFeedbackClientTypeData
-          ? feedbackClientCounts
-          : { citizens: 0, business: 0, government: 0 };
+      const clientCounts = feedbackClientCounts;
 
       const charterCounts = {
         cc1: [0, 0, 0, 0],
@@ -1734,29 +1802,20 @@ const Analytics = ({ setActiveTab }) => {
         cc3: [0, 0, 0, 0],
       };
 
-      // Merge charter ratings per visit so missing CC fields can be filled
-      // from feedback/question ratings without double-counting the same visit.
-      const charterRatingsByVisit = new Map();
-
-      officeVisits.forEach((visit, visitIndex) => {
-        const key = visit?.id || `visit-${visitIndex}`;
-        charterRatingsByVisit.set(key, {
-          cc1Rating: visit?.cc1Rating ?? null,
-          cc2Rating: visit?.cc2Rating ?? null,
-          cc3Rating: visit?.cc3Rating ?? null,
-        });
-      });
+      // Count only feedback respondents, while still allowing each
+      // respondent record to contribute its resolved CC values once.
+      const charterRatingsByRespondent = new Map();
 
       officeFeedbacks.forEach((feedback, feedbackIndex) => {
         const key =
           feedback?.visitId || feedback?.id || `feedback-${feedbackIndex}`;
-        const existingRatings = charterRatingsByVisit.get(key) || {
+        const existingRatings = charterRatingsByRespondent.get(key) || {
           cc1Rating: null,
           cc2Rating: null,
           cc3Rating: null,
         };
 
-        charterRatingsByVisit.set(key, {
+        charterRatingsByRespondent.set(key, {
           cc1Rating:
             existingRatings.cc1Rating ??
             feedback?.cc1Rating ??
@@ -1776,7 +1835,7 @@ const Analytics = ({ setActiveTab }) => {
       });
 
       let hasCharterData = false;
-      charterRatingsByVisit.forEach((ratings) => {
+      charterRatingsByRespondent.forEach((ratings) => {
         [ratings.cc1Rating, ratings.cc2Rating, ratings.cc3Rating].forEach(
           (rating, idx) => {
             const normalized = normalizeCharterRating(rating, idx);
@@ -1788,6 +1847,13 @@ const Analytics = ({ setActiveTab }) => {
       });
 
       const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
+        if (
+          index === COSTS_DIMENSION_INDEX &&
+          !officeIncludesCostsDimension(officeName)
+        ) {
+          return null;
+        }
+
         const ratings = officeFeedbacks
           .map((feedback) =>
             normalizeFivePointRating(
@@ -1800,7 +1866,10 @@ const Analytics = ({ setActiveTab }) => {
         return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
       });
 
-      const meanSatisfaction = calculateMeanSatisfaction(officeFeedbacks);
+      const meanSatisfaction = calculateMeanSatisfaction(
+        officeFeedbacks,
+        officeName,
+      );
 
       const commendationSet = new Set();
       const suggestionSet = new Set();
@@ -1816,12 +1885,8 @@ const Analytics = ({ setActiveTab }) => {
 
       return {
         office: officeName,
-        hasVisitData,
         hasFeedbackData,
-        customerCount:
-          officeVisits.length > 0
-            ? officeVisits.length
-            : officeFeedbacks.length,
+        customerCount: countUniqueFeedbackRespondents(officeFeedbacks),
         maleCount,
         femaleCount,
         citizensCount: clientCounts.citizens,
@@ -1831,6 +1896,7 @@ const Analytics = ({ setActiveTab }) => {
         cc1Counts: charterCounts.cc1,
         cc2Counts: charterCounts.cc2,
         cc3Counts: charterCounts.cc3,
+        includesCosts: officeIncludesCostsDimension(officeName),
         dimensionMeans,
         meanSatisfaction,
         satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
@@ -1838,7 +1904,7 @@ const Analytics = ({ setActiveTab }) => {
         suggestions: [...suggestionSet],
       };
     });
-  }, [officeNamesForPrint, filteredVisits, feedbackRecordsForPrint]);
+  }, [officeNamesForPrint, feedbackRecordsForPrint]);
 
   const officeConcernedNameForPrint = useMemo(() => {
     const sourceOfficeName =
@@ -1928,12 +1994,12 @@ const Analytics = ({ setActiveTab }) => {
     );
 
     return {
-      customerCount: filteredVisits.length,
+      customerCount: countUniqueFeedbackRespondents(feedbackRecordsForPrint),
       dimensionMeans,
       meanSatisfaction,
       satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
     };
-  }, [officeAnalyticsRows, filteredVisits.length]);
+  }, [officeAnalyticsRows, feedbackRecordsForPrint]);
 
   const commendationSuggestionRows = useMemo(() => {
     return officeAnalyticsRows.filter(
@@ -1952,6 +2018,65 @@ const Analytics = ({ setActiveTab }) => {
       },
     ];
   }, [commendationSuggestionRows]);
+
+  useEffect(() => {
+    setCsfActionInputs((previous) => {
+      let changed = false;
+      const next = {};
+
+      csfRowsForPrint.forEach((row) => {
+        const officeKey = getCsfActionRowKey(row?.office);
+        const existing = previous[officeKey];
+
+        next[officeKey] = {
+          commendationDetail: existing?.commendationDetail || "",
+          suggestionsDetail: existing?.suggestionsDetail || "",
+          rootCause: existing?.rootCause || "",
+          actionPlan: existing?.actionPlan || "",
+          targetImplementation: existing?.targetImplementation || "",
+          implementationStatus: existing?.implementationStatus || "",
+        };
+
+        if (
+          !existing ||
+          existing.commendationDetail !== next[officeKey].commendationDetail ||
+          existing.suggestionsDetail !== next[officeKey].suggestionsDetail ||
+          existing.rootCause !== next[officeKey].rootCause ||
+          existing.actionPlan !== next[officeKey].actionPlan ||
+          existing.targetImplementation !==
+            next[officeKey].targetImplementation ||
+          existing.implementationStatus !==
+            next[officeKey].implementationStatus
+        ) {
+          changed = true;
+        }
+      });
+
+      if (!changed && Object.keys(previous).length === Object.keys(next).length) {
+        return previous;
+      }
+
+      return next;
+    });
+  }, [csfRowsForPrint]);
+
+  const csfRowsWithActionsForPrint = useMemo(() => {
+    return csfRowsForPrint.map((row) => {
+      const officeKey = getCsfActionRowKey(row?.office);
+      const actionValues = csfActionInputs[officeKey] || {};
+
+      return {
+        ...row,
+        officeKey,
+        commendationDetail: actionValues.commendationDetail || "",
+        suggestionsDetail: actionValues.suggestionsDetail || "",
+        rootCause: actionValues.rootCause || "",
+        actionPlan: actionValues.actionPlan || "",
+        targetImplementation: actionValues.targetImplementation || "",
+        implementationStatus: actionValues.implementationStatus || "",
+      };
+    });
+  }, [csfRowsForPrint, csfActionInputs]);
 
   const isSingleOffice = officeAnalyticsRows.length === 1;
 
@@ -2032,7 +2157,9 @@ const Analytics = ({ setActiveTab }) => {
         : "our facility";
 
     const ratings = filteredFeedbacks
-      .map((feedback) => getNumericRating(feedback?.averageRating))
+      .map((feedback) =>
+        getFeedbackSatisfactionForAnalytics(feedback, feedback?.office),
+      )
       .filter((rating) => rating !== null);
 
     const highSatCount = ratings.filter((rating) => rating >= 4).length;
@@ -2080,7 +2207,10 @@ const Analytics = ({ setActiveTab }) => {
     narrative += `\n\nKey observations from written feedback:\n\n`;
 
     feedbacksWithComments.slice(0, 8).forEach((feedback, idx) => {
-      const numericRating = getNumericRating(feedback?.averageRating);
+      const numericRating = getFeedbackSatisfactionForAnalytics(
+        feedback,
+        feedback?.office,
+      );
       const ratingText =
         numericRating !== null ? `${numericRating.toFixed(1)}/5` : "N/A";
       const cleanedComment = feedback.comment.replace(/\s+/g, " ").trim();
@@ -2105,7 +2235,9 @@ const Analytics = ({ setActiveTab }) => {
         : "for all monitored offices";
 
     const ratings = filteredFeedbacks
-      .map((feedback) => getNumericRating(feedback?.averageRating))
+      .map((feedback) =>
+        getFeedbackSatisfactionForAnalytics(feedback, feedback?.office),
+      )
       .filter((rating) => rating !== null && rating >= 0 && rating <= 5);
 
     const totalRatedFeedback = ratings.length;
@@ -2116,18 +2248,19 @@ const Analytics = ({ setActiveTab }) => {
       (rate) => rate.label === "Satisfied",
     );
     const neutral = satisfactionRates.find(
-      (rate) => rate.label === "Neither Satisfied nor Dissatisfied",
+      (rate) => rate.label === "Neither nor Dissatisfied",
     );
-    const unsatisfied = satisfactionRates.find(
-      (rate) => rate.label === "Unsatisfied",
+    const dissatisfied = satisfactionRates.find(
+      (rate) => rate.label === "Dissatisfied",
     );
-    const veryUnsatisfied = satisfactionRates.find(
-      (rate) => rate.label === "Very Unsatisfied",
+    const veryDissatisfied = satisfactionRates.find(
+      (rate) => rate.label === "Very Dissatisfied",
     );
 
     const positivePct = (verySatisfied?.pct || 0) + (satisfied?.pct || 0);
     const neutralPct = neutral?.pct || 0;
-    const negativePct = (unsatisfied?.pct || 0) + (veryUnsatisfied?.pct || 0);
+    const negativePct =
+      (dissatisfied?.pct || 0) + (veryDissatisfied?.pct || 0);
     const feedbackResponseRate =
       filteredVisits.length > 0
         ? Math.round((filteredFeedbacks.length / filteredVisits.length) * 100)
@@ -2272,11 +2405,11 @@ const Analytics = ({ setActiveTab }) => {
 
     if (totalVisits === 0) {
       narrativeLines.push(
-        "No visitor traffic was recorded during the selected date range.",
+        "No visitor traffic from feedback respondents was recorded during the selected date range.",
       );
     } else {
       narrativeLines.push(
-        `A total of ${totalVisits} visitor check-in${totalVisits !== 1 ? "s" : ""} was recorded across the week.`,
+        `A total of ${totalVisits} feedback respondent visit${totalVisits !== 1 ? "s" : ""} was recorded across the week.`,
       );
       narrativeLines.push(
         `${formatNameList(peakDays)} ${peakDays.length === 1 ? "was" : "were"} the busiest day${peakDays.length === 1 ? "" : "s"} with ${maxTrafficCount} check-in${maxTrafficCount !== 1 ? "s" : ""}.`,
@@ -2748,7 +2881,10 @@ const Analytics = ({ setActiveTab }) => {
             );
 
             const renderCsfTable = (rows, pageKey, showHeader = true) => {
-              const placeholderText = showHeader ? "N/A" : "";
+              const renderActionValue = (value) => {
+                const normalized = toTrimmedText(value);
+                return normalized || (showHeader ? "N/A" : "");
+              };
 
               return (
                 <table className="w-full border-collapse analytics-table analytics-table-c">
@@ -2801,14 +2937,68 @@ const Analytics = ({ setActiveTab }) => {
                     {rows.map((row, rowIndex) => (
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
                         <td>{row.office}</td>
-                        <td>{renderList(row.commendations)}</td>
-                        <td>{renderList(row.suggestions)}</td>
-                        <td className="text-center">{placeholderText}</td>
-                        <td className="text-center">{placeholderText}</td>
-                        <td className="text-center">{placeholderText}</td>
-                        <td className="text-center">{placeholderText}</td>
-                        <td className="text-center">{placeholderText}</td>
-                        <td className="text-center">{placeholderText}</td>
+                        <td>
+                          {renderList(row.commendations)}
+                          {toTrimmedText(row.commendationDetail) && (
+                            <ul className="mt-2 list-disc pl-4 space-y-1">
+                              {row.commendationDetail
+                                .split(/\r?\n/)
+                                .map((item) => item.trim())
+                                .filter(Boolean)
+                                .map((item, itemIndex) => (
+                                  <li
+                                    key={`commendation-detail-${row.officeKey}-${itemIndex}`}
+                                    className="break-words"
+                                  >
+                                    {item}
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td>
+                          {renderList(row.suggestions)}
+                          {toTrimmedText(row.suggestionsDetail) && (
+                            <ul className="mt-2 list-disc pl-4 space-y-1">
+                              {row.suggestionsDetail
+                                .split(/\r?\n/)
+                                .map((item) => item.trim())
+                                .filter(Boolean)
+                                .map((item, itemIndex) => (
+                                  <li
+                                    key={`suggestion-detail-${row.officeKey}-${itemIndex}`}
+                                    className="break-words"
+                                  >
+                                    {item}
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td>{renderActionValue(row.rootCause)}</td>
+                        <td>{renderActionValue(row.actionPlan)}</td>
+                        <td>{renderActionValue(row.targetImplementation)}</td>
+                        <td className="text-center">
+                          {row.implementationStatus === "closed"
+                            ? "X"
+                            : !row.implementationStatus
+                              ? "N/A"
+                              : ""}
+                        </td>
+                        <td className="text-center">
+                          {row.implementationStatus === "open"
+                            ? "X"
+                            : !row.implementationStatus
+                              ? "N/A"
+                              : ""}
+                        </td>
+                        <td className="text-center">
+                          {row.implementationStatus === "notImplemented"
+                            ? "X"
+                            : !row.implementationStatus
+                              ? "N/A"
+                              : ""}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -2935,24 +3125,24 @@ const Analytics = ({ setActiveTab }) => {
                       >
                         {!isSingleOffice && <td>{row.office}</td>}
                         <td>
-                          {formatCountCell(row.customerCount, row.hasVisitData)}
+                          {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
                         <td>
-                          {formatCountCell(row.maleCount, row.hasVisitData)}
+                          {formatCountCell(row.maleCount, row.hasFeedbackData)}
                         </td>
                         <td>
-                          {formatCountCell(row.femaleCount, row.hasVisitData)}
+                          {formatCountCell(row.femaleCount, row.hasFeedbackData)}
                         </td>
                         <td>
-                          {formatCountCell(row.citizensCount, row.hasVisitData)}
+                          {formatCountCell(row.citizensCount, row.hasFeedbackData)}
                         </td>
                         <td>
-                          {formatCountCell(row.businessCount, row.hasVisitData)}
+                          {formatCountCell(row.businessCount, row.hasFeedbackData)}
                         </td>
                         <td>
                           {formatCountCell(
                             row.governmentCount,
-                            row.hasVisitData,
+                            row.hasFeedbackData,
                           )}
                         </td>
                         <td>
@@ -3147,7 +3337,7 @@ const Analytics = ({ setActiveTab }) => {
                       >
                         {!isSingleOffice && <td>{row.office}</td>}
                         <td>
-                          {formatCountCell(row.customerCount, row.hasVisitData)}
+                          {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
                         <td>{formatScoreCell(row.dimensionMeans[0])}</td>
                         <td>{formatScoreCell(row.dimensionMeans[1])}</td>
@@ -3287,7 +3477,11 @@ const Analytics = ({ setActiveTab }) => {
                             CSF Monthly Commendations &amp; Suggestions
                           </span>
                         </p>
-                        {renderCsfTable(csfRowsForPrint, "section-c", true)}
+                        {renderCsfTable(
+                          csfRowsWithActionsForPrint,
+                          "section-c",
+                          true,
+                        )}
                       </div>
 
                       {renderSignatories()}
@@ -3548,36 +3742,7 @@ const Analytics = ({ setActiveTab }) => {
               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar print:max-h-none print:overflow-visible">
                 {feedbacksWithVisitDetails.length > 0 ? (
                   (() => {
-                    // Filter feedbacks that have comments
-                    const feedbacksWithComments =
-                      feedbacksWithVisitDetails.filter(
-                        (feedback) =>
-                          feedback.comment &&
-                          feedback.comment.trim() !== "" &&
-                          feedback.comment !== "No comment provided",
-                      );
-
-                    // Show message if no feedbacks have comments
-                    if (feedbacksWithComments.length === 0) {
-                      return (
-                        <div className="text-center py-8 text-gray-500">
-                          <MessageSquare
-                            size={48}
-                            className="mx-auto text-gray-300 mb-3"
-                          />
-                          <p className="text-gray-600">
-                            No feedback with comments available
-                          </p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            Only feedback with written comments are displayed
-                            here
-                          </p>
-                        </div>
-                      );
-                    }
-
-                    // Display feedbacks that have comments
-                    return feedbacksWithComments.map((feedback) => (
+                    return feedbacksWithVisitDetails.map((feedback) => (
                       <div
                         key={feedback.id}
                         className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0"
@@ -3798,6 +3963,151 @@ const Analytics = ({ setActiveTab }) => {
                     </div>
                   </section>
                 </div>
+
+                <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-slate-900">
+                      CSF Action Entries
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Add the action details that should appear in the printed
+                      Root Cause and implementation status table.
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    {csfRowsWithActionsForPrint.map((row, rowIndex) => (
+                      <div
+                        key={`csf-action-editor-${row.officeKey}-${rowIndex}`}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+                      >
+                        <div className="mb-3">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {row.office}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Commendations and suggestions are auto-filled from
+                            feedback. You can add more items and supply the
+                            action details here.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700 lg:col-span-2">
+                            <span>Commendation</span>
+                            <textarea
+                              value={row.commendationDetail}
+                              onChange={(e) =>
+                                handleCsfActionInputChange(
+                                  row.officeKey,
+                                  "commendationDetail",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter commendation details"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700 lg:col-span-2">
+                            <span>Detail of Suggestions</span>
+                            <textarea
+                              value={row.suggestionsDetail}
+                              onChange={(e) =>
+                                handleCsfActionInputChange(
+                                  row.officeKey,
+                                  "suggestionsDetail",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter detail of suggestions"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Root Cause</span>
+                            <textarea
+                              value={row.rootCause}
+                              onChange={(e) =>
+                                handleCsfActionInputChange(
+                                  row.officeKey,
+                                  "rootCause",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter root cause"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Action Plan</span>
+                            <textarea
+                              value={row.actionPlan}
+                              onChange={(e) =>
+                                handleCsfActionInputChange(
+                                  row.officeKey,
+                                  "actionPlan",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter action plan"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Target of Implementation</span>
+                            <textarea
+                              value={row.targetImplementation}
+                              onChange={(e) =>
+                                handleCsfActionInputChange(
+                                  row.officeKey,
+                                  "targetImplementation",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter target of implementation"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+                        </div>
+
+                        <label className="mt-4 flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                          <span>Status of Implementation</span>
+                          <select
+                            value={row.implementationStatus}
+                            onChange={(e) =>
+                              handleCsfActionInputChange(
+                                row.officeKey,
+                                "implementationStatus",
+                                e.target.value,
+                              )
+                            }
+                            className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          >
+                            <option value="">Select status</option>
+                            <option value="closed">
+                              Implementation (Closed)
+                            </option>
+                            <option value="open">
+                              On-going / To be Implemented (Open)
+                            </option>
+                            <option value="notImplemented">
+                              Not Implemented
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
 
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">

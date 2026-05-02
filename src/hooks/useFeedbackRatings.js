@@ -290,9 +290,17 @@ const getServicedByValue = (recordData = {}) => {
 const getOfficeValue = (feedbackData = {}, visitData = {}) => {
   const directCandidates = [
     feedbackData.office,
+    feedbackData.officeName,
+    feedbackData.office_name,
     feedbackData.unitOfficeVisited,
     feedbackData.officeVisited,
     feedbackData.unitOffice,
+    feedbackData.surveyDetails?.office,
+    feedbackData.surveyDetails?.officeName,
+    feedbackData.surveyDetails?.unitOfficeVisited,
+    feedbackData.manualSubmissionDefaults?.office,
+    feedbackData.manualSubmissionDefaults?.officeName,
+    feedbackData.manualSubmissionDefaults?.unitOfficeVisited,
     visitData.office,
     visitData.unitOfficeVisited,
     visitData.officeVisited,
@@ -306,7 +314,17 @@ const getOfficeValue = (feedbackData = {}, visitData = {}) => {
     if (value) return value;
   }
 
-  return "";
+  return findValueByKeyPattern(
+    feedbackData,
+    [
+      /^office$/i,
+      /office.*name/i,
+      /unit.*office/i,
+      /office.*visited/i,
+      /selected.*office/i,
+    ],
+    4,
+  );
 };
 
 const getVisitDateTimeValue = (feedbackData = {}, visitData = {}) =>

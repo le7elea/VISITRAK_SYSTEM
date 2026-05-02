@@ -177,6 +177,16 @@ const getOfficialOfficeName = (officeValue, offices = []) => {
   );
 };
 
+const compareOfficeNames = (leftOffice, rightOffice, offices = []) => {
+  const leftOfficial = getOfficialOfficeName(leftOffice, offices) || leftOffice;
+  const rightOfficial = getOfficialOfficeName(rightOffice, offices) || rightOffice;
+
+  return (
+    toTrimmedText(leftOfficial).toLowerCase() ===
+    toTrimmedText(rightOfficial).toLowerCase()
+  );
+};
+
 const escapeCSVValue = (value) =>
   `"${String(value ?? "").replace(/"/g, '""')}"`;
 
@@ -428,9 +438,13 @@ const Feedback = ({ user }) => {
           // Handle office filter based on user role
           let matchesOffice = true;
           if (isOfficeAdmin) {
-            matchesOffice = feedbackOffice === (user.office || "");
+            matchesOffice = compareOfficeNames(
+              feedbackOffice,
+              user.office || "",
+              offices,
+            );
           } else if (office) {
-            matchesOffice = feedbackOffice === office;
+            matchesOffice = compareOfficeNames(feedbackOffice, office, offices);
           }
           
           return matchesSearch && matchesDate && matchesOffice;
