@@ -255,6 +255,7 @@ const Feedback = ({ user }) => {
     documentCode: "F-AQA-CSF-002",
     revisionNumber: "Rev. 3",
   });
+  const [printTableFields, setPrintTableFields] = useState({});
   const [printFooterSnapshot, setPrintFooterSnapshot] = useState({
     printedDate: formatPrintFooterDate(new Date()),
   });
@@ -290,6 +291,16 @@ const Feedback = ({ user }) => {
     setPrintFooterFields((previous) => ({
       ...previous,
       [field]: value,
+    }));
+  };
+
+  const handlePrintTableFieldChange = (officeKey, field, value) => {
+    setPrintTableFields((previous) => ({
+      ...previous,
+      [officeKey]: {
+        ...(previous[officeKey] || {}),
+        [field]: value,
+      },
     }));
   };
 
@@ -871,6 +882,48 @@ const Feedback = ({ user }) => {
     return rows;
   }, [filteredFeedbacks]);
 
+  const printRowsForTable = useMemo(() => {
+    if (printRows.length > 0) return printRows;
+
+    return [
+      {
+        office: "N/A",
+        commendations: [],
+        suggestions: [],
+      },
+    ];
+  }, [printRows]);
+
+  useEffect(() => {
+    setPrintTableFields((previous) => {
+      const next = {};
+
+      printRowsForTable.forEach((row) => {
+        const officeKey = row.office || "N/A";
+        const existing = previous[officeKey] || {};
+
+        next[officeKey] = {
+          commendation:
+            existing.commendation ??
+            (Array.isArray(row.commendations) && row.commendations.length > 0
+              ? row.commendations.join("\n")
+              : "N/A"),
+          detailSuggestions:
+            existing.detailSuggestions ??
+            (Array.isArray(row.suggestions) && row.suggestions.length > 0
+              ? row.suggestions.join("\n")
+              : "N/A"),
+          rootCause: existing.rootCause ?? "N/A",
+          actionPlan: existing.actionPlan ?? "N/A",
+          targetImplementation: existing.targetImplementation ?? "N/A",
+          implementationStatus: existing.implementationStatus ?? "",
+        };
+      });
+
+      return next;
+    });
+  }, [printRowsForTable]);
+
   const reportMonthLabel = useMemo(() => {
     let sourceDate = null;
 
@@ -942,6 +995,16 @@ const Feedback = ({ user }) => {
           </li>
         ))}
       </ul>
+    );
+  };
+
+  const renderPrintMultilineText = (value, fallback = "N/A", className = "") => {
+    const text = toTrimmedText(value) || fallback;
+
+    return (
+      <div className={`whitespace-pre-line break-words ${className}`.trim()}>
+        {text}
+      </div>
     );
   };
 
@@ -1286,8 +1349,14 @@ const Feedback = ({ user }) => {
             <thead>
               <tr>
                 <th className="print-header-cell">
-                  <div className="flex items-start justify-between mb-4 gap-5">
-                    <div className="flex items-center gap-4">
+                  <div
+                    className="flex items-start justify-between mb-4 gap-5"
+                    style={{ paddingInline: "18px" }}
+                  >
+                    <div
+                      className="flex items-center gap-4"
+                      style={{ marginLeft: "14px" }}
+                    >
                       <div className="w-16 h-16 flex items-center justify-center">
                         <img src={bisuLogo} alt="BISU Logo" className="w-full h-full object-contain" />
                       </div>
@@ -1302,7 +1371,10 @@ const Feedback = ({ user }) => {
                       </div>
                     </div>
 
-                    <div className="flex gap-3 items-center">
+                    <div
+                      className="flex gap-3 items-center"
+                      style={{ marginRight: "20px" }}
+                    >
                       <div className="w-24 h-16 flex items-center justify-center">
                         <img
                           src={bagongPilipinasLogo}
@@ -1336,6 +1408,17 @@ const Feedback = ({ user }) => {
                     CSF Monthly Commendations &amp; Suggestions
                   </p>
                   <table className="w-full border-collapse csf-table">
+                    <colgroup>
+                      <col style={{ width: "16%" }} />
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "7%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                    </colgroup>
                     <thead>
                       
                       <tr>
@@ -1354,27 +1437,52 @@ const Feedback = ({ user }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {printRows.map((row, index) => (
-                        <tr key={`${row.office}-${index}`}>
-                          <td>{row.office}</td>
-                          <td>{renderPrintList(row.commendations)}</td>
-                          <td>{renderPrintList(row.suggestions)}</td>
-                          <td className="text-center">N/A</td>
-                          <td className="text-center">N/A</td>
-                          <td className="text-center">N/A</td>
-                          <td className="text-center">N/A</td>
-                          <td className="text-center">N/A</td>
-                          <td className="text-center">N/A</td>
-                        </tr>
-                      ))}
+                      {printRowsForTable.map((row, index) => {
+                        const officeKey = row.office || "N/A";
+                        const fields = printTableFields[officeKey] || {};
+
+                        return (
+                          <tr key={`${row.office}-${index}`}>
+                            <td>{renderPrintMultilineText(row.office, "N/A", "text-center")}</td>
+                            <td>{renderPrintMultilineText(fields.commendation, "N/A")}</td>
+                            <td>{renderPrintMultilineText(fields.detailSuggestions, "N/A")}</td>
+                            <td>{renderPrintMultilineText(fields.rootCause, "N/A")}</td>
+                            <td>{renderPrintMultilineText(fields.actionPlan, "N/A")}</td>
+                            <td>{renderPrintMultilineText(fields.targetImplementation, "N/A")}</td>
+                            <td className="text-center">
+                              {renderPrintMultilineText(
+                                fields.implementationStatus === "closed" ? "N/A" : "",
+                                "",
+                                "text-center",
+                              )}
+                            </td>
+                            <td className="text-center">
+                              {renderPrintMultilineText(
+                                fields.implementationStatus === "open" ? "N/A" : "",
+                                "",
+                                "text-center",
+                              )}
+                            </td>
+                            <td className="text-center">
+                              {renderPrintMultilineText(
+                                fields.implementationStatus === "notImplemented"
+                                  ? "N/A"
+                                  : "",
+                                "",
+                                "text-center",
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </td>
               </tr>
               <tr className="csf-signatories-row">
                 <td className="csf-signatories-cell">
-                  <div className="mt-10 text-[13px] feedback-signatories">
-                    <div className="grid grid-cols-2 gap-24 mb-6 feedback-signatories-row">
+                  <div className="feedback-signatories">
+                    <div className="grid grid-cols-2 gap-24 mb-2 feedback-signatories-row">
                       <div className="text-center feedback-signatory-group">
                         <p className="text-left mb-3">Prepared:</p>
                         <p className="font-semibold underline feedback-signatory-name">
@@ -1569,6 +1677,158 @@ const Feedback = ({ user }) => {
                   </div>
                 </section>
               </div>
+
+              <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    CSF Action Entries
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Add the action details that should appear in the printed
+                    Root Cause and implementation status table.
+                  </p>
+                </div>
+
+                <div className="space-y-5">
+                  {printRowsForTable.map((row, index) => {
+                    const officeKey = row.office || "N/A";
+                    const fields = printTableFields[officeKey] || {};
+
+                    return (
+                      <div
+                        key={`print-table-row-${officeKey}-${index}`}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+                      >
+                        <div className="mb-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {officeKey}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Commendation and suggestions are auto-filled from
+                              feedback. You can refine them and supply the action
+                              details here.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700 lg:col-span-2">
+                            <span>Commendation</span>
+                            <textarea
+                              value={fields.commendation || ""}
+                              onChange={(e) =>
+                                handlePrintTableFieldChange(
+                                  officeKey,
+                                  "commendation",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter commendation details"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700 lg:col-span-2">
+                            <span>Detail of Suggestions</span>
+                            <textarea
+                              value={fields.detailSuggestions || ""}
+                              onChange={(e) =>
+                                handlePrintTableFieldChange(
+                                  officeKey,
+                                  "detailSuggestions",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter detail of suggestions"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Root Cause</span>
+                            <textarea
+                              value={fields.rootCause || ""}
+                              onChange={(e) =>
+                                handlePrintTableFieldChange(
+                                  officeKey,
+                                  "rootCause",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter root cause"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Action Plan</span>
+                            <textarea
+                              value={fields.actionPlan || ""}
+                              onChange={(e) =>
+                                handlePrintTableFieldChange(
+                                  officeKey,
+                                  "actionPlan",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter action plan"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            <span>Target of Implementation</span>
+                            <textarea
+                              value={fields.targetImplementation || ""}
+                              onChange={(e) =>
+                                handlePrintTableFieldChange(
+                                  officeKey,
+                                  "targetImplementation",
+                                  e.target.value,
+                                )
+                              }
+                              rows={4}
+                              placeholder="Enter target of implementation"
+                              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </label>
+                        </div>
+
+                        <label className="mt-4 flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                          <span>Status of Implementation</span>
+                          <select
+                            value={fields.implementationStatus || ""}
+                            onChange={(e) =>
+                              handlePrintTableFieldChange(
+                                officeKey,
+                                "implementationStatus",
+                                e.target.value,
+                              )
+                            }
+                            className="h-[44px] rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          >
+                            <option value="">Select status</option>
+                            <option value="closed">
+                              Implementation (Closed)
+                            </option>
+                            <option value="open">
+                              On-going / To be Implemented (Open)
+                            </option>
+                            <option value="notImplemented">
+                              Not Implemented
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
 
             <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
@@ -1671,7 +1931,7 @@ const Feedback = ({ user }) => {
 
           .csf-table th,
           .csf-table td {
-            border: 1px solid #000 !important;
+            border: 0.75px solid #000 !important;
             vertical-align: top;
             word-break: break-word;
             overflow-wrap: anywhere;
@@ -1681,8 +1941,9 @@ const Feedback = ({ user }) => {
           }
 
           .csf-table th {
-            font-size: 10px;
+            font-size: 8pt;
             font-weight: 700;
+            line-height: 1;
             text-align: center;
             padding: 6px 4px;
           }
@@ -1715,7 +1976,8 @@ const Feedback = ({ user }) => {
           }
 
           .csf-table td {
-            font-size: 10px;
+            font-size: 10pt;
+            line-height: 1;
             padding: 6px 6px;
             page-break-inside: auto;
           break-inside: auto;
@@ -1741,12 +2003,20 @@ const Feedback = ({ user }) => {
 
           .csf-signatories-cell {
             border: none !important;
-            padding: 12px 0 0 !important;
+            padding: 0 !important;
           }
 
-          .feedback-signatories,
+          .feedback-signatories {
+            margin-top: 24px;
+            font-size: 9pt;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
           .feedback-signatories-row,
           .feedback-signatory-group {
+            margin-top: 0;
+            line-height: 1;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }

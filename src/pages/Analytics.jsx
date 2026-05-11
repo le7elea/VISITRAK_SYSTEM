@@ -2628,7 +2628,7 @@ const Analytics = ({ setActiveTab }) => {
            margin-top: 0;
            margin-bottom: 2px;
            font-family: Arial, sans-serif;
-           font-size: 14.67px;
+           font-size: 9pt;
            font-weight: 400;
            line-height: 1.15;
           }
@@ -2668,15 +2668,16 @@ const Analytics = ({ setActiveTab }) => {
 
         .analytics-table th,
         .analytics-table td {
-          border: 1px solid #000 !important;
+          border: 0.75px solid #000 !important;
           vertical-align: top;
            box-decoration-break: clone;
           -webkit-box-decoration-break: clone;
         }
 
         .analytics-table th {
-          font-size: 12px;
+          font-size: 8pt;
           font-weight: 700;
+          line-height: 1;
           text-align: center;
           padding: 3px 2px;
           vertical-align: middle;
@@ -2685,8 +2686,8 @@ const Analytics = ({ setActiveTab }) => {
         }
 
         .analytics-table td {
-          font-size: 12px;
-          line-height: 1.2;
+          font-size: 10pt;
+          line-height: 1;
           padding: 2px 2px;
           text-align: center;
           font-family: Arial, sans-serif;
@@ -2733,7 +2734,7 @@ const Analytics = ({ setActiveTab }) => {
         }
 
         .analytics-signatories {
-          margin-top: 30px;
+          margin-top: 24px;
           font-size: 16px;
            page-break-inside: avoid;
            break-inside: avoid;
@@ -2741,10 +2742,11 @@ const Analytics = ({ setActiveTab }) => {
 
          .analytics-signatories-row,
          .analytics-signatory-group {
-           margin-top: 60px;
-           page-break-inside: avoid;
-           break-inside: avoid;
-         }
+           margin-top: 0;
+           line-height: 1;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
 
          .analytics-signatory-name {
            white-space: nowrap;
@@ -2770,8 +2772,14 @@ const Analytics = ({ setActiveTab }) => {
         <div className="hidden print:block bg-white print-only-section text-black">
           {(() => {
             const renderHeader = () => (
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex items-center">
+              <div
+                className="flex items-start justify-between mb-1"
+                style={{ paddingInline: "18px" }}
+              >
+                <div
+                  className="flex items-center"
+                  style={{ marginLeft: "14px" }}
+                >
                   <div className="w-24 h-16 flex items-center justify-center">
                     <img
                       src={bisuLogo}
@@ -2813,7 +2821,10 @@ const Analytics = ({ setActiveTab }) => {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div
+                  className="flex gap-2"
+                  style={{ marginRight: "20px" }}
+                >
                   <div className="w-20 h-24 flex items-center justify-center">
                     <img
                       src={bagongPilipinasLogo}
@@ -2850,9 +2861,9 @@ const Analytics = ({ setActiveTab }) => {
             const renderSignatories = () => (
               <div
                 className="analytics-signatories"
-                style={{ fontFamily: "Arial, sans-serif", fontSize: "16px" }}
+                style={{ fontFamily: "Arial, sans-serif", fontSize: "9pt" }}
               >
-                <div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-6">
+                <div className="analytics-signatories-row grid grid-cols-2 gap-24 mb-2">
                   <div className="analytics-signatory-group text-center">
                     <p className="text-left mb-3">Prepared:</p>
                     <p className="font-semibold underline analytics-signatory-name">

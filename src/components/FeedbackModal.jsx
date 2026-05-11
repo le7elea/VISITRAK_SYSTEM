@@ -1120,21 +1120,39 @@ const FeedbackModal = ({ isOpen, onClose, visitor }) => {
               Rating Per Question
             </h4>
             {questionRatings.length > 0 ? (
-              <ul className="space-y-2">
-                {questionRatings.map((item, index) => (
-                  <li
-                    key={`${item.question || "question"}-${index}`}
-                    className="flex items-start justify-between gap-4 p-3 bg-gray-50 border border-gray-200 rounded-lg"
-                  >
-                    <p className="text-sm text-gray-700 flex-1">
-                      {item.question || `Question ${index + 1}`}
-                    </p>
-                    <p className="text-sm font-semibold text-yellow-600 whitespace-nowrap">
-                      {formatRating(item.rating)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50">
+                <table className="min-w-full table-fixed border-collapse">
+                  <colgroup>
+                    <col style={{ width: "78%" }} />
+                    <col style={{ width: "22%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border-b border-gray-200 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-gray-600">
+                        Question
+                      </th>
+                      <th className="border-b border-gray-200 px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.08em] text-gray-600">
+                        Rating
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {questionRatings.map((item, index) => (
+                      <tr
+                        key={`${item.question || "question"}-${index}`}
+                        className="align-top"
+                      >
+                        <td className="border-b border-gray-200 px-4 py-3 text-sm text-gray-700 break-words">
+                          {item.question || `Question ${index + 1}`}
+                        </td>
+                        <td className="border-b border-gray-200 px-4 py-3 text-right text-sm font-semibold text-yellow-600 whitespace-nowrap">
+                          {formatRating(item.rating)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                 <p className="text-sm text-gray-500">
