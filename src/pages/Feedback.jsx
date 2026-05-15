@@ -12,6 +12,9 @@ import tuvISOLogo from "../assets/tuvISO_logo.png";
 
 const toTrimmedText = (value) => (typeof value === "string" ? value.trim() : "");
 
+const isAllOfficesOption = (value) =>
+  toTrimmedText(value).toLowerCase() === "all offices";
+
 const getAnonymousAlias = (index) =>
   `Anonymous${String(index + 1).padStart(3, "0")}`;
 
@@ -524,7 +527,9 @@ const Feedback = ({ user }) => {
         combined.push(user.office);
       }
 
-      const uniqueOffices = [...new Set(combined)].sort();
+      const uniqueOffices = [...new Set(combined)]
+        .filter((officeName) => !isAllOfficesOption(officeName))
+        .sort();
       if (uniqueOffices.length > 0) {
         return uniqueOffices;
       }
