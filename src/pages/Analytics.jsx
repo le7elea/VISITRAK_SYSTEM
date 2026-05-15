@@ -3843,6 +3843,10 @@ const Analytics = ({ setActiveTab }) => {
           text-align: left;
         }
 
+        .analytics-table-c td:first-child {
+          font-size: 10pt;
+        }
+
         .analytics-table-c td.text-center {
           text-align: center;
         }
