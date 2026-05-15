@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart2,
   ChevronDown,
@@ -1641,6 +1641,15 @@ const toOfficialOfficeDisplayName = (officeName, officeRecords = []) => {
   );
 };
 
+const toSentenceCaseOfficeName = (officeName) => {
+  const normalized = normalizeOfficeName(officeName);
+  if (!normalized) return "";
+
+  return normalized.toLowerCase().replace(/[a-z]+/g, (word) =>
+    word === "and" ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
+  );
+};
+
 // Add a comparison function that's more flexible
 const compareOfficeNames = (office1, office2) => {
   if (!office1 || !office2) return false;
@@ -3037,13 +3046,13 @@ const Analytics = ({ setActiveTab }) => {
 
     const matchedOffice = findOfficeRecordByName(sourceOfficeName, offices);
 
-    return (
+    return toSentenceCaseOfficeName(
       normalizeOfficeName(matchedOffice?.name) ||
       normalizeOfficeName(sourceOfficeName) ||
       normalizeOfficeName(currentOfficeRecord?.name) ||
       normalizeOfficeName(currentUser?.originalOffice) ||
       normalizeOfficeName(currentUser?.office) ||
-      "N/A"
+      "N/A",
     );
   }, [
     selectedOfficeFilter,
@@ -3120,15 +3129,17 @@ const Analytics = ({ setActiveTab }) => {
     };
   }, [officeAnalyticsRows, feedbackRecordsForPrint]);
 
-  const commendationSuggestionRows = useMemo(() => {
+  const printableOfficeAnalyticsRows = useMemo(() => {
     return officeAnalyticsRows.filter(
-      (row) => row.commendations.length > 0 || row.suggestions.length > 0,
+      (row) => !isAllOfficesExcelSheet(row?.office),
     );
   }, [officeAnalyticsRows]);
 
   const csfRowsForPrint = useMemo(() => {
-    return commendationSuggestionRows;
-  }, [commendationSuggestionRows]);
+    return printableOfficeAnalyticsRows.filter(
+      (row) => row.commendations.length > 0 || row.suggestions.length > 0,
+    );
+  }, [printableOfficeAnalyticsRows]);
 
   useEffect(() => {
     setCsfActionInputs((previous) => {
@@ -3189,29 +3200,41 @@ const Analytics = ({ setActiveTab }) => {
     });
   }, [csfRowsForPrint, csfActionInputs]);
 
-  const isSingleOffice = officeAnalyticsRows.length === 1;
+  const isSingleOffice = printableOfficeAnalyticsRows.length === 1;
 
   const charterRowsForPrint = useMemo(() => {
     if (isSingleOffice) {
-      return officeAnalyticsRows.map((row) => ({ kind: "office", row }));
+      return printableOfficeAnalyticsRows.map((row) => ({
+        kind: "office",
+        row,
+      }));
     }
 
     return [
-      ...officeAnalyticsRows.map((row) => ({ kind: "office", row })),
+      ...printableOfficeAnalyticsRows.map((row) => ({
+        kind: "office",
+        row,
+      })),
       { kind: "overall", row: charterOverallTotals },
     ];
-  }, [officeAnalyticsRows, charterOverallTotals, isSingleOffice]);
+  }, [printableOfficeAnalyticsRows, charterOverallTotals, isSingleOffice]);
 
   const summaryRowsForPrint = useMemo(() => {
     if (isSingleOffice) {
-      return officeAnalyticsRows.map((row) => ({ kind: "office", row }));
+      return printableOfficeAnalyticsRows.map((row) => ({
+        kind: "office",
+        row,
+      }));
     }
 
     return [
-      ...officeAnalyticsRows.map((row) => ({ kind: "office", row })),
+      ...printableOfficeAnalyticsRows.map((row) => ({
+        kind: "office",
+        row,
+      })),
       { kind: "overall", row: summaryOverallRow },
     ];
-  }, [officeAnalyticsRows, summaryOverallRow, isSingleOffice]);
+  }, [printableOfficeAnalyticsRows, summaryOverallRow, isSingleOffice]);
 
   const preparedByNameForPrint =
     toTrimmedText(printSignatories.prepared) || "________________________";
@@ -3811,10 +3834,33 @@ const Analytics = ({ setActiveTab }) => {
           -webkit-box-decoration-break: clone;
         }
 
+        .analytics-table-a,
+        .analytics-table-b,
+        .analytics-table-c {
+          border: 0.75px solid #000 !important;
+          border-collapse: collapse;
+        }
+
+        .analytics-table-a th,
+        .analytics-table-a td,
+        .analytics-table-b th,
+        .analytics-table-b td,
+        .analytics-table-c th,
+        .analytics-table-c td {
+          border: 0.5px solid #000 !important;
+        }
+
+        .analytics-table-a tr,
+        .analytics-table-b tr,
+        .analytics-table-c tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+
         .analytics-table th {
-          font-size: 8pt;
+          font-size: 10pt;
           font-weight: 700;
-          line-height: 1;
+          line-height: 1.0;
           text-align: center;
           padding: 3px 2px;
           vertical-align: middle;
@@ -3824,10 +3870,11 @@ const Analytics = ({ setActiveTab }) => {
 
         .analytics-table td {
           font-size: 10pt;
-          line-height: 1;
+          line-height: 1.0;
           padding: 2px 2px;
           text-align: center;
           font-family: Arial, sans-serif;
+          overflow-wrap: anywhere;
           word-break: break-word;
           white-space: normal;
           vertical-align: top;
@@ -3849,20 +3896,6 @@ const Analytics = ({ setActiveTab }) => {
 
         .analytics-table-c td.text-center {
           text-align: center;
-        }
-
-        .analytics-table tr {
-          page-break-inside: auto;
-          break-inside: auto;
-        }
-
-       .analytics-table td {
-          page-break-inside: auto;
-          break-inside: auto;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-          white-space: normal;
-          vertical-align: top;
         }
 
         .analytics-table ul {
@@ -3951,7 +3984,7 @@ const Analytics = ({ setActiveTab }) => {
                       className="text-[13.33px]"
                       style={{ fontFamily: "Arial, sans-serif" }}
                     >
-                      {printOfficeName}
+                      {toSentenceCaseOfficeName(printOfficeName)}
                     </p>
                     <p
                       className="text-[13.33px] italic"
@@ -3986,7 +4019,7 @@ const Analytics = ({ setActiveTab }) => {
 
             const renderList = (items = []) => {
               if (!Array.isArray(items) || items.length === 0) {
-                return <span>N/A</span>;
+                return null;
               }
 
               return (
@@ -4088,7 +4121,7 @@ const Analytics = ({ setActiveTab }) => {
                   <tbody>
                     {rows.map((row, rowIndex) => (
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{row.office}</td>
+                        <td>{toSentenceCaseOfficeName(row.office)}</td>
                         <td>
                           {renderList(row.commendations)}
                           {toTrimmedText(row.commendationDetail) && (
@@ -4275,7 +4308,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{toSentenceCaseOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
@@ -4523,7 +4558,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{toSentenceCaseOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>

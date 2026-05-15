@@ -857,11 +857,13 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           }
 
           .print-page-table {
+            border: 0.5pt solid #000 !important;
             table-layout: fixed;
           }
 
           .print-page-table th,
           .print-page-table td {
+            border: 0.5pt solid #000 !important;
             box-sizing: border-box;
           }
 
