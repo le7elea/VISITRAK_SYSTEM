@@ -3127,15 +3127,7 @@ const Analytics = ({ setActiveTab }) => {
   }, [officeAnalyticsRows]);
 
   const csfRowsForPrint = useMemo(() => {
-    if (commendationSuggestionRows.length) return commendationSuggestionRows;
-
-    return [
-      {
-        office: "N/A",
-        commendations: [],
-        suggestions: [],
-      },
-    ];
+    return commendationSuggestionRows;
   }, [commendationSuggestionRows]);
 
   useEffect(() => {
@@ -4039,7 +4031,7 @@ const Analytics = ({ setActiveTab }) => {
             const renderCsfTable = (rows, pageKey, showHeader = true) => {
               const renderActionValue = (value) => {
                 const normalized = toTrimmedText(value);
-                return normalized || (showHeader ? "N/A" : "");
+                return normalized || "";
               };
 
               return (
@@ -4138,21 +4130,21 @@ const Analytics = ({ setActiveTab }) => {
                           {row.implementationStatus === "closed"
                             ? "X"
                             : !row.implementationStatus
-                              ? "N/A"
+                              ? ""
                               : ""}
                         </td>
                         <td className="text-center">
                           {row.implementationStatus === "open"
                             ? "X"
                             : !row.implementationStatus
-                              ? "N/A"
+                              ? ""
                               : ""}
                         </td>
                         <td className="text-center">
                           {row.implementationStatus === "notImplemented"
                             ? "X"
                             : !row.implementationStatus
-                              ? "N/A"
+                              ? ""
                               : ""}
                         </td>
                       </tr>
