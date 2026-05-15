@@ -95,7 +95,7 @@ const PRINT_PAGE_MARGIN_TOP_CM = 0.5;
 const PRINT_PAGE_MARGIN_RIGHT_CM = 0.5;
 const PRINT_PAGE_MARGIN_BOTTOM_CM = 1.9;
 const PRINT_PAGE_MARGIN_LEFT_CM = 0.5;
-const PRINT_ROWS_PER_PAGE = 17;
+const PRINT_ROWS_PER_PAGE = 18;
 const PRINT_HEADER_ROW_HEIGHT_IN = 0.42;
 const PRINT_BODY_ROW_HEIGHT_IN = 0.31;
 const PRINT_CONTACT_FONT_SIZE_PX = 11;
@@ -621,7 +621,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
       {/* Print View Only - BISU Format */}
       <div className="hidden print:block bg-white print-only-section">
-        {/* Split visitors into pages of 17 rows each */}
+        {/* Split visitors into pages of 18 rows each */}
         {printPages.map((page, pageIndex) => {
           const shouldForcePageBreak = pageIndex < printPages.length - 1;
           const pageVisitors = page.rows;
@@ -735,7 +735,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                         </tr>
                       );
                     })}
-                    {/* Add empty rows to complete 17 rows per page */}
+                    {/* Add empty rows to complete 18 rows per page */}
                     {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
                       <tr key={`empty-${i}`} className="print-body-row">
                         <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
