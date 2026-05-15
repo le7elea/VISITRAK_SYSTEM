@@ -447,6 +447,9 @@ const EXCEL_DIMENSION_LABELS = [
   "Outcome",
 ];
 
+const COSTS_DIMENSION_INDEX = 4;
+const COST_ONLY_PRINT_OFFICES = ["cashier", "canteen", "production"];
+
 const EXCEL_HEADER_FILL = {
   type: "pattern",
   pattern: "solid",
@@ -1596,6 +1599,14 @@ const toComparableOfficeKey = (officeName) =>
   normalizeOfficeName(officeName)
     .toLowerCase()
     .replace(/[^\w\s/.-]/g, "");
+
+const isCostOnlyPrintOffice = (officeName = "") => {
+  const officeKey = toComparableOfficeKey(officeName);
+  return COST_ONLY_PRINT_OFFICES.some(
+    (targetOffice) =>
+      officeKey === targetOffice || officeKey.includes(targetOffice),
+  );
+};
 
 const findOfficeRecordByName = (officeName, officeRecords = []) => {
   const normalized = normalizeOfficeName(officeName);
@@ -4476,6 +4487,42 @@ const Analytics = ({ setActiveTab }) => {
                     }
 
                     const row = entry.row;
+                    const isCostOnlyRow = isCostOnlyPrintOffice(row.office);
+                    const costsMean = row.dimensionMeans[COSTS_DIMENSION_INDEX];
+                    const nonCostDimensionMeans = row.dimensionMeans.filter(
+                      (_value, dimensionIndex) =>
+                        dimensionIndex !== COSTS_DIMENSION_INDEX,
+                    );
+                    const nonCostMean = (() => {
+                      const numericValues = nonCostDimensionMeans.filter(
+                        (value) =>
+                          value !== null &&
+                          value !== undefined &&
+                          !Number.isNaN(value),
+                      );
+
+                      if (!numericValues.length) return null;
+                      return (
+                        numericValues.reduce((sum, value) => sum + value, 0) /
+                        numericValues.length
+                      );
+                    })();
+                    const meanSatisfactionForPrint = isCostOnlyRow
+                      ? costsMean
+                      : nonCostMean;
+                    const satisfactionDescriptionForPrint = isCostOnlyRow
+                      ? getSatisfactionDescription(costsMean)
+                      : getSatisfactionDescription(nonCostMean);
+                    const formatDimensionForPrint = (dimensionIndex) => {
+                      if (dimensionIndex === COSTS_DIMENSION_INDEX) {
+                        return isCostOnlyRow
+                          ? formatScoreCell(row.dimensionMeans[dimensionIndex])
+                          : "-";
+                      }
+
+                      return formatScoreCell(row.dimensionMeans[dimensionIndex]);
+                    };
+
                     return (
                       <tr
                         key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}
@@ -4484,16 +4531,16 @@ const Analytics = ({ setActiveTab }) => {
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
-                        <td>{formatScoreCell(row.dimensionMeans[0])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[1])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[2])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[3])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[4])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[5])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[6])}</td>
-                        <td>{formatScoreCell(row.dimensionMeans[7])}</td>
-                        <td>{formatScoreCell(row.meanSatisfaction)}</td>
-                        <td>{row.satisfactionDescription}</td>
+                        <td>{formatDimensionForPrint(0)}</td>
+                        <td>{formatDimensionForPrint(1)}</td>
+                        <td>{formatDimensionForPrint(2)}</td>
+                        <td>{formatDimensionForPrint(3)}</td>
+                        <td>{formatDimensionForPrint(4)}</td>
+                        <td>{formatDimensionForPrint(5)}</td>
+                        <td>{formatDimensionForPrint(6)}</td>
+                        <td>{formatDimensionForPrint(7)}</td>
+                        <td>{formatScoreCell(meanSatisfactionForPrint)}</td>
+                        <td>{satisfactionDescriptionForPrint}</td>
                       </tr>
                     );
                   })}
