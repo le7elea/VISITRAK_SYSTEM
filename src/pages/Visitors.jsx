@@ -635,8 +635,14 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
               }`}
             >
                  {/* Header */}
-                 <div className="flex items-start justify-between mb-1">
-                   <div className="flex items-center">
+                 <div
+                   className="flex items-start justify-between mb-1"
+                   style={{ paddingInline: "18px" }}
+                 >
+                   <div
+                     className="flex items-center"
+                     style={{ marginLeft: "4px" }}
+                   >
                      <div className="w-24 h-16 flex items-center justify-center">
                        <img 
                          src={bisuLogo} 
@@ -644,16 +650,44 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                          className="w-full h-full object-contain"
                        />
                      </div>
-                     <div className="leading-tight">
-                       <p className="text-[14.67px]">Republic of the Philippines</p>
-                       <p className="text-[16px] font-bold">BOHOL ISLAND STATE UNIVERSITY</p>
-                       <p className="text-[13.33px]">Magsija, Balilihan 6342, Bohol, Philippines</p>
-                       <p className="text-[13.33px]">{printOfficeName}</p>
-                       <p className="text-[13.33px] italic">Balance | Integrity | Stewardship | Uprightness</p>
+                     <div className="leading-tight text-left font-normal">
+                       <p
+                         className="text-[14.67px]"
+                         style={{ fontFamily: "Arial, sans-serif" }}
+                       >
+                         Republic of the Philippines
+                       </p>
+                       <h1
+                         className="text-[16px] font-bold tracking-wide leading-none"
+                         style={{ fontFamily: "Arial, sans-serif" }}
+                       >
+                         BOHOL ISLAND STATE UNIVERSITY
+                       </h1>
+                       <p
+                         className="text-[13.33px]"
+                         style={{ fontFamily: "Arial, sans-serif" }}
+                       >
+                         Magsija, Balilihan 6342, Bohol, Philippines
+                       </p>
+                       <p
+                         className="text-[13.33px]"
+                         style={{ fontFamily: "Arial, sans-serif" }}
+                       >
+                         {printOfficeName}
+                       </p>
+                       <p
+                         className="text-[13.33px] italic"
+                         style={{ fontFamily: '"Times New Roman", Times, serif' }}
+                       >
+                         Balance | Integrity | Stewardship | Uprightness
+                       </p>
                      </div>
                    </div>
                    
-                   <div className="flex gap-2">
+                   <div
+                     className="flex gap-2"
+                     style={{ marginRight: "8px" }}
+                   >
                      <div className="w-20 h-24 flex items-center justify-center">
                        <img 
                          src={bagongPilipinasLogo} 
