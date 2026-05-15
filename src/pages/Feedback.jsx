@@ -187,9 +187,6 @@ const compareOfficeNames = (leftOffice, rightOffice, offices = []) => {
   );
 };
 
-const escapeCSVValue = (value) =>
-  `"${String(value ?? "").replace(/"/g, '""')}"`;
-
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -538,52 +535,6 @@ const Feedback = ({ user }) => {
       return ["Main Office", "Branch Office", "Headquarters"];
     }
   }, [offices, feedbacks, isOfficeAdmin, user?.office]);
-
-  const exportCSV = () => {
-    try {
-      if (filteredFeedbacks.length === 0) {
-        alert("No data to export!");
-        return;
-      }
-
-      // Prepare CSV content
-      const headers = [
-        "Display Name",
-        "Date",
-        "Office",
-        "Rating",
-        "Commendation",
-        "Suggestion",
-      ];
-      const csvRows = filteredFeedbacks.map(f => [
-        escapeCSVValue(f.displayName || f.alias || "Anonymous"),
-        escapeCSVValue(f.date),
-        escapeCSVValue(f.office || "Unspecified"),
-        escapeCSVValue(f.satisfaction),
-        escapeCSVValue(f.commendation || ""),
-        escapeCSVValue(f.suggestion || ""),
-      ]);
-      
-      const csvContent = [
-        headers.join(","),
-        ...csvRows.map(row => row.join(","))
-      ].join("\n");
-      
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `feedbacks_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Error exporting CSV:", err);
-      alert("Failed to export CSV. Please try again.");
-    }
-  };
 
   const exportPDF = () => {
     setShowPrintSignatoryModal(true);
@@ -982,22 +933,6 @@ const Feedback = ({ user }) => {
   const PRINT_MARGIN_TOTAL_CM =
     PRINT_PAGE_MARGIN_LEFT_CM + PRINT_PAGE_MARGIN_RIGHT_CM;
 
-  const renderPrintList = (items = []) => {
-    if (!Array.isArray(items) || items.length === 0) {
-      return <span>N/A</span>;
-    }
-
-    return (
-      <ul className="list-disc pl-4 space-y-1">
-        {items.map((item, index) => (
-          <li key={`${item}-${index}`} className="break-words">
-            {item}
-          </li>
-        ))}
-      </ul>
-    );
-  };
-
   const renderPrintMultilineText = (value, fallback = "N/A", className = "") => {
     const text = toTrimmedText(value) || fallback;
 
@@ -1070,7 +1005,6 @@ const Feedback = ({ user }) => {
             setDayRange={setDayRange}
             office={office}
             setOffice={setOffice}
-            exportCSV={exportCSV}
             exportPDF={exportPDF}
             officeOptions={officeOptions}
             user={user}

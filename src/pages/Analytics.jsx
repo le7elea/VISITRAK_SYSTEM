@@ -2,6 +2,7 @@
 import {
   BarChart2,
   ChevronDown,
+  Download,
   MoreHorizontal,
   MessageSquare,
   Calendar,
@@ -11,6 +12,8 @@ import {
   Meh,
   Frown,
 } from "lucide-react";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import bisuLogo from "../assets/bisulogo.png";
@@ -74,6 +77,19 @@ const getNumericRating = (value) => {
 
   const parsed = parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toDateObject = (value) => {
+  if (!value) return null;
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toExcelText = (value) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  return getReadableValue(value);
 };
 
 const normalizeQuestionRatings = (answers, questions = []) => {
@@ -363,36 +379,13 @@ const normalizeFivePointRating = (value) => {
   return null;
 };
 
-const COSTS_DIMENSION_INDEX = 4;
-
-const officeIncludesCostsDimension = (officeName) => {
-  const normalized = toTrimmedText(officeName).toLowerCase();
-  if (!normalized) return false;
-
-  return ["cashier", "canteen", "production"].some((keyword) =>
-    normalized.includes(keyword),
-  );
-};
-
-const getFeedbackSatisfactionForAnalytics = (
-  feedback,
-  officeName = feedback?.office,
-) => {
+const getFeedbackSatisfactionForAnalytics = (feedback) => {
   const questionRatings = Array.isArray(feedback?.questionRatings)
     ? feedback.questionRatings
     : [];
 
   const eligibleRatings = questionRatings
-    .map((item, index) => {
-      if (
-        index === COSTS_DIMENSION_INDEX &&
-        !officeIncludesCostsDimension(officeName)
-      ) {
-        return null;
-      }
-
-      return normalizeFivePointRating(item?.rating);
-    })
+    .map((item) => normalizeFivePointRating(item?.rating))
     .filter((value) => value !== null);
 
   if (eligibleRatings.length) {
@@ -415,9 +408,1048 @@ const formatScoreCell = (value) => {
   return Number(value).toFixed(2);
 };
 
-const calculateMeanSatisfaction = (feedbacks = [], officeName = "") => {
+const RAW_DATA_HEADERS = [
+  "Office Visited (Required)",
+  "MONTH",
+  "YEAR",
+  "Resp No.",
+  "Client Type",
+  "Date(MM/DD/YYYY)",
+  "Time of Visit",
+  "Sex",
+  "Age",
+  "Region of Residence:",
+  "Served by:",
+  "Service Availed:",
+  "CC1",
+  "CC2",
+  "CC3",
+  "Responsiveness",
+  "Reliability",
+  "Access & Facilities",
+  "Communcation",
+  "Costs",
+  "Integrity",
+  "Assurance",
+  "Outcome",
+  "Commendations",
+  "Suggestions",
+];
+
+const EXCEL_DIMENSION_LABELS = [
+  "Responsiveness",
+  "Reliability (Quality)",
+  "Access & Facilities",
+  "Communication",
+  "Costs",
+  "Integrity",
+  "Assurance",
+  "Outcome",
+];
+
+const EXCEL_HEADER_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFFCE4D6" },
+};
+
+const EXCEL_RAW_HEADER_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFE2F0D9" },
+};
+
+const EXCEL_WHITE_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFFFFFFF" },
+};
+
+const EXCEL_SUMMARY_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFE2F0D9" },
+};
+
+const EXCEL_DEMOGRAPHIC_SUMMARY_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFF8CBAD" },
+};
+
+const EXCEL_PERCENTAGE_FILL = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFFFE699" },
+};
+
+const EXCEL_THIN_BORDER = {
+  top: { style: "thin" },
+  left: { style: "thin" },
+  bottom: { style: "thin" },
+  right: { style: "thin" },
+};
+
+const getExcelCellValue = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  return value;
+};
+
+const getExcelRatingValue = (value) => {
+  const numeric = getNumericRating(value);
+  return numeric === null ? "" : numeric;
+};
+
+const getExcelDateValue = (record = {}) =>
+  toDateObject(record.checkInTime) || toDateObject(record.createdAt);
+
+const getExcelTimeValue = (record = {}) =>
+  toDateObject(record.checkInTime) || toDateObject(record.createdAt);
+
+const getExcelMonthValue = (record = {}, fallbackDate = null) => {
+  const date = getExcelDateValue(record) || fallbackDate;
+  return date ? date.getMonth() + 1 : "";
+};
+
+const getExcelYearValue = (record = {}, fallbackDate = null) => {
+  const date = getExcelDateValue(record) || fallbackDate;
+  return date ? date.getFullYear() : "";
+};
+
+const normalizeExcelSheetName = (name, fallback = "Sheet") => {
+  const cleaned = toTrimmedText(name)
+    .replace(/[:\\/?*[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (cleaned || fallback).slice(0, 31);
+};
+
+const getUniqueExcelSheetName = (name, usedNames) => {
+  const baseName = normalizeExcelSheetName(name, "Office");
+  let candidate = baseName;
+  let counter = 2;
+
+  while (usedNames.has(candidate.toLowerCase())) {
+    const suffix = ` (${counter})`;
+    candidate = `${baseName.slice(0, 31 - suffix.length)}${suffix}`;
+    counter += 1;
+  }
+
+  usedNames.add(candidate.toLowerCase());
+  return candidate;
+};
+
+const getExcelFormulaSheetName = (sheetName) =>
+  `'${String(sheetName).replace(/'/g, "''")}'`;
+
+const getExcelDownloadFileName = (monthValue = "") => {
+  const safeMonth = toTrimmedText(monthValue) || "selected-month";
+  return `visitrak-raw-data_${safeMonth}.xlsx`;
+};
+
+const styleWorksheetGrid = (worksheet) => {
+  worksheet.eachRow((row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = EXCEL_THIN_BORDER;
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: "center",
+        wrapText: true,
+      };
+      cell.font = { name: "Arial", size: 10 };
+    });
+  });
+};
+
+const RAW_DATA_COLUMN_WIDTH = 20;
+const RAW_DATA_OFFICE_COLUMN_WIDTH = 38;
+
+const setRawDataSheetColumns = (worksheet) => {
+  worksheet.columns = RAW_DATA_HEADERS.map((header) => ({
+    width:
+      header === "Office Visited (Required)"
+        ? RAW_DATA_OFFICE_COLUMN_WIDTH
+        : RAW_DATA_COLUMN_WIDTH,
+  }));
+};
+
+const applyRawDataSheetFormatting = (worksheet, summaryRowNumber) => {
+  setRawDataSheetColumns(worksheet);
+  worksheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 16;
+  headerRow.eachCell((cell, columnNumber) => {
+    const isOfficeHeader = columnNumber === 1;
+    cell.font = { name: "Arial", size: 8, bold: !isOfficeHeader };
+    cell.fill = isOfficeHeader ? EXCEL_WHITE_FILL : EXCEL_RAW_HEADER_FILL;
+    cell.border = EXCEL_THIN_BORDER;
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+      wrapText: false,
+      shrinkToFit: true,
+      textRotation: 0,
+    };
+  });
+
+  styleWorksheetGrid(worksheet);
+
+  worksheet.getColumn(6).numFmt = "mm/dd/yyyy";
+  worksheet.getColumn(7).numFmt = "h:mm AM/PM";
+  for (let col = 16; col <= 23; col += 1) {
+    worksheet.getColumn(col).numFmt = "0";
+  }
+  worksheet.getColumn(24).numFmt = "0.00";
+
+  const lastDataRow = summaryRowNumber ? summaryRowNumber - 2 : 1;
+  for (let rowNumber = 2; rowNumber <= lastDataRow; rowNumber += 1) {
+    const officeCell = worksheet.getCell(rowNumber, 1);
+    officeCell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+      wrapText: false,
+      shrinkToFit: true,
+      textRotation: 0,
+    };
+
+    for (let columnNumber = 16; columnNumber <= 23; columnNumber += 1) {
+      worksheet.getCell(rowNumber, columnNumber).numFmt = "0";
+    }
+  }
+
+  if (summaryRowNumber) {
+    const summaryRow = worksheet.getRow(summaryRowNumber);
+    summaryRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = { name: "Arial", size: 10, bold: true };
+      cell.fill = EXCEL_SUMMARY_FILL;
+      cell.border = EXCEL_THIN_BORDER;
+    });
+
+    for (let columnNumber = 16; columnNumber <= 24; columnNumber += 1) {
+      summaryRow.getCell(columnNumber).numFmt = "0.00";
+    }
+
+    for (let rowNumber = summaryRowNumber + 1; rowNumber <= summaryRowNumber + 3; rowNumber += 1) {
+      [4, 5, 7, 8].forEach((columnNumber) => {
+        const isClientTypeSummary =
+          rowNumber >= summaryRowNumber + 1 && (columnNumber === 4 || columnNumber === 5);
+        const isSexSummary =
+          rowNumber >= summaryRowNumber + 1 &&
+          rowNumber <= summaryRowNumber + 2 &&
+          (columnNumber === 7 || columnNumber === 8);
+
+        if (!isClientTypeSummary && !isSexSummary) return;
+
+        const cell = worksheet.getCell(rowNumber, columnNumber);
+        cell.fill = EXCEL_DEMOGRAPHIC_SUMMARY_FILL;
+        cell.border = EXCEL_THIN_BORDER;
+        cell.numFmt = columnNumber === 5 || columnNumber === 8 ? "0" : "@";
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: columnNumber === 5 || columnNumber === 8 ? "right" : "left",
+          wrapText: true,
+        };
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          bold: columnNumber === 5 || columnNumber === 8,
+          color:
+            columnNumber === 5 || columnNumber === 8
+              ? { argb: "FFFF0000" }
+              : { argb: "FF000000" },
+        };
+      });
+    }
+
+    for (let rowNumber = summaryRowNumber + 1; rowNumber <= summaryRowNumber + 5; rowNumber += 1) {
+      [12, 13, 14, 15].forEach((columnNumber) => {
+        const cell = worksheet.getCell(rowNumber, columnNumber);
+        cell.fill = EXCEL_DEMOGRAPHIC_SUMMARY_FILL;
+        cell.border = EXCEL_THIN_BORDER;
+        cell.numFmt = "0";
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: columnNumber === 12 ? "left" : "right",
+          wrapText: true,
+        };
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          bold: columnNumber !== 12,
+          color:
+            columnNumber === 12
+              ? { argb: "FF000000" }
+              : { argb: "FFFF0000" },
+        };
+      });
+    }
+
+    for (let rowNumber = summaryRowNumber + 7; rowNumber <= summaryRowNumber + 9; rowNumber += 1) {
+      for (let columnNumber = 2; columnNumber <= 19; columnNumber += 1) {
+        const cell = worksheet.getCell(rowNumber, columnNumber);
+        cell.fill = rowNumber === summaryRowNumber + 7
+          ? EXCEL_SUMMARY_FILL
+          : EXCEL_DEMOGRAPHIC_SUMMARY_FILL;
+        cell.border = EXCEL_THIN_BORDER;
+        cell.numFmt = rowNumber === summaryRowNumber + 9 ? "0" : "@";
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          bold: rowNumber !== summaryRowNumber + 8,
+          color:
+            rowNumber === summaryRowNumber + 9
+              ? { argb: "FFFF0000" }
+              : { argb: "FF000000" },
+        };
+      }
+    }
+  }
+};
+
+const applySummarySheetFormatting = (worksheet, headerRowCount = 1) => {
+  worksheet.views = [{ state: "frozen", ySplit: headerRowCount }];
+  styleWorksheetGrid(worksheet);
+
+  for (let rowNumber = 1; rowNumber <= headerRowCount; rowNumber += 1) {
+    worksheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = { name: "Arial", size: 10, bold: true };
+      cell.fill = EXCEL_HEADER_FILL;
+    });
+  }
+};
+
+const applySummaryTwoWorksheetFormatting = (worksheet) => {
+  worksheet.views = [{ state: "frozen", ySplit: 2 }];
+  worksheet.getRow(1).height = 42;
+  worksheet.getRow(2).height = 18;
+  styleWorksheetGrid(worksheet);
+
+  for (let rowNumber = 1; rowNumber <= 2; rowNumber += 1) {
+    worksheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = { name: "Arial", size: 10 };
+      cell.fill = EXCEL_WHITE_FILL;
+      cell.border = EXCEL_THIN_BORDER;
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: "center",
+        wrapText: true,
+      };
+    });
+  }
+
+  worksheet.getCell("B1").alignment = {
+    vertical: "middle",
+    horizontal: "center",
+    wrapText: true,
+  };
+
+  for (let rowNumber = 3; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    worksheet.getCell(rowNumber, 1).alignment = {
+      vertical: "middle",
+      horizontal: "left",
+      wrapText: false,
+      shrinkToFit: true,
+    };
+
+    const rowLabel = toTrimmedText(worksheet.getCell(rowNumber, 1).value);
+    if (rowLabel === "OVERALL TOTAL" || rowLabel === "Percentage %") {
+      worksheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill =
+          rowLabel === "OVERALL TOTAL"
+            ? EXCEL_DEMOGRAPHIC_SUMMARY_FILL
+            : EXCEL_PERCENTAGE_FILL;
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          bold: true,
+          color: { argb: "FFFF0000" },
+        };
+        cell.border = EXCEL_THIN_BORDER;
+      });
+    }
+  }
+};
+
+const getSummaryTwoCountCell = (value, hasData) => (hasData ? value || 0 : "-");
+
+const getSummaryTwoOfficeRowValues = (row) => [
+  row.office,
+  getSummaryTwoCountCell(row.customerCount, row.hasFeedbackData),
+  getSummaryTwoCountCell(row.maleCount, row.hasFeedbackData),
+  getSummaryTwoCountCell(row.femaleCount, row.hasFeedbackData),
+  getSummaryTwoCountCell(row.citizensCount, row.hasFeedbackData),
+  getSummaryTwoCountCell(row.businessCount, row.hasFeedbackData),
+  getSummaryTwoCountCell(row.governmentCount, row.hasFeedbackData),
+  ...row.cc1Counts.map((value) =>
+    getSummaryTwoCountCell(value, row.hasCharterData),
+  ),
+  ...row.cc2Counts.map((value) =>
+    getSummaryTwoCountCell(value, row.hasCharterData),
+  ),
+  ...row.cc3Counts.map((value) =>
+    getSummaryTwoCountCell(value, row.hasCharterData),
+  ),
+];
+
+const getSummaryTwoOverallValues = (totals) => [
+  totals.customerCount || 0,
+  totals.maleCount || 0,
+  totals.femaleCount || 0,
+  totals.citizensCount || 0,
+  totals.businessCount || 0,
+  totals.governmentCount || 0,
+  ...totals.cc1Counts,
+  ...totals.cc2Counts,
+  ...totals.cc3Counts,
+];
+
+const getSummaryTwoPercentageValues = (totals) => {
+  const totalCustomers = totals.customerCount || 0;
+  if (!totalCustomers) {
+    return Array.from({ length: 19 }, (_, index) => (index === 0 ? "" : "-"));
+  }
+
+  return [
+    "",
+    ...getSummaryTwoOverallValues(totals)
+      .slice(1)
+      .map((value) => Math.round(((value || 0) / totalCustomers) * 100)),
+  ];
+};
+
+const setSummaryTwoFormulaRows = ({
+  worksheet,
+  firstOfficeRow,
+  lastOfficeRow,
+  totalRowNumber,
+  percentageRowNumber,
+  totals,
+}) => {
+  const overallValues = getSummaryTwoOverallValues(totals);
+  const percentageValues = getSummaryTwoPercentageValues(totals);
+
+  for (let columnNumber = 2; columnNumber <= 20; columnNumber += 1) {
+    const columnLetter = worksheet.getColumn(columnNumber).letter;
+    const overallResult = overallValues[columnNumber - 2] ?? 0;
+    const percentageResult = percentageValues[columnNumber - 2] ?? "";
+    const totalCell = worksheet.getCell(totalRowNumber, columnNumber);
+    const percentageCell = worksheet.getCell(percentageRowNumber, columnNumber);
+
+    totalCell.value =
+      lastOfficeRow >= firstOfficeRow
+        ? {
+            formula: `SUM(${columnLetter}${firstOfficeRow}:${columnLetter}${lastOfficeRow})`,
+            result: overallResult,
+          }
+        : overallResult;
+
+    percentageCell.value =
+      columnNumber === 2
+        ? ""
+        : {
+            formula: `IFERROR(ROUND(${columnLetter}${totalRowNumber}/$B$${totalRowNumber}*100,0),"-")`,
+            result: percentageResult,
+          };
+  }
+};
+
+const getFirstRawDataSheet = (workbook) =>
+  workbook.worksheets.find(
+    (worksheet) =>
+      worksheet.name !== "SUMMARY 1" && worksheet.name !== "SUMMARY 2",
+  );
+
+const getOfficeRawRowsForExcel = (records = [], officeName = "") =>
+  records
+    .filter((record) => compareOfficeNames(record?.office, officeName))
+    .sort((left, right) => {
+      const leftDate = getExcelDateValue(left);
+      const rightDate = getExcelDateValue(right);
+      return (leftDate?.getTime() || 0) - (rightDate?.getTime() || 0);
+    });
+
+const getSummaryAverageFormula = (columnLetter, firstDataRow, lastDataRow) => {
+  if (lastDataRow < firstDataRow) return "";
+  return {
+    formula: `IFERROR(ROUND(AVERAGE(${columnLetter}${firstDataRow}:${columnLetter}${lastDataRow}),2)," -")`,
+  };
+};
+
+const getSummaryCountFormula = (columnLetter, firstDataRow, lastDataRow) => {
+  if (lastDataRow < firstDataRow) return "";
+  return {
+    formula: `COUNT(${columnLetter}${firstDataRow}:${columnLetter}${lastDataRow})`,
+  };
+};
+
+const getRawDataDemographicCounts = (records = []) =>
+  records.reduce(
+    (counts, record) => {
+      const clientType = normalizeClientType(record?.clientType);
+      const sex = normalizeSex(record?.sex);
+
+      if (clientType === "citizens") counts.citizens += 1;
+      if (clientType === "business") counts.business += 1;
+      if (clientType === "government") counts.government += 1;
+      if (sex === "M") counts.male += 1;
+      if (sex === "F") counts.female += 1;
+
+      return counts;
+    },
+    {
+      citizens: 0,
+      business: 0,
+      government: 0,
+      male: 0,
+      female: 0,
+    },
+  );
+
+const getRawDataCountFormula = (
+  columnLetter,
+  firstDataRow,
+  lastDataRow,
+  criteria = [],
+) => {
+  if (lastDataRow < firstDataRow || criteria.length === 0) return 0;
+
+  const range = `${columnLetter}${firstDataRow}:${columnLetter}${lastDataRow}`;
+  return {
+    formula: criteria
+      .map((criterion) => `COUNTIF(${range},"${criterion}")`)
+      .join("+"),
+  };
+};
+
+const addRawDataDemographicSummary = (worksheet, records, startRowNumber) => {
+  const counts = getRawDataDemographicCounts(records);
+  const firstDataRow = 2;
+  const lastDataRow = records.length + 1;
+  const summaryRows = [
+    [
+      "Citizen",
+      getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*citizen*",
+        "*individual*",
+        "*resident*",
+        "*student*",
+        "*faculty*",
+        "*employee*",
+        "*parent*",
+        "*alumni*",
+      ]),
+      counts.citizens,
+      "Male",
+      getRawDataCountFormula("H", firstDataRow, lastDataRow, ["Male", "M"]),
+      counts.male,
+    ],
+    [
+      "Business",
+      getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*business*",
+        "*company*",
+        "*corporate*",
+        "*enterprise*",
+      ]),
+      counts.business,
+      "Female",
+      getRawDataCountFormula("H", firstDataRow, lastDataRow, ["Female", "F"]),
+      counts.female,
+    ],
+    [
+      "Government",
+      getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*government*",
+        "*govt*",
+        "*agency*",
+        "*public*",
+      ]),
+      counts.government,
+      "",
+      "",
+      "",
+    ],
+  ];
+
+  summaryRows.forEach(
+    (
+      [
+        clientTypeLabel,
+        clientTypeCount,
+        clientTypeResult,
+        sexLabel,
+        sexCount,
+        sexResult,
+      ],
+      index,
+    ) => {
+    const row = worksheet.getRow(startRowNumber + index);
+    row.getCell(4).value = clientTypeLabel;
+    row.getCell(5).value =
+      typeof clientTypeCount === "object"
+        ? { ...clientTypeCount, result: clientTypeResult }
+        : clientTypeCount;
+    if (sexLabel) {
+      const sexRow = worksheet.getRow(startRowNumber + index);
+      sexRow.getCell(7).value = sexLabel;
+      sexRow.getCell(8).value =
+        typeof sexCount === "object" ? { ...sexCount, result: sexResult } : sexCount;
+      sexRow.commit();
+    }
+    row.commit();
+    },
+  );
+};
+
+const addRawDataCcSummary = (worksheet, records, startRowNumber) => {
+  const firstDataRow = 2;
+  const lastDataRow = records.length + 1;
+  const ccColumns = ["M", "N", "O"];
+
+  for (let rating = 1; rating <= 5; rating += 1) {
+    const row = worksheet.getRow(startRowNumber + rating - 1);
+    row.getCell(12).value = rating;
+
+    ccColumns.forEach((columnLetter, index) => {
+      row.getCell(13 + index).value =
+        lastDataRow < firstDataRow
+          ? 0
+          : {
+              formula: `COUNTIF(${columnLetter}${firstDataRow}:${columnLetter}${lastDataRow},${rating})`,
+              result: records.filter(
+                (record) =>
+                  getExcelRatingValue(
+                    record?.[`cc${index + 1}Rating`],
+                  ) === rating,
+              ).length,
+            };
+    });
+
+    row.commit();
+  }
+};
+
+const addRawDataGroupedSummary = (worksheet, records, startRowNumber) => {
+  const counts = getRawDataDemographicCounts(records);
+  const firstDataRow = 2;
+  const lastDataRow = records.length + 1;
+  const startColumn = 2;
+  const rowValues = [
+    "M",
+    "F",
+    "Citizen",
+    "Business",
+    "Government",
+    "CC 1-1",
+    "CC 1-2",
+    "CC 1-3",
+    "CC 1-4",
+    "CC 2-1",
+    "CC 2-2",
+    "CC 2-3",
+    "CC 2-4",
+    "CC 2-5",
+    "CC 3-1",
+    "CC 3-2",
+    "CC 3-3",
+    "CC 3-4",
+  ];
+  const countValues = [
+    {
+      ...getRawDataCountFormula("H", firstDataRow, lastDataRow, ["Male", "M"]),
+      result: counts.male,
+    },
+    {
+      ...getRawDataCountFormula("H", firstDataRow, lastDataRow, ["Female", "F"]),
+      result: counts.female,
+    },
+    {
+      ...getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*citizen*",
+        "*individual*",
+        "*resident*",
+        "*student*",
+        "*faculty*",
+        "*employee*",
+        "*parent*",
+        "*alumni*",
+      ]),
+      result: counts.citizens,
+    },
+    {
+      ...getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*business*",
+        "*company*",
+        "*corporate*",
+        "*enterprise*",
+      ]),
+      result: counts.business,
+    },
+    {
+      ...getRawDataCountFormula("E", firstDataRow, lastDataRow, [
+        "*government*",
+        "*govt*",
+        "*agency*",
+        "*public*",
+      ]),
+      result: counts.government,
+    },
+    ...[1, 2, 3, 4].map((rating) => ({
+      formula: `COUNTIF(M${firstDataRow}:M${lastDataRow},${rating})`,
+      result: records.filter((record) => getExcelRatingValue(record?.cc1Rating) === rating)
+        .length,
+    })),
+    ...[1, 2, 3, 4, 5].map((rating) => ({
+      formula: `COUNTIF(N${firstDataRow}:N${lastDataRow},${rating})`,
+      result: records.filter((record) => getExcelRatingValue(record?.cc2Rating) === rating)
+        .length,
+    })),
+    ...[1, 2, 3, 4].map((rating) => ({
+      formula: `COUNTIF(O${firstDataRow}:O${lastDataRow},${rating})`,
+      result: records.filter((record) => getExcelRatingValue(record?.cc3Rating) === rating)
+        .length,
+    })),
+  ];
+
+  worksheet.mergeCells(startRowNumber, startColumn, startRowNumber, startColumn + 1);
+  worksheet.mergeCells(startRowNumber, startColumn + 2, startRowNumber, startColumn + 4);
+  worksheet.mergeCells(startRowNumber, startColumn + 5, startRowNumber, startColumn + 8);
+  worksheet.mergeCells(startRowNumber, startColumn + 9, startRowNumber, startColumn + 13);
+  worksheet.mergeCells(startRowNumber, startColumn + 14, startRowNumber, startColumn + 17);
+
+  worksheet.getCell(startRowNumber, startColumn).value = "Sex";
+  worksheet.getCell(startRowNumber, startColumn + 2).value = "Client Type";
+  worksheet.getCell(startRowNumber, startColumn + 5).value = "CC1";
+  worksheet.getCell(startRowNumber, startColumn + 9).value = "CC2";
+  worksheet.getCell(startRowNumber, startColumn + 14).value = "CC3";
+
+  rowValues.forEach((label, index) => {
+    worksheet.getCell(startRowNumber + 1, startColumn + index).value = label;
+    worksheet.getCell(startRowNumber + 2, startColumn + index).value =
+      lastDataRow < firstDataRow ? 0 : countValues[index];
+  });
+};
+
+const addRawDataWorksheet = ({
+  workbook,
+  usedSheetNames,
+  officeName,
+  records,
+  reportMonthDate,
+}) => {
+  const sheetName = getUniqueExcelSheetName(officeName, usedSheetNames);
+  const worksheet = workbook.addWorksheet(sheetName);
+
+  worksheet.addRow(RAW_DATA_HEADERS);
+
+  records.forEach((record, index) => {
+    const date = getExcelDateValue(record);
+    const time = getExcelTimeValue(record);
+    const ratings = Array.from({ length: 8 }, (_, ratingIndex) =>
+      getExcelRatingValue(record?.questionRatings?.[ratingIndex]?.rating),
+    );
+
+    worksheet.addRow([
+      officeName,
+      getExcelMonthValue(record, reportMonthDate),
+      getExcelYearValue(record, reportMonthDate),
+      index + 1,
+      getExcelCellValue(toExcelText(record?.clientType)),
+      date || "",
+      time || "",
+      getExcelCellValue(toExcelText(record?.sex)),
+      getExcelCellValue(toExcelText(record?.age)),
+      getExcelCellValue(toExcelText(record?.regionOfResidence)),
+      getExcelCellValue(toExcelText(record?.servedBy)),
+      getExcelCellValue(toExcelText(record?.serviceAvailed)),
+      getExcelRatingValue(record?.cc1Rating),
+      getExcelRatingValue(record?.cc2Rating),
+      getExcelRatingValue(record?.cc3Rating),
+      ...ratings,
+      getExcelCellValue(toExcelText(record?.commendation)),
+      getExcelCellValue(toExcelText(record?.suggestion)),
+    ]);
+  });
+
+  const firstDataRow = 2;
+  const lastDataRow = records.length + 1;
+  const summaryRowNumber = records.length + 2;
+  addRawDataDemographicSummary(worksheet, records, summaryRowNumber + 1);
+  addRawDataCcSummary(worksheet, records, summaryRowNumber + 1);
+  addRawDataGroupedSummary(worksheet, records, summaryRowNumber + 7);
+
+  const summaryRow = worksheet.getRow(summaryRowNumber);
+  summaryRow.getCell(15).value = getSummaryCountFormula(
+    "O",
+    firstDataRow,
+    lastDataRow,
+  );
+
+  ["P", "Q", "R", "S", "T", "U", "V", "W"].forEach((columnLetter, index) => {
+    summaryRow.getCell(16 + index).value = getSummaryAverageFormula(
+      columnLetter,
+      firstDataRow,
+      lastDataRow,
+    );
+  });
+
+  summaryRow.getCell(24).value = {
+    formula: `IFERROR(ROUND(AVERAGE(P${summaryRowNumber}:W${summaryRowNumber}),2)," -")`,
+  };
+  summaryRow.commit();
+
+  applyRawDataSheetFormatting(worksheet, summaryRowNumber);
+  return { sheetName, summaryRowNumber };
+};
+
+const addSummaryOneWorksheet = ({
+  workbook,
+  officeAnalyticsRows,
+  sheetMap,
+  summaryOverallRow,
+}) => {
+  const worksheet = workbook.addWorksheet("SUMMARY 1");
+  worksheet.columns = [
+    { width: 44 },
+    { width: 16 },
+    ...Array.from({ length: 8 }, () => ({ width: 15 })),
+    { width: 18 },
+    { width: 22 },
+  ];
+
+  worksheet.addRow([
+    "Offices",
+    "Number of Customers (f)",
+    ...EXCEL_DIMENSION_LABELS,
+    "Mean Satisfaction",
+    "Description",
+  ]);
+
+  officeAnalyticsRows.forEach((row) => {
+    worksheet.addRow([
+      row.office,
+      row.customerCount || 0,
+      ...row.dimensionMeans.map((value) =>
+        value === null || value === undefined ? " -" : value,
+      ),
+      row.meanSatisfaction ?? " -",
+      row.satisfactionDescription || " -",
+    ]);
+
+    const rowNumber = worksheet.lastRow.number;
+    const sheetInfo = sheetMap.get(row.office);
+    if (sheetInfo) {
+      worksheet.getCell(rowNumber, 2).value = {
+        formula: `${getExcelFormulaSheetName(sheetInfo.sheetName)}!O${sheetInfo.summaryRowNumber}`,
+        result: row.customerCount || 0,
+      };
+      for (let index = 0; index < 8; index += 1) {
+        worksheet.getCell(rowNumber, 3 + index).value =
+          row.dimensionMeans[index] === null || row.dimensionMeans[index] === undefined
+            ? " -"
+            : {
+                formula: `${getExcelFormulaSheetName(
+                  sheetInfo.sheetName,
+                )}!${String.fromCharCode(
+                  80 + index,
+                )}${sheetInfo.summaryRowNumber}`,
+                result: row.dimensionMeans[index],
+              };
+      }
+      worksheet.getCell(rowNumber, 11).value = {
+        formula: `${getExcelFormulaSheetName(sheetInfo.sheetName)}!X${sheetInfo.summaryRowNumber}`,
+        result: row.meanSatisfaction ?? "",
+      };
+    }
+  });
+
+  if (officeAnalyticsRows.length > 1) {
+    worksheet.addRow([
+      "OVERALL",
+      summaryOverallRow.customerCount || 0,
+      ...summaryOverallRow.dimensionMeans.map((value) =>
+        value === null || value === undefined ? " -" : value,
+      ),
+      summaryOverallRow.meanSatisfaction ?? " -",
+      summaryOverallRow.satisfactionDescription || " -",
+    ]);
+    worksheet.lastRow.font = { name: "Arial", size: 10, bold: true };
+    worksheet.lastRow.eachCell((cell) => {
+      cell.fill = EXCEL_SUMMARY_FILL;
+    });
+  }
+
+  for (let col = 3; col <= 11; col += 1) {
+    worksheet.getColumn(col).numFmt = "0.00";
+  }
+
+  applySummarySheetFormatting(worksheet);
+};
+
+const addSummaryTwoWorksheet = ({
+  workbook,
+  officeAnalyticsRows,
+  charterOverallTotals,
+}) => {
+  const worksheet = workbook.addWorksheet("SUMMARY 2");
+  worksheet.columns = [
+    { width: 44 },
+    { width: 11 },
+    { width: 8 },
+    { width: 8 },
+    { width: 12 },
+    { width: 12 },
+    { width: 14 },
+    ...Array.from({ length: 13 }, () => ({ width: 9 })),
+  ];
+
+  worksheet.addRow([
+    "Office",
+    "Number of\nCustomers\n(f)",
+    "Sex",
+    "",
+    "Client Type",
+    "",
+    "",
+    "CC1",
+    "",
+    "",
+    "",
+    "CC2",
+    "",
+    "",
+    "",
+    "",
+    "CC3",
+    "",
+    "",
+    "",
+  ]);
+  worksheet.addRow([
+    "",
+    "",
+    "M",
+    "F",
+    "Citizen",
+    "Business",
+    "Government",
+    "CC 1-1",
+    "CC 1-2",
+    "CC 1-3",
+    "CC 1-4",
+    "CC 2-1",
+    "CC 2-2",
+    "CC 2-3",
+    "CC 2-4",
+    "CC 2-5",
+    "CC 3-1",
+    "CC 3-2",
+    "CC 3-3",
+    "CC 3-4",
+  ]);
+
+  worksheet.mergeCells("A1:A2");
+  worksheet.mergeCells("B1:B2");
+  worksheet.mergeCells("C1:D1");
+  worksheet.mergeCells("E1:G1");
+  worksheet.mergeCells("H1:K1");
+  worksheet.mergeCells("L1:P1");
+  worksheet.mergeCells("Q1:T1");
+
+  const firstOfficeRow = 3;
+  officeAnalyticsRows.forEach((row) => {
+    worksheet.addRow(getSummaryTwoOfficeRowValues(row));
+  });
+
+  const lastOfficeRow = worksheet.lastRow?.number || firstOfficeRow - 1;
+  worksheet.addRow([
+    "OVERALL TOTAL",
+    ...getSummaryTwoOverallValues(charterOverallTotals),
+  ]);
+  const totalRowNumber = worksheet.lastRow.number;
+  worksheet.addRow([
+    "Percentage %",
+    ...getSummaryTwoPercentageValues(charterOverallTotals),
+  ]);
+  const percentageRowNumber = worksheet.lastRow.number;
+
+  setSummaryTwoFormulaRows({
+    worksheet,
+    firstOfficeRow,
+    lastOfficeRow,
+    totalRowNumber,
+    percentageRowNumber,
+    totals: charterOverallTotals,
+  });
+
+  applySummaryTwoWorksheetFormatting(worksheet);
+};
+
+const buildAnalyticsExcelWorkbook = ({
+  officeAnalyticsRows,
+  feedbackRecordsForPrint,
+  summaryOverallRow,
+  charterOverallTotals,
+  reportMonthDate,
+}) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "VisiTrak System";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const usedSheetNames = new Set();
+  const sheetMap = new Map();
+
+  officeAnalyticsRows.forEach((officeRow) => {
+    const records = getOfficeRawRowsForExcel(
+      feedbackRecordsForPrint,
+      officeRow.office,
+    );
+    const sheetInfo = addRawDataWorksheet({
+      workbook,
+      usedSheetNames,
+      officeName: officeRow.office,
+      records,
+      reportMonthDate,
+    });
+    sheetMap.set(officeRow.office, sheetInfo);
+  });
+
+  if (!getFirstRawDataSheet(workbook)) {
+    addRawDataWorksheet({
+      workbook,
+      usedSheetNames,
+      officeName: "No Data",
+      records: [],
+      reportMonthDate,
+    });
+  }
+
+  addSummaryOneWorksheet({
+    workbook,
+    officeAnalyticsRows,
+    sheetMap,
+    summaryOverallRow,
+  });
+  addSummaryTwoWorksheet({
+    workbook,
+    officeAnalyticsRows,
+    charterOverallTotals,
+  });
+
+  return workbook;
+};
+
+const calculateMeanSatisfaction = (feedbacks = []) => {
   const ratings = feedbacks
-    .map((feedback) => getFeedbackSatisfactionForAnalytics(feedback, officeName))
+    .map((feedback) => getFeedbackSatisfactionForAnalytics(feedback))
     .filter((value) => value !== null);
 
   if (!ratings.length) return null;
@@ -901,6 +1933,16 @@ const Analytics = ({ setActiveTab }) => {
             office: d.office,
             sex: getVisitSexValue(d),
             clientType: getVisitClientTypeValue(d),
+            age: d.age || d.visitorAge || d.personalInfo?.age || "",
+            regionOfResidence:
+              d.regionOfResidence ||
+              d.region ||
+              d.residenceRegion ||
+              d.personalInfo?.regionOfResidence ||
+              "",
+            servedBy: d.servedBy || d.staff || d.assistedBy || "",
+            serviceAvailed:
+              d.serviceAvailed || d.visitPurpose || d.purpose || d.service || "",
             cc1Rating: getCharterRatingValue(d, 1),
             cc2Rating: getCharterRatingValue(d, 2),
             cc3Rating: getCharterRatingValue(d, 3),
@@ -1023,6 +2065,20 @@ const Analytics = ({ setActiveTab }) => {
                   "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
+                age: d.age || d.visitorAge || d.personalInfo?.age || "",
+                regionOfResidence:
+                  d.regionOfResidence ||
+                  d.region ||
+                  d.residenceRegion ||
+                  d.personalInfo?.regionOfResidence ||
+                  "",
+                servedBy: d.servedBy || d.staff || d.assistedBy || "",
+                serviceAvailed:
+                  d.serviceAvailed ||
+                  d.visitPurpose ||
+                  d.purpose ||
+                  d.service ||
+                  "",
                 cc1Rating: getCharterRatingValue(d, 1),
                 cc2Rating: getCharterRatingValue(d, 2),
                 cc3Rating: getCharterRatingValue(d, 3),
@@ -1088,6 +2144,20 @@ const Analytics = ({ setActiveTab }) => {
                   "",
                 sex: getVisitSexValue(d),
                 clientType: getVisitClientTypeValue(d),
+                age: d.age || d.visitorAge || d.personalInfo?.age || "",
+                regionOfResidence:
+                  d.regionOfResidence ||
+                  d.region ||
+                  d.residenceRegion ||
+                  d.personalInfo?.regionOfResidence ||
+                  "",
+                servedBy: d.servedBy || d.staff || d.assistedBy || "",
+                serviceAvailed:
+                  d.serviceAvailed ||
+                  d.visitPurpose ||
+                  d.purpose ||
+                  d.service ||
+                  "",
                 cc1Rating: getCharterRatingValue(d, 1),
                 cc2Rating: getCharterRatingValue(d, 2),
                 cc3Rating: getCharterRatingValue(d, 3),
@@ -1163,6 +2233,7 @@ const Analytics = ({ setActiveTab }) => {
   const [showDayRangeDropdown, setShowDayRangeDropdown] = useState(false);
   const [showIntegratedModal, setShowIntegratedModal] = useState(false);
   const [showOverallModal, setShowOverallModal] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [showPrintSignatoryModal, setShowPrintSignatoryModal] = useState(false);
   const [printSignatories, setPrintSignatories] = useState({
     prepared: "MA. MAELITH L. BUCHAN",
@@ -1414,6 +2485,7 @@ const Analytics = ({ setActiveTab }) => {
     const addOffice = (value) => {
       const normalized = normalizeOfficeName(value);
       if (!normalized) return;
+      if (normalized.toLowerCase() === "all offices") return;
       const key = normalized.toLowerCase();
       if (!officeMap.has(key)) {
         officeMap.set(key, normalized);
@@ -1673,6 +2745,19 @@ const Analytics = ({ setActiveTab }) => {
     return `${monthName}, ${startDate.getFullYear()}`.toUpperCase();
   }, [dateRange.start, reportDateRangeLabel]);
 
+  const excelReportMonthValue = useMemo(() => {
+    if (dateRangeMode === "month" && monthRange.start) {
+      return monthRange.start;
+    }
+
+    return dateRange.start ? dateRange.start.slice(0, 7) : "";
+  }, [dateRange.start, dateRangeMode, monthRange.start]);
+
+  const excelReportMonthDate = useMemo(
+    () => monthValueToBoundaryDate(excelReportMonthValue, "start"),
+    [excelReportMonthValue],
+  );
+
   const visitsById = useMemo(() => {
     const map = new Map();
     visits.forEach((visit) => {
@@ -1697,6 +2782,16 @@ const Analytics = ({ setActiveTab }) => {
           "Unspecified",
         sex: getVisitSexValue(feedback),
         clientType: getVisitClientTypeValue(feedback),
+        age: feedback?.age || matchedVisit?.age || "",
+        regionOfResidence:
+          feedback?.regionOfResidence || matchedVisit?.regionOfResidence || "",
+        servedBy: feedback?.servedBy || matchedVisit?.servedBy || "",
+        serviceAvailed:
+          feedback?.serviceAvailed ||
+          matchedVisit?.serviceAvailed ||
+          matchedVisit?.purpose ||
+          "",
+        checkInTime: matchedVisit?.checkInTime || feedback?.checkInTime || null,
         cc1Rating:
           getCharterRatingValue(feedback, 1) ??
           getCharterRatingValue(matchedVisit, 1),
@@ -1847,13 +2942,6 @@ const Analytics = ({ setActiveTab }) => {
       });
 
       const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
-        if (
-          index === COSTS_DIMENSION_INDEX &&
-          !officeIncludesCostsDimension(officeName)
-        ) {
-          return null;
-        }
-
         const ratings = officeFeedbacks
           .map((feedback) =>
             normalizeFivePointRating(
@@ -1866,10 +2954,7 @@ const Analytics = ({ setActiveTab }) => {
         return ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
       });
 
-      const meanSatisfaction = calculateMeanSatisfaction(
-        officeFeedbacks,
-        officeName,
-      );
+      const meanSatisfaction = calculateMeanSatisfaction(officeFeedbacks);
 
       const commendationSet = new Set();
       const suggestionSet = new Set();
@@ -1896,7 +2981,6 @@ const Analytics = ({ setActiveTab }) => {
         cc1Counts: charterCounts.cc1,
         cc2Counts: charterCounts.cc2,
         cc3Counts: charterCounts.cc3,
-        includesCosts: officeIncludesCostsDimension(officeName),
         dimensionMeans,
         meanSatisfaction,
         satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
@@ -2120,6 +3204,32 @@ const Analytics = ({ setActiveTab }) => {
   // --- Export Functions ---
   const exportToPDF = () => {
     setShowPrintSignatoryModal(true);
+  };
+
+  const exportToExcel = async () => {
+    if (isExportingExcel) return;
+
+    try {
+      setIsExportingExcel(true);
+      const workbook = buildAnalyticsExcelWorkbook({
+        officeAnalyticsRows,
+        feedbackRecordsForPrint,
+        summaryOverallRow,
+        charterOverallTotals,
+        reportMonthDate: excelReportMonthDate,
+      });
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      saveAs(blob, getExcelDownloadFileName(excelReportMonthValue));
+    } catch (error) {
+      console.error("Error exporting Excel workbook:", error);
+      alert("Failed to export Excel file. Please try again.");
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleConfirmPrint = () => {
@@ -3541,7 +4651,21 @@ const Analytics = ({ setActiveTab }) => {
                    <BarChart2 size={18} />
                    <span>Overall Integration</span>
                  </button>
-               </div> */}
+                </div> */}
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={exportToExcel}
+                    disabled={isExportingExcel}
+                    className="h-[46px] inline-flex items-center gap-2 px-4 bg-white border border-emerald-300 rounded-xl shadow-sm hover:shadow-md transition-shadow text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap"
+                  >
+                    <Download size={18} className="text-emerald-600" />
+                    <span>
+                      {isExportingExcel ? "Exporting..." : "Export Excel"}
+                    </span>
+                  </button>
+                </div>
 
                 <div className="relative">
                   <button
