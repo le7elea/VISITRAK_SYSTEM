@@ -543,6 +543,12 @@ const getUniqueExcelSheetName = (name, usedNames) => {
 const getExcelFormulaSheetName = (sheetName) =>
   `'${String(sheetName).replace(/'/g, "''")}'`;
 
+const isAllOfficesExcelSheet = (officeName = "") =>
+  toTrimmedText(officeName).toLowerCase() === "all offices";
+
+const getSummaryCommentStatus = (row = {}) =>
+  row.commendations?.length || row.suggestions?.length ? "w/comment" : 0;
+
 const getExcelDownloadFileName = (monthValue = "") => {
   const safeMonth = toTrimmedText(monthValue) || "selected-month";
   return `visitrak-raw-data_${safeMonth}.xlsx`;
@@ -1222,6 +1228,7 @@ const addSummaryOneWorksheet = ({
     ...Array.from({ length: 8 }, () => ({ width: 15 })),
     { width: 18 },
     { width: 22 },
+    { width: 14 },
   ];
 
   worksheet.addRow([
@@ -1230,6 +1237,7 @@ const addSummaryOneWorksheet = ({
     ...EXCEL_DIMENSION_LABELS,
     "Mean Satisfaction",
     "Description",
+    "Comments",
   ]);
 
   officeAnalyticsRows.forEach((row) => {
@@ -1241,6 +1249,7 @@ const addSummaryOneWorksheet = ({
       ),
       row.meanSatisfaction ?? " -",
       row.satisfactionDescription || " -",
+      getSummaryCommentStatus(row),
     ]);
 
     const rowNumber = worksheet.lastRow.number;
@@ -1279,6 +1288,7 @@ const addSummaryOneWorksheet = ({
       ),
       summaryOverallRow.meanSatisfaction ?? " -",
       summaryOverallRow.satisfactionDescription || " -",
+      0,
     ]);
     worksheet.lastRow.font = { name: "Arial", size: 10, bold: true };
     worksheet.lastRow.eachCell((cell) => {
@@ -1408,6 +1418,8 @@ const buildAnalyticsExcelWorkbook = ({
   const sheetMap = new Map();
 
   officeAnalyticsRows.forEach((officeRow) => {
+    if (isAllOfficesExcelSheet(officeRow.office)) return;
+
     const records = getOfficeRawRowsForExcel(
       feedbackRecordsForPrint,
       officeRow.office,
