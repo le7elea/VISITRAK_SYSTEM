@@ -2237,8 +2237,20 @@ const Analytics = ({ setActiveTab }) => {
     };
   };
 
-  const [dateRange, setDateRange] = useState(getDefaultDateRange());
-  const [dateRangeMode, setDateRangeMode] = useState("day");
+  const getDefaultMonthDateRange = () => {
+    const monthValue = getDefaultMonthRange().start;
+    const [year, month] = monthValue.split("-").map(Number);
+    const monthEndDate = new Date(year, month, 0);
+    const endDay = String(monthEndDate.getDate()).padStart(2, "0");
+
+    return {
+      start: `${monthValue}-01`,
+      end: `${monthValue}-${endDay}`,
+    };
+  };
+
+  const [dateRange, setDateRange] = useState(getDefaultMonthDateRange());
+  const [dateRangeMode, setDateRangeMode] = useState("month");
   const [monthRange, setMonthRange] = useState(getDefaultMonthRange());
   const [pendingDayRange, setPendingDayRange] = useState(getDefaultDateRange());
   const [selectedOfficeFilter, setSelectedOfficeFilter] = useState("all");
