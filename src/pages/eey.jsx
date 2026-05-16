@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart2,
   ChevronDown,
@@ -1645,9 +1645,8 @@ const toSentenceCaseOfficeName = (officeName) => {
   const normalized = normalizeOfficeName(officeName);
   if (!normalized) return "";
 
-  const lowerCased = normalized.toLowerCase();
-  return lowerCased.replace(/(^|[.!?]\s+)([a-z])/g, (match) =>
-    match.toUpperCase(),
+  return normalized.toLowerCase().replace(/[a-z]+/g, (word) =>
+    word === "and" ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
   );
 };
 
@@ -3047,13 +3046,13 @@ const Analytics = ({ setActiveTab }) => {
 
     const matchedOffice = findOfficeRecordByName(sourceOfficeName, offices);
 
-    return (
+    return toSentenceCaseOfficeName(
       normalizeOfficeName(matchedOffice?.name) ||
       normalizeOfficeName(sourceOfficeName) ||
       normalizeOfficeName(currentOfficeRecord?.name) ||
       normalizeOfficeName(currentUser?.originalOffice) ||
       normalizeOfficeName(currentUser?.office) ||
-      "N/A"
+      "N/A",
     );
   }, [
     selectedOfficeFilter,
@@ -3851,6 +3850,13 @@ const Analytics = ({ setActiveTab }) => {
           border: 0.5px solid #000 !important;
         }
 
+        .analytics-table-b td {
+          background-image: linear-gradient(#000, #000);
+          background-position: left bottom;
+          background-repeat: no-repeat;
+          background-size: 100% 0.5px;
+        }
+
         .analytics-table-a tr,
         .analytics-table-b tr,
         .analytics-table-c tr {
@@ -3985,7 +3991,7 @@ const Analytics = ({ setActiveTab }) => {
                       className="text-[13.33px]"
                       style={{ fontFamily: "Arial, sans-serif" }}
                     >
-                      {printOfficeName}
+                      {toSentenceCaseOfficeName(printOfficeName)}
                     </p>
                     <p
                       className="text-[13.33px] italic"
@@ -4122,7 +4128,7 @@ const Analytics = ({ setActiveTab }) => {
                   <tbody>
                     {rows.map((row, rowIndex) => (
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{row.office}</td>
+                        <td>{toSentenceCaseOfficeName(row.office)}</td>
                         <td>
                           {renderList(row.commendations)}
                           {toTrimmedText(row.commendationDetail) && (
@@ -4309,7 +4315,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{toSentenceCaseOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
@@ -4557,7 +4565,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{toSentenceCaseOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
