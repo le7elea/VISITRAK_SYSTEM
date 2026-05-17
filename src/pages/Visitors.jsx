@@ -831,6 +831,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
               text-align: left;
               vertical-align: top;
               padding-top: 0.15cm;
+              padding-left: 0.25cm;
               white-space: nowrap;
             }
           }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronDown, Download, QrCode, Search } from "lucide-react";
+import { Calendar, ChevronDown, QrCode, Search } from "lucide-react";
 
 const FilterBar = ({
   search,
@@ -8,7 +8,6 @@ const FilterBar = ({
   setDayRange,
   office,
   setOffice,
-  exportPDF,
   officeOptions = [],
   user,
   totalCount,
@@ -130,12 +129,6 @@ const FilterBar = ({
               <QrCode size={16} /> {isGeneratingQRCode ? "Generating..." : "Quick Feedback Access"}
             </button>
           )}
-          {/* <button
-            onClick={exportPDF}
-            className="flex items-center gap-2 bg-[#7400EA] hover:bg-blue-800 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
-          >
-            <Download size={16} /> Print PDF
-          </button> */}
         </div>
       </div>
 

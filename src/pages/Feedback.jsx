@@ -541,10 +541,6 @@ const Feedback = ({ user }) => {
     }
   }, [offices, feedbacks, isOfficeAdmin, user?.office]);
 
-  const exportPDF = () => {
-    setShowPrintSignatoryModal(true);
-  };
-
   const openManualQrSettings = () => {
     setManualQrSettings({
       mode: "single",
@@ -1010,7 +1006,6 @@ const Feedback = ({ user }) => {
             setDayRange={setDayRange}
             office={office}
             setOffice={setOffice}
-            exportPDF={exportPDF}
             officeOptions={officeOptions}
             user={user}
             totalCount={feedbacks.length}
