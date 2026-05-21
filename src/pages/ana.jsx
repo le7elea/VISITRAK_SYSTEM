@@ -911,7 +911,7 @@ const [showPrintSignatoryModal, setShowPrintSignatoryModal] = useState(false);
 const [printSignatories, setPrintSignatories] = useState({
 prepared: "MA. MAELITH L. BUCHAN",
 verified: "HORONORIO O. UEHARA",
-approved: "MARRIETA C. MACALOLOT, PhD",
+approved: "MARIETTA C. MACALOLOT, PhD",
 });
 const dayRangeDropdownRef = useRef(null);
 

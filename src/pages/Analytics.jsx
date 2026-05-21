@@ -2283,7 +2283,7 @@ const Analytics = ({ setActiveTab }) => {
   const [printSignatories, setPrintSignatories] = useState({
     prepared: "MA. MAELITH L. BUCHAN",
     verified: "HIRONORI O. UEHARA",
-    approved: "MARRIETA C. MACALOLOT, PhD",
+    approved: "MARIETTA C. MACALOLOT, PhD",
   });
   const [printFooterFields, setPrintFooterFields] = useState({
     documentCode: "F-AQA-CSF-002",
