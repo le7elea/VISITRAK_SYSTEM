@@ -4,10 +4,9 @@ import useFeedbackRatings from "../hooks/useFeedbackRatings";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -279,6 +278,14 @@ const formatQrDate = (value) => {
   return date ? date.toLocaleString() : "Not available";
 };
 
+const getQrSortTime = (qr) => {
+  const date =
+    toDateValue(qr?.createdAt) ||
+    toDateValue(qr?.createdAtClient) ||
+    toDateValue(qr?.updatedAt);
+  return date ? date.getTime() : 0;
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
@@ -392,18 +399,17 @@ const Feedback = ({ user }) => {
     if (!qrManagerOpen) return undefined;
 
     setManualQrTokensLoading(true);
-    const tokensQuery = query(
-      collection(db, "manualFeedbackTokens"),
-      orderBy("createdAt", "desc")
-    );
+    const tokensRef = collection(db, "manualFeedbackTokens");
 
     const unsubscribe = onSnapshot(
-      tokensQuery,
+      tokensRef,
       (snapshot) => {
-        const tokens = snapshot.docs.map((tokenDoc) => ({
-          id: tokenDoc.id,
-          ...tokenDoc.data(),
-        }));
+        const tokens = snapshot.docs
+          .map((tokenDoc) => ({
+            id: tokenDoc.id,
+            ...tokenDoc.data(),
+          }))
+          .sort((first, second) => getQrSortTime(second) - getQrSortTime(first));
         setManualQrTokens(tokens);
         setManualQrTokensLoading(false);
       },
@@ -736,11 +742,14 @@ const Feedback = ({ user }) => {
     setRevokingQrId(qrToken.id);
 
     try {
-      await updateDoc(doc(db, "manualFeedbackTokens", qrToken.id), {
+      const qrDocRef = doc(db, "manualFeedbackTokens", qrToken.id);
+
+      await updateDoc(qrDocRef, {
         revoked: true,
         status: "revoked",
         updatedAt: serverTimestamp(),
       });
+      await deleteDoc(qrDocRef);
     } catch (err) {
       console.error("Error revoking manual feedback QR token:", err);
       const errorDetail = err?.code || err?.message || "Unknown error";

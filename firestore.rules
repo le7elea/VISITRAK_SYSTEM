@@ -148,7 +148,11 @@ service cloud.firestore {
             request.resource.data.status == "used"
           )
         );
-      allow delete: if isSuper();
+      allow delete: if isSuper() || (
+        signedIn() &&
+        resource.data.revoked == true &&
+        resource.data.status == "revoked"
+      );
     }
 
     // Append-only audit logs.
