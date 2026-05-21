@@ -1529,6 +1529,12 @@ const calculateSatisfactionRates = (feedbacks = []) => {
 const getCsfActionRowKey = (officeName = "") =>
   normalizeOfficeName(officeName).toLowerCase() || "unspecified-office";
 
+const formatCsfItemsForInput = (items = []) =>
+  items
+    .map((item) => toTrimmedText(item))
+    .filter(Boolean)
+    .join("\n");
+
 const countUniqueFeedbackRespondents = (feedbacks = []) => {
   const customerKeys = new Set();
 
@@ -1638,16 +1644,6 @@ const toOfficialOfficeDisplayName = (officeName, officeRecords = []) => {
     normalizeOfficeName(matchedOffice?.officialName) ||
     normalizeOfficeName(matchedOffice?.name) ||
     normalized
-  );
-};
-
-const toSentenceCaseOfficeName = (officeName) => {
-  const normalized = normalizeOfficeName(officeName);
-  if (!normalized) return "";
-
-  const lowerCased = normalized.toLowerCase();
-  return lowerCased.replace(/(^|[.!?]\s+)([a-z])/g, (match) =>
-    match.toUpperCase(),
   );
 };
 
@@ -3150,14 +3146,30 @@ const Analytics = ({ setActiveTab }) => {
       csfRowsForPrint.forEach((row) => {
         const officeKey = getCsfActionRowKey(row?.office);
         const existing = previous[officeKey];
+        const autoCommendationDetail = formatCsfItemsForInput(
+          row?.commendations,
+        );
+        const autoSuggestionsDetail = formatCsfItemsForInput(row?.suggestions);
+        const commendationDetail =
+          !existing ||
+          existing.commendationDetail === existing._autoCommendationDetail
+            ? autoCommendationDetail
+            : existing.commendationDetail;
+        const suggestionsDetail =
+          !existing ||
+          existing.suggestionsDetail === existing._autoSuggestionsDetail
+            ? autoSuggestionsDetail
+            : existing.suggestionsDetail;
 
         next[officeKey] = {
-          commendationDetail: existing?.commendationDetail || "",
-          suggestionsDetail: existing?.suggestionsDetail || "",
+          commendationDetail,
+          suggestionsDetail,
           rootCause: existing?.rootCause || "",
           actionPlan: existing?.actionPlan || "",
           targetImplementation: existing?.targetImplementation || "",
           implementationStatus: existing?.implementationStatus || "",
+          _autoCommendationDetail: autoCommendationDetail,
+          _autoSuggestionsDetail: autoSuggestionsDetail,
         };
 
         if (
@@ -3169,7 +3181,11 @@ const Analytics = ({ setActiveTab }) => {
           existing.targetImplementation !==
             next[officeKey].targetImplementation ||
           existing.implementationStatus !==
-            next[officeKey].implementationStatus
+            next[officeKey].implementationStatus ||
+          existing._autoCommendationDetail !==
+            next[officeKey]._autoCommendationDetail ||
+          existing._autoSuggestionsDetail !==
+            next[officeKey]._autoSuggestionsDetail
         ) {
           changed = true;
         }
@@ -4124,41 +4140,23 @@ const Analytics = ({ setActiveTab }) => {
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
                         <td>{row.office}</td>
                         <td>
-                          {renderList(row.commendations)}
-                          {toTrimmedText(row.commendationDetail) && (
-                            <ul className="mt-2 list-disc pl-4 space-y-1">
-                              {row.commendationDetail
-                                .split(/\r?\n/)
-                                .map((item) => item.trim())
-                                .filter(Boolean)
-                                .map((item, itemIndex) => (
-                                  <li
-                                    key={`commendation-detail-${row.officeKey}-${itemIndex}`}
-                                    className="break-words"
-                                  >
-                                    {item}
-                                  </li>
-                                ))}
-                            </ul>
+                          {renderList(
+                            toTrimmedText(row.commendationDetail)
+                              ? row.commendationDetail
+                                  .split(/\r?\n/)
+                                  .map((item) => item.trim())
+                                  .filter(Boolean)
+                              : row.commendations,
                           )}
                         </td>
                         <td>
-                          {renderList(row.suggestions)}
-                          {toTrimmedText(row.suggestionsDetail) && (
-                            <ul className="mt-2 list-disc pl-4 space-y-1">
-                              {row.suggestionsDetail
-                                .split(/\r?\n/)
-                                .map((item) => item.trim())
-                                .filter(Boolean)
-                                .map((item, itemIndex) => (
-                                  <li
-                                    key={`suggestion-detail-${row.officeKey}-${itemIndex}`}
-                                    className="break-words"
-                                  >
-                                    {item}
-                                  </li>
-                                ))}
-                            </ul>
+                          {renderList(
+                            toTrimmedText(row.suggestionsDetail)
+                              ? row.suggestionsDetail
+                                  .split(/\r?\n/)
+                                  .map((item) => item.trim())
+                                  .filter(Boolean)
+                              : row.suggestions,
                           )}
                         </td>
                         <td>{renderActionValue(row.rootCause)}</td>
