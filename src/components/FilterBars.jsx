@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronDown, QrCode, Search } from "lucide-react";
+import { Calendar, ChevronDown, QrCode, Search, Settings } from "lucide-react";
 
 const FilterBar = ({
   search,
@@ -13,6 +13,7 @@ const FilterBar = ({
   totalCount,
   filteredCount,
   onGenerateQRCode,
+  onManageQRCodes,
   isGeneratingQRCode = false,
 }) => {
   // Check both 'type' and 'role' fields to match Login.jsx structure
@@ -127,6 +128,15 @@ const FilterBar = ({
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition"
             >
               <QrCode size={16} /> {isGeneratingQRCode ? "Generating..." : "Quick Feedback Access"}
+            </button>
+          )}
+          {typeof onManageQRCodes === "function" && (
+            <button
+              type="button"
+              onClick={onManageQRCodes}
+              className="flex items-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+            >
+              <Settings size={16} /> Manage QR
             </button>
           )}
         </div>

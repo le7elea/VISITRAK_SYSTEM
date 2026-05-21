@@ -1,7 +1,16 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Clipboard, Download, FileText, Printer, QrCode, X } from "lucide-react";
+import { Ban, Clipboard, Download, FileText, Printer, QrCode, X } from "lucide-react";
 import useFeedbackRatings from "../hooks/useFeedbackRatings";
-import { addDoc, collection, onSnapshot, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "../lib/firebase";
 import FeedbackModal from "../components/FeedbackModal";
 import FilterBar from "../components/FilterBars";
@@ -256,6 +265,20 @@ const getQrExpiryLabel = (qr) => {
   return `Expires ${qr.expiresAt.toLocaleString()}.`;
 };
 
+const toDateValue = (value) => {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatQrDate = (value) => {
+  const date = toDateValue(value);
+  return date ? date.toLocaleString() : "Not available";
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
@@ -285,6 +308,10 @@ const Feedback = ({ user }) => {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [generatedQr, setGeneratedQr] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+  const [qrManagerOpen, setQrManagerOpen] = useState(false);
+  const [manualQrTokens, setManualQrTokens] = useState([]);
+  const [manualQrTokensLoading, setManualQrTokensLoading] = useState(false);
+  const [revokingQrId, setRevokingQrId] = useState("");
   const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
   
   // Use the custom hook to fetch feedbacks
@@ -360,6 +387,37 @@ const Feedback = ({ user }) => {
       unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (!qrManagerOpen) return undefined;
+
+    setManualQrTokensLoading(true);
+    const tokensQuery = query(
+      collection(db, "manualFeedbackTokens"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      tokensQuery,
+      (snapshot) => {
+        const tokens = snapshot.docs.map((tokenDoc) => ({
+          id: tokenDoc.id,
+          ...tokenDoc.data(),
+        }));
+        setManualQrTokens(tokens);
+        setManualQrTokensLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching manual feedback QR tokens:", error);
+        setManualQrTokens([]);
+        setManualQrTokensLoading(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [qrManagerOpen]);
  
   // Get a safe date string from createdAt
   const getSafeDateString = (createdAt) => {
@@ -664,6 +722,31 @@ const Feedback = ({ user }) => {
     } catch (err) {
       console.error("Error copying QR link:", err);
       alert("Could not copy the link. Please copy it manually.");
+    }
+  };
+
+  const revokeManualQr = async (qrToken) => {
+    if (!qrToken?.id || revokingQrId) return;
+
+    const confirmed = window.confirm(
+      "Revoke this QR code? Anyone scanning it after this will no longer be able to use it."
+    );
+    if (!confirmed) return;
+
+    setRevokingQrId(qrToken.id);
+
+    try {
+      await updateDoc(doc(db, "manualFeedbackTokens", qrToken.id), {
+        revoked: true,
+        status: "revoked",
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Error revoking manual feedback QR token:", err);
+      const errorDetail = err?.code || err?.message || "Unknown error";
+      alert(`Failed to revoke QR code: ${errorDetail}`);
+    } finally {
+      setRevokingQrId("");
     }
   };
 
@@ -1030,6 +1113,7 @@ const Feedback = ({ user }) => {
             totalCount={feedbacks.length}
             filteredCount={filteredFeedbacks.length}
             onGenerateQRCode={openManualQrSettings}
+            onManageQRCodes={() => setQrManagerOpen(true)}
             isGeneratingQRCode={isGeneratingQr}
           />
 
@@ -1311,6 +1395,96 @@ const Feedback = ({ user }) => {
                 >
                   <Printer size={16} /> Print
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {qrManagerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl dark:bg-gray-900 dark:text-gray-100">
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                    Manage Feedback QR Codes
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Revoke lifetime or temporary feedback access links.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQrManagerOpen(false)}
+                  className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                  aria-label="Close QR manager"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-y-auto px-5 py-5">
+                {manualQrTokensLoading ? (
+                  <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Loading QR codes...
+                  </p>
+                ) : manualQrTokens.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No manual feedback QR codes found.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {manualQrTokens.map((qrToken) => {
+                      const revoked = qrToken.revoked === true || qrToken.status === "revoked";
+                      const active = !revoked && qrToken.status === "active";
+
+                      return (
+                        <div
+                          key={qrToken.id}
+                          className="rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                  {qrToken.officialOfficeName || qrToken.office || "All Offices"}
+                                </p>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    active
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+                                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                                  }`}
+                                >
+                                  {revoked ? "Revoked" : qrToken.type === "lifetime" ? "Lifetime" : qrToken.status || "Active"}
+                                </span>
+                              </div>
+                              <p className="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">
+                                {qrToken.url}
+                              </p>
+                              <div className="mt-2 grid gap-1 text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-2">
+                                <span>Created: {formatQrDate(qrToken.createdAtClient || qrToken.createdAt)}</span>
+                                <span>
+                                  Uses: {qrToken.useCount || 0}
+                                  {qrToken.type === "lifetime" ? "" : ` / ${qrToken.maxUses || 1}`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => revokeManualQr(qrToken)}
+                              disabled={revoked || revokingQrId === qrToken.id}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30 dark:disabled:border-gray-700 dark:disabled:text-gray-500"
+                            >
+                              <Ban size={16} />
+                              {revokingQrId === qrToken.id ? "Revoking..." : revoked ? "Revoked" : "Revoke"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
