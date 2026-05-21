@@ -239,6 +239,23 @@ const buildQrImageUrl = (value) =>
     value
   )}`;
 
+const LIFETIME_QR_MAX_USES = 1000000000;
+const LIFETIME_QR_EXPIRES_AT = new Date("9999-12-31T23:59:59.999Z");
+
+const getQrUsageLabel = (qr) => {
+  if (qr?.type === "lifetime") return "Lifetime access";
+  if (qr?.type === "batch") return `Batch token, ${qr.maxUses} maximum uses`;
+  return "Single-use token";
+};
+
+const getQrExpiryLabel = (qr) => {
+  if (qr?.type === "lifetime" || !qr?.expiresAt) {
+    return "Never expires unless revoked by an admin.";
+  }
+
+  return `Expires ${qr.expiresAt.toLocaleString()}.`;
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
@@ -261,7 +278,7 @@ const Feedback = ({ user }) => {
   });
   const [manualQrSettingsOpen, setManualQrSettingsOpen] = useState(false);
   const [manualQrSettings, setManualQrSettings] = useState({
-    mode: "single",
+    mode: "lifetime",
     expiresInHours: 24,
     maxUses: 1,
   });
@@ -543,7 +560,7 @@ const Feedback = ({ user }) => {
 
   const openManualQrSettings = () => {
     setManualQrSettings({
-      mode: "single",
+      mode: "lifetime",
       expiresInHours: 24,
       maxUses: 1,
     });
@@ -557,15 +574,18 @@ const Feedback = ({ user }) => {
     const approvedOffice = toTrimmedText(targetOffice) || "All Offices";
     const officialOfficeName =
       getOfficialOfficeName(approvedOffice, offices) || approvedOffice;
-    const expiresInHours = Math.max(
-      1,
-      Math.min(168, Number(manualQrSettings.expiresInHours) || 24)
-    );
-    const maxUses =
-      manualQrSettings.mode === "batch"
+    const isLifetimeQr = manualQrSettings.mode === "lifetime";
+    const expiresInHours = isLifetimeQr
+      ? 0
+      : Math.max(1, Math.min(168, Number(manualQrSettings.expiresInHours) || 24));
+    const maxUses = isLifetimeQr
+      ? LIFETIME_QR_MAX_USES
+      : manualQrSettings.mode === "batch"
         ? Math.max(1, Math.min(500, Number(manualQrSettings.maxUses) || 25))
         : 1;
-    const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
+    const expiresAt = isLifetimeQr
+      ? LIFETIME_QR_EXPIRES_AT
+      : new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
     const feedbackUrl = buildManualFeedbackUrl({
       token,
       accessKey,
@@ -595,6 +615,7 @@ const Feedback = ({ user }) => {
         createdAt: serverTimestamp(),
         createdAtClient: new Date(),
         expiresAt,
+        lifetime: isLifetimeQr,
         maxUses,
         remainingUses: maxUses,
         useCount: 0,
@@ -655,10 +676,8 @@ const Feedback = ({ user }) => {
       return;
     }
 
-    const approvalUseLabel =
-      generatedQr.type === "batch"
-        ? `${generatedQr.maxUses} uses`
-        : "Single-use";
+    const approvalUseLabel = getQrUsageLabel(generatedQr);
+    const expiryLabel = getQrExpiryLabel(generatedQr);
 
     printWindow.document.write(`
       <!doctype html>
@@ -706,7 +725,7 @@ const Feedback = ({ user }) => {
             <img src="${buildQrImageUrl(generatedQr.url)}" alt="Feedback QR Code" />
             <p class="token">Token: ${escapeHtml(generatedQr.token)}</p>
             <p>${escapeHtml(approvalUseLabel)}</p>
-            <p>Expires: ${generatedQr.expiresAt.toLocaleString()}</p>
+            <p>${escapeHtml(expiryLabel)}</p>
           </div>
           <script>
             window.onload = () => {
@@ -1078,7 +1097,23 @@ const Feedback = ({ user }) => {
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">
                     Token Type
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManualQrSettings((previous) => ({
+                          ...previous,
+                          mode: "lifetime",
+                        }))
+                      }
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        manualQrSettings.mode === "lifetime"
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                          : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      Lifetime
+                    </button>
                     <button
                       type="button"
                       onClick={() =>
@@ -1116,7 +1151,14 @@ const Feedback = ({ user }) => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {manualQrSettings.mode === "lifetime" && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                    This QR opens the feedback form directly and stays active until an admin revokes it.
+                  </div>
+                )}
+
+                {manualQrSettings.mode !== "lifetime" && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Expires In
@@ -1158,7 +1200,8 @@ const Feedback = ({ user }) => {
                       className="h-[42px] w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-900 dark:text-gray-200 dark:disabled:bg-gray-800"
                     />
                   </div>
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 border-t border-gray-200 px-5 py-4 sm:flex-row sm:justify-end dark:border-gray-700">
@@ -1176,7 +1219,7 @@ const Feedback = ({ user }) => {
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed"
                 >
                   <QrCode size={16} />
-                  {isGeneratingQr ? "Generating..." : "Generate Approval QR"}
+                  {isGeneratingQr ? "Generating..." : "Generate Feedback QR"}
                 </button>
               </div>
             </div>
@@ -1226,9 +1269,7 @@ const Feedback = ({ user }) => {
                         Approval
                       </label>
                       <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
-                        {generatedQr.type === "batch"
-                          ? `Batch token, ${generatedQr.maxUses} maximum uses`
-                          : "Single-use token"}
+                        {getQrUsageLabel(generatedQr)}
                       </div>
                     </div>
 
@@ -1242,7 +1283,7 @@ const Feedback = ({ user }) => {
                     </div>
 
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Expires {generatedQr.expiresAt.toLocaleString()}. Manual submissions should be saved as anonymous paper-form entries.
+                      {getQrExpiryLabel(generatedQr)} Manual submissions should be saved as anonymous paper-form entries.
                     </p>
                   </div>
                 </div>

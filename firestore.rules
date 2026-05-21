@@ -87,10 +87,22 @@ service cloud.firestore {
         request.resource.data.source == "manual-qr" &&
         request.resource.data.status == "active" &&
         request.resource.data.revoked == false &&
-        request.resource.data.maxUses is int &&
-        request.resource.data.maxUses >= 1 &&
-        request.resource.data.maxUses <= 500 &&
-        request.resource.data.remainingUses == request.resource.data.maxUses &&
+        (
+          (
+            request.resource.data.lifetime == true &&
+            request.resource.data.expiresAt is timestamp &&
+            request.resource.data.maxUses is int &&
+            request.resource.data.maxUses == 1000000000 &&
+            request.resource.data.remainingUses == request.resource.data.maxUses
+          ) ||
+          (
+            request.resource.data.lifetime == false &&
+            request.resource.data.maxUses is int &&
+            request.resource.data.maxUses >= 1 &&
+            request.resource.data.maxUses <= 500 &&
+            request.resource.data.remainingUses == request.resource.data.maxUses
+          )
+        ) &&
         request.resource.data.useCount == 0 &&
         request.resource.data.used == false &&
         request.resource.data.manualSubmissionDefaults.manualEntry == true &&
