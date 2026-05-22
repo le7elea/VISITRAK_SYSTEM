@@ -3132,6 +3132,55 @@ const Analytics = ({ setActiveTab }) => {
     );
   }, [officeAnalyticsRows]);
 
+  const printSummaryOverallRow = useMemo(() => {
+    const rowsWithFeedback = printableOfficeAnalyticsRows.filter(
+      (row) => row.hasFeedbackData,
+    );
+
+    const averageValues = (values = []) => {
+      const numericValues = values.filter(
+        (value) =>
+          value !== null && value !== undefined && !Number.isNaN(value),
+      );
+      if (!numericValues.length) return null;
+      return (
+        numericValues.reduce((sum, value) => sum + value, 0) /
+        numericValues.length
+      );
+    };
+
+    const getPrintedRowMean = (row) => {
+      if (isCostOnlyPrintOffice(row.office)) {
+        return row.dimensionMeans[COSTS_DIMENSION_INDEX];
+      }
+
+      return averageValues(
+        row.dimensionMeans.filter(
+          (_value, dimensionIndex) =>
+            dimensionIndex !== COSTS_DIMENSION_INDEX,
+        ),
+      );
+    };
+
+    const dimensionMeans = Array.from({ length: 8 }, (_, index) => {
+      const sourceRows =
+        index === COSTS_DIMENSION_INDEX
+          ? rowsWithFeedback.filter((row) => isCostOnlyPrintOffice(row.office))
+          : rowsWithFeedback;
+
+      return averageValues(sourceRows.map((row) => row.dimensionMeans[index]));
+    });
+
+    const meanSatisfaction = averageValues(rowsWithFeedback.map(getPrintedRowMean));
+
+    return {
+      customerCount: summaryOverallRow.customerCount,
+      dimensionMeans,
+      meanSatisfaction,
+      satisfactionDescription: getSatisfactionDescription(meanSatisfaction),
+    };
+  }, [printableOfficeAnalyticsRows, summaryOverallRow.customerCount]);
+
   const csfRowsForPrint = useMemo(() => {
     return printableOfficeAnalyticsRows.filter(
       (row) => row.commendations.length > 0 || row.suggestions.length > 0,
@@ -3249,9 +3298,9 @@ const Analytics = ({ setActiveTab }) => {
         kind: "office",
         row,
       })),
-      { kind: "overall", row: summaryOverallRow },
+      { kind: "overall", row: printSummaryOverallRow },
     ];
-  }, [printableOfficeAnalyticsRows, summaryOverallRow, isSingleOffice]);
+  }, [printableOfficeAnalyticsRows, printSummaryOverallRow, isSingleOffice]);
 
   const preparedByNameForPrint =
     toTrimmedText(printSignatories.prepared) || "________________________";
@@ -4457,59 +4506,61 @@ const Analytics = ({ setActiveTab }) => {
                 <tbody>
                   {entries.map((entry, rowIndex) => {
                     if (entry.kind === "overall") {
+                      const overallRow = entry.row;
+
                       return (
                         <tr
                           key={`summary-overall-${pageKey}-${rowIndex}`}
                           className="font-bold"
                         >
                           {!isSingleOffice && <td>Overall Rating</td>}
-                          <td>{summaryOverallRow.customerCount}</td>
+                          <td>{overallRow.customerCount}</td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[0],
+                              overallRow.dimensionMeans[0],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[1],
+                              overallRow.dimensionMeans[1],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[2],
+                              overallRow.dimensionMeans[2],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[3],
+                              overallRow.dimensionMeans[3],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[4],
+                              overallRow.dimensionMeans[4],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[5],
+                              overallRow.dimensionMeans[5],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[6],
+                              overallRow.dimensionMeans[6],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.dimensionMeans[7],
+                              overallRow.dimensionMeans[7],
                             )}
                           </td>
                           <td>
                             {formatScoreCell(
-                              summaryOverallRow.meanSatisfaction,
+                              overallRow.meanSatisfaction,
                             )}
                           </td>
-                          <td>{summaryOverallRow.satisfactionDescription}</td>
+                          <td>{overallRow.satisfactionDescription}</td>
                         </tr>
                       );
                     }
