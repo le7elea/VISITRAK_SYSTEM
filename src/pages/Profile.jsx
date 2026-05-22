@@ -28,6 +28,7 @@ import {
   limit 
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
+import { getStoredUser, setStoredUser } from "../lib/sessionStorage";
 import profileImg from "../assets/bisulogo.png";
 
 const Profile = () => {
@@ -71,7 +72,7 @@ const Profile = () => {
     const loadUserData = async () => {
       setLoading(true);
       try {
-        const savedUser = localStorage.getItem("user");
+        const savedUser = getStoredUser();
         
         if (!savedUser) {
           navigate('/login');
@@ -108,7 +109,7 @@ const Profile = () => {
               id: userOffice.id
             });
             
-            // Check if email matches - if not, we'll update localStorage
+            // Check if email matches - if not, we'll update the session cache
             if (userOffice.email !== parsedUser.email) {
               console.log("🔄 SuperAdmin email changed:", {
                 old: parsedUser.email,
@@ -195,7 +196,7 @@ const Profile = () => {
           
           setUser(completeUser);
           
-          // CRITICAL: Always update localStorage with current data
+          // CRITICAL: Always update session storage with current data
           const updatedUserData = {
             ...parsedUser,
             id: userOffice.id,
@@ -213,9 +214,9 @@ const Profile = () => {
             type: type
           };
           
-          localStorage.setItem("user", JSON.stringify(updatedUserData));
+          setStoredUser(updatedUserData);
           
-          console.log("✅ User data loaded and localStorage updated:", {
+          console.log("✅ User data loaded and session storage updated:", {
             oldEmail: parsedUser.email,
             newEmail: userOffice.email,
             type: type,
@@ -274,7 +275,7 @@ const Profile = () => {
       } catch (error) {
         console.error("❌ Error loading user data:", error);
         
-        const savedUser = localStorage.getItem("user");
+        const savedUser = getStoredUser();
         if (savedUser) {
           const parsedUser = JSON.parse(savedUser);
           const fallbackUser = {
@@ -306,7 +307,7 @@ const Profile = () => {
   const refreshUserData = async () => {
     setLoading(true);
     try {
-      const savedUser = localStorage.getItem("user");
+      const savedUser = getStoredUser();
       if (!savedUser) {
         navigate('/login');
         return;
@@ -356,7 +357,7 @@ const Profile = () => {
         
         setUser(completeUser);
         
-        localStorage.setItem("user", JSON.stringify({
+        setStoredUser({
           ...parsedUser,
           id: userOffice.id,
           name: userOffice.name,
@@ -371,7 +372,7 @@ const Profile = () => {
           role: userOffice.role,
           office: userOffice.name,
           type: type
-        }));
+        });
         
         await loadActivityLogs(completeUser);
         console.log("✅ User data refreshed");
@@ -387,7 +388,7 @@ const Profile = () => {
   const refreshSuperAdmin = async () => {
     setLoading(true);
     try {
-      const savedUser = localStorage.getItem("user");
+      const savedUser = getStoredUser();
       if (!savedUser) return;
       
       const parsedUser = JSON.parse(savedUser);
@@ -416,8 +417,8 @@ const Profile = () => {
         
         setUser(completeUser);
         
-        // Update localStorage with the correct email
-        localStorage.setItem("user", JSON.stringify({
+        // Update session storage with the correct email
+        setStoredUser({
           ...parsedUser,
           id: superAdminOffice.id,
           name: superAdminOffice.name,
@@ -425,7 +426,7 @@ const Profile = () => {
           role: "super",
           office: superAdminOffice.name,
           type: "SuperAdmin"
-        }));
+        });
         
         console.log("✅ SuperAdmin refreshed with new email:", superAdminOffice.email);
         await loadActivityLogs(completeUser);

@@ -16,6 +16,7 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { getStoredUser } from "../lib/sessionStorage";
 import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
@@ -1674,10 +1675,10 @@ const formatNameList = (names = []) => {
   return `${uniqueNames.slice(0, -1).join(", ")}, and ${uniqueNames[uniqueNames.length - 1]}`;
 };
 
-// Get user from localStorage - UPDATED
+// Get user from session storage - UPDATED
 const getCurrentUser = () => {
   try {
-    const userStr = localStorage.getItem("user");
+    const userStr = getStoredUser();
     if (!userStr) return null;
     const user = JSON.parse(userStr);
 
@@ -1690,7 +1691,7 @@ const getCurrentUser = () => {
 
     return user;
   } catch (error) {
-    console.error("Error parsing user from localStorage:", error);
+    console.error("Error parsing user from session storage:", error);
     return null;
   }
 };
@@ -1889,7 +1890,7 @@ const Analytics = ({ setActiveTab }) => {
     setCurrentUser(user);
 
     if (!user) {
-      console.warn("?? No user found in localStorage");
+      console.warn("?? No user found in session storage");
     } else {
       console.log("?? Current user:", user);
       console.log(

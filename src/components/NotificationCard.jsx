@@ -12,6 +12,7 @@ import {
   Timestamp 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { getStoredUser } from "../lib/sessionStorage";
 import { Bell, CheckCheck, Sparkles, Clock, Building2, User, Search, Filter } from "lucide-react";
 
 const getNotificationStorageKeyBase = (user) =>
@@ -26,19 +27,19 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'new', 'read'
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Get current user from prop or localStorage
+  // Get current user from prop or session storage
   const [currentUser, setCurrentUser] = useState(user);
 
   useEffect(() => {
     let userToUse = user;
     
     if (!userToUse || !userToUse.email) {
-      const savedUser = localStorage.getItem("user");
+      const savedUser = getStoredUser();
       if (savedUser) {
         try {
           userToUse = JSON.parse(savedUser);
         } catch (error) {
-          console.error("Error parsing user from localStorage:", error);
+          console.error("Error parsing user from session storage:", error);
         }
       }
     }

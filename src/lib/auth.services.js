@@ -14,6 +14,11 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc, query, where, getDocs } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import {
+  clearStoredSession,
+  setStoredOfficeSession,
+  setStoredUser,
+} from "./sessionStorage";
 
 // 🔹 Register a new office user
 export const registerOfficeUser = async (officeData) => {
@@ -167,10 +172,7 @@ export const logoutUser = async () => {
     await signOut(auth);
     console.log("✅ User logged out");
     
-    // Clear local storage
-    localStorage.removeItem("officeUser");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
+    clearStoredSession();
     
     return true;
   } catch (error) {
@@ -327,8 +329,7 @@ export const initializeUserSession = async () => {
     
     if (!user) {
       // Clear any stale session data
-      localStorage.removeItem("officeUser");
-      localStorage.removeItem("authToken");
+      clearStoredSession();
       return null;
     }
     
@@ -344,18 +345,17 @@ export const initializeUserSession = async () => {
     
     const officeData = officeSnapshot.data();
     
-    // Store in localStorage for quick access
-    localStorage.setItem("officeUser", JSON.stringify({
+    // Store in sessionStorage for quick access during the current browser session.
+    setStoredOfficeSession({
       ...officeData,
       id: user.uid
-    }));
-    localStorage.setItem("authToken", "authenticated");
-    localStorage.setItem("user", JSON.stringify({
+    });
+    setStoredUser({
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
       emailVerified: user.emailVerified
-    }));
+    });
     
     return {
       uid: user.uid,
@@ -384,9 +384,7 @@ export const setupAuthPersistence = () => {
       initializeUserSession();
     } else {
       console.log("👤 User signed out");
-      localStorage.removeItem("officeUser");
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("user");
+      clearStoredSession();
     }
   });
 };

@@ -1,5 +1,6 @@
 // lib/info.services.js - COMPLETE FIXED VERSION WITH PROPER EXPIRATION
 import { auth, db } from "./firebase";
+import { getStoredUser } from "./sessionStorage";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
@@ -114,7 +115,7 @@ const createActivityLog = async (logData) => {
 };
 
 /**
- * Get current user from localStorage (for activity logs)
+ * Get current user from session storage (for activity logs)
  */
 const getCurrentUser = () => {
   try {
@@ -127,7 +128,7 @@ const getCurrentUser = () => {
       };
     }
     
-    const savedUser = localStorage.getItem("user");
+    const savedUser = getStoredUser();
     if (savedUser) {
       const user = JSON.parse(savedUser);
       return {

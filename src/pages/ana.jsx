@@ -13,6 +13,7 @@ Frown,
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getStoredUser } from '../lib/sessionStorage';
 import bisuLogo from '../assets/bisulogo.png';
 import bagongPilipinasLogo from '../assets/bagong_pilipinas_logo.png';
 import tuvISOLogo from '../assets/tuvISO_logo.png';
@@ -442,10 +443,10 @@ if (uniqueNames.length === 2) return `${uniqueNames[0]} and ${uniqueNames[1]}`;
 return `${uniqueNames.slice(0, -1).join(', ')}, and ${uniqueNames[uniqueNames.length - 1]}`;
 };
 
-// Get user from localStorage - UPDATED
+// Get user from session storage - UPDATED
 const getCurrentUser = () => {
 try {
-const userStr = localStorage.getItem("user");
+const userStr = getStoredUser();
 if (!userStr) return null;
 const user = JSON.parse(userStr);
 
@@ -458,7 +459,7 @@ user.normalizedOffice = user.office.toLowerCase();
 
 return user;
 } catch (error) {
-console.error("Error parsing user from localStorage:", error);
+console.error("Error parsing user from session storage:", error);
 return null;
 }
 };
@@ -634,7 +635,7 @@ const user = getCurrentUser();
 setCurrentUser(user);
 
 if (!user) {
-console.warn("?? No user found in localStorage");
+console.warn("?? No user found in session storage");
 } else {
 console.log("?? Current user:", user);
 console.log("?? User office - Original:", user.originalOffice, "Normalized:", user.office);

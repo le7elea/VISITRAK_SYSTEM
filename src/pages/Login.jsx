@@ -7,7 +7,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { auth, db } from "../lib/firebase";
+import { auth, authPersistenceReady, db } from "../lib/firebase";
+import { clearStoredSession, getStoredUser, setStoredUser } from "../lib/sessionStorage";
 import {
   buildSessionUser,
   getOfficeProfileForAuthUser,
@@ -53,7 +54,7 @@ const Login = ({ onLogin }) => {
     }
 
     // Backward compatibility for previous user storage.
-    const savedUser = localStorage.getItem("user");
+    const savedUser = getStoredUser();
     if (!savedUser) return;
 
     try {
@@ -67,7 +68,7 @@ const Login = ({ onLogin }) => {
       }
     } catch (error) {
       console.error("Error parsing saved user:", error);
-      localStorage.removeItem("user");
+      clearStoredSession();
     }
   }, []);
 
@@ -107,6 +108,7 @@ const Login = ({ onLogin }) => {
     try {
       const normalizedIdentifier = identifier.trim().toLowerCase();
       const isEmailLogin = normalizedIdentifier.includes("@");
+      await authPersistenceReady;
 
       let authResult = null;
       if (isEmailLogin) {
@@ -179,7 +181,7 @@ const Login = ({ onLogin }) => {
         localStorage.removeItem("rememberedEmail");
       }
 
-      localStorage.setItem("user", JSON.stringify(userData));
+      setStoredUser(userData);
 
       if (onLogin) {
         onLogin(userData);

@@ -13,7 +13,8 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
-import { auth } from "./lib/firebase";
+import { auth, authPersistenceReady } from "./lib/firebase";
+import { clearStoredSession, setStoredUser } from "./lib/sessionStorage";
 import {
   buildSessionUser,
   getOfficeProfileForAuthUser,
@@ -96,43 +97,53 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (authUser) => {
-      try {
-        if (!authUser) {
-          setUser(null);
-          localStorage.removeItem("user");
-          setIsLoading(false);
-          return;
-        }
+    let unsub = () => {};
+    let disposed = false;
 
-        const officeProfile = await getOfficeProfileForAuthUser(authUser);
-        if (!officeProfile) {
-          // Signed-in user without profile should not access dashboard.
-          await signOut(auth);
-          setUser(null);
-          localStorage.removeItem("user");
-          setIsLoading(false);
-          return;
-        }
+    authPersistenceReady.finally(() => {
+      if (disposed) return;
 
-        const userData = buildSessionUser(authUser, officeProfile);
-        setUser(userData);
-        localStorage.setItem("user", JSON.stringify(userData));
-      } catch (error) {
-        console.error("Session restore error:", error);
-        setUser(null);
-        localStorage.removeItem("user");
-      } finally {
-        setIsLoading(false);
-      }
+      unsub = onAuthStateChanged(auth, async (authUser) => {
+        try {
+          if (!authUser) {
+            setUser(null);
+            clearStoredSession();
+            setIsLoading(false);
+            return;
+          }
+
+          const officeProfile = await getOfficeProfileForAuthUser(authUser);
+          if (!officeProfile) {
+            // Signed-in user without profile should not access dashboard.
+            await signOut(auth);
+            setUser(null);
+            clearStoredSession();
+            setIsLoading(false);
+            return;
+          }
+
+          const userData = buildSessionUser(authUser, officeProfile);
+          setUser(userData);
+          setStoredUser(userData);
+        } catch (error) {
+          console.error("Session restore error:", error);
+          setUser(null);
+          clearStoredSession();
+        } finally {
+          setIsLoading(false);
+        }
+      });
     });
 
-    return () => unsub();
+    return () => {
+      disposed = true;
+      unsub();
+    };
   }, []);
 
   const handleLogin = (userData) => {
     setUser(userData);
-    localStorage.setItem("user", JSON.stringify(userData));
+    setStoredUser(userData);
   };
 
   const handleLogout = async () => {
@@ -142,7 +153,7 @@ function App() {
       console.error("Logout error:", error);
     } finally {
       setUser(null);
-      localStorage.removeItem("user");
+      clearStoredSession();
     }
   };
 

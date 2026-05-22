@@ -8,6 +8,7 @@ import {
   Timestamp 
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { getStoredUser } from "../lib/sessionStorage";
 import profileImg from "../assets/bisulogo.png";
 import { Sun, Moon, Bell, User, X, ChevronRight } from "lucide-react";
 import VisitorInfoModal from "./VisitorInfoModal"; // Import the modal
@@ -36,19 +37,19 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVisitor, setSelectedVisitor] = useState(null);
 
-  // Get user from prop or localStorage as fallback
+  // Get user from prop or session storage as fallback
   const [currentUser, setCurrentUser] = useState(user);
 
   useEffect(() => {
     let userToUse = user;
     
     if (!userToUse || !userToUse.office) {
-      const savedUser = localStorage.getItem("user");
+      const savedUser = getStoredUser();
       if (savedUser) {
         try {
           userToUse = JSON.parse(savedUser);
         } catch (error) {
-          console.error("❌ Error parsing user from localStorage:", error);
+          console.error("❌ Error parsing user from session storage:", error);
         }
       }
     }
