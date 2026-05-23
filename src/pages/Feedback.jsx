@@ -319,7 +319,15 @@ const Feedback = ({ user }) => {
   const [manualQrTokens, setManualQrTokens] = useState([]);
   const [manualQrTokensLoading, setManualQrTokensLoading] = useState(false);
   const [revokingQrId, setRevokingQrId] = useState("");
-  const isOfficeAdmin = user?.type === "OfficeAdmin" || user?.role === "OfficeAdmin";
+  const normalizedUserType = toTrimmedText(user?.type).toLowerCase();
+  const normalizedUserRole = toTrimmedText(user?.role).toLowerCase();
+  const isSuperAdmin =
+    normalizedUserType === "superadmin" || normalizedUserRole === "super";
+  const isOfficeAdmin =
+    !isSuperAdmin &&
+    (normalizedUserType === "officeadmin" ||
+      normalizedUserRole === "officeadmin" ||
+      normalizedUserRole === "office");
   
   // Use the custom hook to fetch feedbacks
   const { feedbacks, loading, error } = useFeedbackRatings();
@@ -623,6 +631,11 @@ const Feedback = ({ user }) => {
   }, [offices, feedbacks, isOfficeAdmin, user?.office]);
 
   const openManualQrSettings = () => {
+    if (!isSuperAdmin) {
+      alert("Only the Super Admin can generate manual feedback QR codes.");
+      return;
+    }
+
     setManualQrSettings({
       mode: "lifetime",
       expiresInHours: 24,
@@ -632,6 +645,11 @@ const Feedback = ({ user }) => {
   };
 
   const handleGenerateQRCode = async () => {
+    if (!isSuperAdmin) {
+      alert("Only the Super Admin can generate manual feedback QR codes.");
+      return;
+    }
+
     const token = generateFeedbackToken();
     const accessKey = generateFeedbackToken();
     const targetOffice = isOfficeAdmin ? user?.office : office;
@@ -1285,8 +1303,8 @@ const Feedback = ({ user }) => {
             user={user}
             totalCount={feedbacks.length}
             filteredCount={filteredFeedbacks.length}
-            onGenerateQRCode={openManualQrSettings}
-            onManageQRCodes={() => setQrManagerOpen(true)}
+            onGenerateQRCode={isSuperAdmin ? openManualQrSettings : undefined}
+            onManageQRCodes={isSuperAdmin ? () => setQrManagerOpen(true) : undefined}
             isGeneratingQRCode={isGeneratingQr}
           />
 

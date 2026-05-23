@@ -82,8 +82,8 @@ service cloud.firestore {
     // Admin-generated approval tokens for anonymous manual feedback encoding.
     match /manualFeedbackTokens/{tokenId} {
       allow get: if true;
-      allow list: if signedIn();
-      allow create: if signedIn() &&
+      allow list: if isSuper();
+      allow create: if isSuper() &&
         request.resource.data.mode == "manual" &&
         request.resource.data.source == "manual-qr" &&
         request.resource.data.status == "active" &&
@@ -113,7 +113,7 @@ service cloud.firestore {
         request.resource.data.manualSubmissionDefaults.name == "Anonymous";
       allow update: if
         (
-          signedIn() &&
+          isSuper() &&
           request.resource.data.diff(resource.data).changedKeys().hasOnly([
             "revoked",
             "status",
@@ -148,11 +148,7 @@ service cloud.firestore {
             request.resource.data.status == "used"
           )
         );
-      allow delete: if isSuper() || (
-        signedIn() &&
-        resource.data.revoked == true &&
-        resource.data.status == "revoked"
-      );
+      allow delete: if isSuper();
     }
 
     // Append-only audit logs.
