@@ -1661,6 +1661,17 @@ const toOfficialOfficeDisplayName = (officeName, officeRecords = []) => {
   );
 };
 
+const toOfficialOfficePrintName = (officeName, officeRecords = []) => {
+  const normalized = normalizeOfficeName(officeName);
+  if (!normalized) return "";
+
+  const matchedOffice = findOfficeRecordByName(normalized, officeRecords);
+  const officialName = normalizeOfficeName(matchedOffice?.officialName);
+  if (officialName) return officialName;
+
+  return formatPrintOfficeName(normalizeOfficeName(matchedOffice?.name) || normalized);
+};
+
 // Add a comparison function that's more flexible
 const compareOfficeNames = (office1, office2) => {
   if (!office1 || !office2) return false;
@@ -2751,29 +2762,27 @@ const Analytics = ({ setActiveTab }) => {
 
     if (!currentUser) return formatPrintOfficeName(fallbackOfficeName);
     if (currentUser.type === "SuperAdmin") {
-      return formatPrintOfficeName(toOfficialOfficeDisplayName(
+      return toOfficialOfficePrintName(
         currentOfficeRecord?.officialName ||
           currentOfficeRecord?.name ||
           currentUser.originalOffice ||
           currentUser.office ||
           fallbackOfficeName,
         offices,
-      ));
+      );
     }
 
     if (selectedOfficeFilter !== "all")
-      return formatPrintOfficeName(
-        toOfficialOfficeDisplayName(selectedOfficeFilter, offices),
-      );
+      return toOfficialOfficePrintName(selectedOfficeFilter, offices);
 
-    return formatPrintOfficeName(toOfficialOfficeDisplayName(
+    return toOfficialOfficePrintName(
       currentOfficeRecord?.officialName ||
         currentOfficeRecord?.name ||
         currentUser.originalOffice ||
         currentUser.office ||
         fallbackOfficeName,
       offices,
-    ));
+    );
   }, [currentUser, currentOfficeRecord, selectedOfficeFilter, offices]);
 
   const reportDateRangeLabel = useMemo(() => {
@@ -3059,13 +3068,13 @@ const Analytics = ({ setActiveTab }) => {
 
     const matchedOffice = findOfficeRecordByName(sourceOfficeName, offices);
 
-    return formatPrintOfficeName(
-      normalizeOfficeName(matchedOffice?.name) ||
-        normalizeOfficeName(sourceOfficeName) ||
-        normalizeOfficeName(currentOfficeRecord?.name) ||
-        normalizeOfficeName(currentUser?.originalOffice) ||
-        normalizeOfficeName(currentUser?.office) ||
-        "N/A",
+    return (
+      normalizeOfficeName(matchedOffice?.officialName) ||
+      toOfficialOfficePrintName(sourceOfficeName, offices) ||
+      toOfficialOfficePrintName(currentOfficeRecord?.name, offices) ||
+      toOfficialOfficePrintName(currentUser?.originalOffice, offices) ||
+      toOfficialOfficePrintName(currentUser?.office, offices) ||
+      "N/A"
     );
   }, [
     selectedOfficeFilter,
@@ -4203,7 +4212,7 @@ const Analytics = ({ setActiveTab }) => {
                   <tbody>
                     {rows.map((row, rowIndex) => (
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{formatPrintOfficeName(row.office)}</td>
+                        <td>{toOfficialOfficePrintName(row.office, offices)}</td>
                         <td>
                           {renderList(
                             toTrimmedText(row.commendationDetail)
@@ -4373,7 +4382,7 @@ const Analytics = ({ setActiveTab }) => {
                         key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
                         {!isSingleOffice && (
-                          <td>{formatPrintOfficeName(row.office)}</td>
+                          <td>{toOfficialOfficePrintName(row.office, offices)}</td>
                         )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
@@ -4625,7 +4634,7 @@ const Analytics = ({ setActiveTab }) => {
                         key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
                         {!isSingleOffice && (
-                          <td>{formatPrintOfficeName(row.office)}</td>
+                          <td>{toOfficialOfficePrintName(row.office, offices)}</td>
                         )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
