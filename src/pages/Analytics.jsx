@@ -1602,6 +1602,19 @@ const normalizeOfficeName = (officeName) => {
   return normalized;
 };
 
+const formatPrintOfficeName = (officeName) => {
+  const normalized = normalizeOfficeName(officeName);
+  if (!normalized) return "";
+  const uppercaseWords = new Set(["ctas", "ccis", "sds"]);
+
+  return normalized.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, (word) => {
+    const lowerWord = word.toLowerCase();
+    if (lowerWord === "and") return "and";
+    if (uppercaseWords.has(lowerWord)) return word.toUpperCase();
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+};
+
 const toComparableOfficeKey = (officeName) =>
   normalizeOfficeName(officeName)
     .toLowerCase()
@@ -2736,29 +2749,31 @@ const Analytics = ({ setActiveTab }) => {
     const fallbackOfficeName =
       "Office of the College of Computing and Information Sciences";
 
-    if (!currentUser) return fallbackOfficeName;
+    if (!currentUser) return formatPrintOfficeName(fallbackOfficeName);
     if (currentUser.type === "SuperAdmin") {
-      return toOfficialOfficeDisplayName(
+      return formatPrintOfficeName(toOfficialOfficeDisplayName(
         currentOfficeRecord?.officialName ||
           currentOfficeRecord?.name ||
           currentUser.originalOffice ||
           currentUser.office ||
           fallbackOfficeName,
         offices,
-      );
+      ));
     }
 
     if (selectedOfficeFilter !== "all")
-      return toOfficialOfficeDisplayName(selectedOfficeFilter, offices);
+      return formatPrintOfficeName(
+        toOfficialOfficeDisplayName(selectedOfficeFilter, offices),
+      );
 
-    return toOfficialOfficeDisplayName(
+    return formatPrintOfficeName(toOfficialOfficeDisplayName(
       currentOfficeRecord?.officialName ||
         currentOfficeRecord?.name ||
         currentUser.originalOffice ||
         currentUser.office ||
         fallbackOfficeName,
       offices,
-    );
+    ));
   }, [currentUser, currentOfficeRecord, selectedOfficeFilter, offices]);
 
   const reportDateRangeLabel = useMemo(() => {
@@ -3044,13 +3059,13 @@ const Analytics = ({ setActiveTab }) => {
 
     const matchedOffice = findOfficeRecordByName(sourceOfficeName, offices);
 
-    return (
+    return formatPrintOfficeName(
       normalizeOfficeName(matchedOffice?.name) ||
-      normalizeOfficeName(sourceOfficeName) ||
-      normalizeOfficeName(currentOfficeRecord?.name) ||
-      normalizeOfficeName(currentUser?.originalOffice) ||
-      normalizeOfficeName(currentUser?.office) ||
-      "N/A"
+        normalizeOfficeName(sourceOfficeName) ||
+        normalizeOfficeName(currentOfficeRecord?.name) ||
+        normalizeOfficeName(currentUser?.originalOffice) ||
+        normalizeOfficeName(currentUser?.office) ||
+        "N/A",
     );
   }, [
     selectedOfficeFilter,
@@ -4188,7 +4203,7 @@ const Analytics = ({ setActiveTab }) => {
                   <tbody>
                     {rows.map((row, rowIndex) => (
                       <tr key={`csf-row-${pageKey}-${row.office}-${rowIndex}`}>
-                        <td>{row.office}</td>
+                        <td>{formatPrintOfficeName(row.office)}</td>
                         <td>
                           {renderList(
                             toTrimmedText(row.commendationDetail)
@@ -4357,7 +4372,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`charter-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{formatPrintOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
@@ -4607,7 +4624,9 @@ const Analytics = ({ setActiveTab }) => {
                       <tr
                         key={`summary-row-${pageKey}-${row.office}-${rowIndex}`}
                       >
-                        {!isSingleOffice && <td>{row.office}</td>}
+                        {!isSingleOffice && (
+                          <td>{formatPrintOfficeName(row.office)}</td>
+                        )}
                         <td>
                           {formatCountCell(row.customerCount, row.hasFeedbackData)}
                         </td>
