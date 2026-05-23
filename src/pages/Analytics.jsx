@@ -790,7 +790,7 @@ const applySummaryTwoWorksheetFormatting = (worksheet) => {
 const getSummaryTwoCountCell = (value, hasData) => (hasData ? value || 0 : "-");
 
 const getSummaryTwoOfficeRowValues = (row) => [
-  row.office,
+  row.excelOfficeName || row.office,
   getSummaryTwoCountCell(row.customerCount, row.hasFeedbackData),
   getSummaryTwoCountCell(row.maleCount, row.hasFeedbackData),
   getSummaryTwoCountCell(row.femaleCount, row.hasFeedbackData),
@@ -1151,6 +1151,7 @@ const addRawDataWorksheet = ({
   workbook,
   usedSheetNames,
   officeName,
+  officeDisplayName = officeName,
   records,
   reportMonthDate,
 }) => {
@@ -1167,7 +1168,7 @@ const addRawDataWorksheet = ({
     );
 
     worksheet.addRow([
-      officeName,
+      officeDisplayName,
       getExcelMonthValue(record, reportMonthDate),
       getExcelYearValue(record, reportMonthDate),
       index + 1,
@@ -1246,7 +1247,7 @@ const addSummaryOneWorksheet = ({
 
   officeAnalyticsRows.forEach((row) => {
     worksheet.addRow([
-      row.office,
+      row.excelOfficeName || row.office,
       row.customerCount || 0,
       ...row.dimensionMeans.map((value) =>
         value === null || value === undefined ? " -" : value,
@@ -1412,6 +1413,7 @@ const buildAnalyticsExcelWorkbook = ({
   summaryOverallRow,
   charterOverallTotals,
   reportMonthDate,
+  offices = [],
 }) => {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "VisiTrak System";
@@ -1420,8 +1422,12 @@ const buildAnalyticsExcelWorkbook = ({
 
   const usedSheetNames = new Set();
   const sheetMap = new Map();
+  const officeRowsForExcel = officeAnalyticsRows.map((row) => ({
+    ...row,
+    excelOfficeName: toOfficialOfficePrintName(row.office, offices),
+  }));
 
-  officeAnalyticsRows.forEach((officeRow) => {
+  officeRowsForExcel.forEach((officeRow) => {
     if (isAllOfficesExcelSheet(officeRow.office)) return;
 
     const records = getOfficeRawRowsForExcel(
@@ -1432,6 +1438,7 @@ const buildAnalyticsExcelWorkbook = ({
       workbook,
       usedSheetNames,
       officeName: officeRow.office,
+      officeDisplayName: officeRow.excelOfficeName,
       records,
       reportMonthDate,
     });
@@ -1450,13 +1457,13 @@ const buildAnalyticsExcelWorkbook = ({
 
   addSummaryOneWorksheet({
     workbook,
-    officeAnalyticsRows,
+    officeAnalyticsRows: officeRowsForExcel,
     sheetMap,
     summaryOverallRow,
   });
   addSummaryTwoWorksheet({
     workbook,
-    officeAnalyticsRows,
+    officeAnalyticsRows: officeRowsForExcel,
     charterOverallTotals,
   });
 
@@ -3358,6 +3365,7 @@ const Analytics = ({ setActiveTab }) => {
         summaryOverallRow,
         charterOverallTotals,
         reportMonthDate: excelReportMonthDate,
+        offices,
       });
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
