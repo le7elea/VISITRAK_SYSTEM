@@ -1,7 +1,47 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronDown, Download, Search } from "lucide-react";
 
-const formatDisplayDate = (value) => {
+const getMonthValueFromDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) return "";
+
+  const [startYear, startMonth, startDay] = startDate.split("-");
+  const [endYear, endMonth, endDay] = endDate.split("-");
+  if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
+    return "";
+  }
+
+  const lastDayOfMonth = new Date(
+    Number(startYear),
+    Number(startMonth),
+    0,
+  ).getDate();
+
+  if (
+    startYear === endYear &&
+    startMonth === endMonth &&
+    startDay === "01" &&
+    Number(endDay) === lastDayOfMonth
+  ) {
+    return `${startYear}-${startMonth}`;
+  }
+
+  return "";
+};
+
+const getDateRangeFromMonth = (monthValue) => {
+  if (!monthValue) return { startDate: "", endDate: "" };
+
+  const [year, month] = monthValue.split("-").map(Number);
+  if (!year || !month) return { startDate: "", endDate: "" };
+
+  const lastDayOfMonth = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${monthValue}-01`,
+    endDate: `${monthValue}-${String(lastDayOfMonth).padStart(2, "0")}`,
+  };
+};
+
+const formatCompactDateDisplay = (value) => {
   if (!value) return "";
 
   const parsed = new Date(value);
@@ -9,7 +49,18 @@ const formatDisplayDate = (value) => {
 
   return parsed.toLocaleDateString("en-US", {
     month: "short",
-    day: "numeric",
+    day: "2-digit",
+  });
+};
+
+const formatMonthDisplay = (monthValue) => {
+  if (!monthValue) return "";
+
+  const [year, month] = monthValue.split("-").map(Number);
+  if (!year || !month) return monthValue;
+
+  return new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+    month: "short",
     year: "numeric",
   });
 };
@@ -28,13 +79,30 @@ const FilterBar = ({
   uniqueOffices = [],
 }) => {
   const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
-  const [draftStartDate, setDraftStartDate] = useState(startDateFilter || "");
-  const [draftEndDate, setDraftEndDate] = useState(endDateFilter || "");
+  const [dateRangeMode, setDateRangeMode] = useState(() =>
+    getMonthValueFromDateRange(startDateFilter, endDateFilter) ? "month" : "day"
+  );
+  const [pendingDayRange, setPendingDayRange] = useState({
+    start: startDateFilter || "",
+    end: endDateFilter || "",
+  });
+  const [monthRange, setMonthRange] = useState(() =>
+    getMonthValueFromDateRange(startDateFilter, endDateFilter)
+  );
   const dateMenuRef = useRef(null);
 
   useEffect(() => {
-    setDraftStartDate(startDateFilter || "");
-    setDraftEndDate(endDateFilter || "");
+    const currentMonth = getMonthValueFromDateRange(
+      startDateFilter,
+      endDateFilter
+    );
+
+    setPendingDayRange({
+      start: startDateFilter || "",
+      end: endDateFilter || "",
+    });
+    setMonthRange(currentMonth || (startDateFilter || "").slice(0, 7));
+    setDateRangeMode(currentMonth ? "month" : "day");
   }, [startDateFilter, endDateFilter]);
 
   useEffect(() => {
@@ -56,19 +124,79 @@ const FilterBar = ({
   }, [isDateMenuOpen]);
 
   const dateRangeLabel = useMemo(() => {
-    const startLabel = formatDisplayDate(startDateFilter);
-    const endLabel = formatDisplayDate(endDateFilter);
+    if (dateRangeMode === "month") {
+      const monthValue =
+        getMonthValueFromDateRange(startDateFilter, endDateFilter) ||
+        monthRange;
+      return monthValue ? `Month: ${formatMonthDisplay(monthValue)}` : "Select month";
+    }
 
-    if (startLabel && endLabel) return `${startLabel} - ${endLabel}`;
+    const startLabel = formatCompactDateDisplay(startDateFilter);
+    const endLabel = formatCompactDateDisplay(endDateFilter);
+
+    if (startLabel && endLabel) return `Day: ${startLabel} - ${endLabel}`;
     if (startLabel) return `${startLabel} - End Date`;
     if (endLabel) return `Start Date - ${endLabel}`;
 
     return "Select date range";
-  }, [startDateFilter, endDateFilter]);
+  }, [dateRangeMode, endDateFilter, monthRange, startDateFilter]);
 
-  const handleApplyDateRange = () => {
-    setStartDateFilter(draftStartDate);
-    setEndDateFilter(draftEndDate);
+  const handleDateRangeModeChange = (nextMode) => {
+    setDateRangeMode(nextMode);
+
+    if (nextMode === "month") {
+      const monthValue =
+        getMonthValueFromDateRange(startDateFilter, endDateFilter) ||
+        (startDateFilter || "").slice(0, 7) ||
+        monthRange;
+      setMonthRange(monthValue);
+      return;
+    }
+
+    setPendingDayRange({
+      start: startDateFilter || "",
+      end: endDateFilter || "",
+    });
+  };
+
+  const handleMonthRangeChange = (value) => {
+    if (!value) return;
+    setMonthRange(value);
+  };
+
+  const handleDayRangeChange = (field, value) => {
+    if (!value) return;
+    setPendingDayRange((previous) => {
+      const next = {
+        ...previous,
+        [field]: value,
+      };
+
+      if (next.start && next.end && next.start > next.end) {
+        if (field === "start") {
+          next.end = value;
+        } else {
+          next.start = value;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const applyDayRangeSelection = () => {
+    if (!pendingDayRange.start || !pendingDayRange.end) return;
+    setStartDateFilter(pendingDayRange.start);
+    setEndDateFilter(pendingDayRange.end);
+    setIsDateMenuOpen(false);
+  };
+
+  const applyMonthRangeSelection = () => {
+    if (!monthRange) return;
+    const { startDate, endDate } = getDateRangeFromMonth(monthRange);
+    if (!startDate || !endDate) return;
+    setStartDateFilter(startDate);
+    setEndDateFilter(endDate);
     setIsDateMenuOpen(false);
   };
 
@@ -133,37 +261,81 @@ const FilterBar = ({
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium mb-1.5 text-gray-600 dark:text-gray-300">
-                    Start Date
+                    Range Type
                   </label>
-                  <input
-                    type="date"
-                    value={draftStartDate}
-                    max={draftEndDate || undefined}
-                    onChange={(e) => setDraftStartDate(e.target.value)}
+                  <select
+                    value={dateRangeMode}
+                    onChange={(e) => handleDateRangeModeChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 outline-none"
-                  />
+                  >
+                    <option value="month">Month</option>
+                    <option value="day">Day</option>
+                  </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium mb-1.5 text-gray-600 dark:text-gray-300">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    value={draftEndDate}
-                    min={draftStartDate || undefined}
-                    onChange={(e) => setDraftEndDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 outline-none"
-                  />
-                </div>
+                {dateRangeMode === "month" ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-gray-600 dark:text-gray-300">
+                        Month
+                      </label>
+                      <input
+                        type="month"
+                        value={monthRange}
+                        onChange={(e) => handleMonthRangeChange(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 outline-none"
+                      />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleApplyDateRange}
-                  className="w-full rounded-md bg-[#6E47C4] hover:bg-[#5f3cb0] text-white py-2 text-sm font-medium"
-                >
-                  Apply
-                </button>
+                    <button
+                      type="button"
+                      onClick={applyMonthRangeSelection}
+                      className="w-full rounded-md bg-[#6E47C4] hover:bg-[#5f3cb0] text-white py-2 text-sm font-medium"
+                    >
+                      Apply
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-gray-600 dark:text-gray-300">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={pendingDayRange.start}
+                        max={pendingDayRange.end || undefined}
+                        onChange={(e) =>
+                          handleDayRangeChange("start", e.target.value)
+                        }
+                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-gray-600 dark:text-gray-300">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        value={pendingDayRange.end}
+                        min={pendingDayRange.start || undefined}
+                        onChange={(e) =>
+                          handleDayRangeChange("end", e.target.value)
+                        }
+                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={applyDayRangeSelection}
+                      className="w-full rounded-md bg-[#6E47C4] hover:bg-[#5f3cb0] text-white py-2 text-sm font-medium"
+                    >
+                      Apply
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}

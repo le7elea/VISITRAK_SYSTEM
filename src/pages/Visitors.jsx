@@ -87,6 +87,19 @@ const getVisitorContactLines = (visitor) => {
   );
 };
 
+const getDefaultMonthDateRange = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const monthValue = `${year}-${String(month).padStart(2, "0")}`;
+  const lastDay = new Date(year, month, 0).getDate();
+
+  return {
+    start: `${monthValue}-01`,
+    end: `${monthValue}-${String(lastDay).padStart(2, "0")}`,
+  };
+};
+
 const DEFAULT_PRINT_DOCUMENT_CODE = "F-AQA-CSF-002";
 const DEFAULT_PRINT_REVISION_NUMBER = "Rev. 3";
 const PRINT_PAGE_WIDTH_IN = 13;
@@ -101,10 +114,13 @@ const PRINT_BODY_ROW_HEIGHT_IN = 0.31;
 const PRINT_CONTACT_FONT_SIZE_PX = 11;
 
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
+  const defaultMonthDateRange = useMemo(() => getDefaultMonthDateRange(), []);
   const [search, setSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState("All Offices");
-  const [startDateFilter, setStartDateFilter] = useState("");
-  const [endDateFilter, setEndDateFilter] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState(
+    defaultMonthDateRange.start
+  );
+  const [endDateFilter, setEndDateFilter] = useState(defaultMonthDateRange.end);
   const [visits, setVisits] = useState([]);
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);

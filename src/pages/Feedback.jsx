@@ -243,7 +243,7 @@ const getUserIdentifier = (user) =>
   user?.email || user?.username || user?.name || user?.uid || "Unknown user";
 
 const buildQrImageUrl = (value) =>
-  `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(
+  `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=${encodeURIComponent(
     value
   )}`;
 
@@ -768,8 +768,7 @@ const Feedback = ({ user }) => {
       return;
     }
 
-    const approvalUseLabel = getQrUsageLabel(generatedQr);
-    const expiryLabel = getQrExpiryLabel(generatedQr);
+    const qrOfficeName = generatedQr.officialOfficeName || generatedQr.office;
 
     printWindow.document.write(`
       <!doctype html>
@@ -777,47 +776,212 @@ const Feedback = ({ user }) => {
         <head>
           <title>Manual Feedback QR Code</title>
           <style>
+            @page {
+              size: letter portrait;
+              margin: 0.45in;
+            }
+            * {
+              box-sizing: border-box;
+            }
             body {
               font-family: Arial, sans-serif;
               margin: 0;
-              padding: 32px;
+              padding: 0;
               color: #111827;
-              text-align: center;
+              background: #ffffff;
+            }
+            .page {
+              min-height: calc(11in - 0.9in);
+              display: flex;
+              align-items: flex-start;
+              justify-content: center;
             }
             .qr-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 24px;
+              width: 100%;
+              max-width: 720px;
+              border: 0;
+              border-radius: 0;
+              overflow: hidden;
+              background: #ffffff;
+            }
+            .header {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 20px;
+              padding: 18px 28px 14px;
+              border-bottom: 0;
+              text-align: left;
+              background: #ffffff;
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 14px;
+              min-width: 0;
+            }
+            .bisu-logo {
+              width: 64px;
+              height: 64px;
+              object-fit: contain;
+              flex: 0 0 auto;
+            }
+            .header-logos {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              flex: 0 0 auto;
+            }
+            .bagong-logo {
+              width: 96px;
+              height: 64px;
+              object-fit: contain;
+            }
+            .iso-logo {
+              width: 128px;
+              height: 64px;
+              object-fit: contain;
+            }
+            .header-text {
+              line-height: 1.12;
+              min-width: 0;
+            }
+            .header-text p {
+              margin: 0;
+              color: #111827;
+            }
+            .school {
+              margin: 0;
+              font-size: 16px;
+              font-weight: 700;
+              letter-spacing: 0.03em;
+            }
+            .republic {
+              font-size: 14.67px;
+            }
+            .address,
+            .header-office,
+            .tagline {
+              font-size: 13.33px;
+            }
+            .tagline {
+              font-family: "Times New Roman", Times, serif;
+              font-style: italic;
+            }
+            .content {
+              padding: 22px 28px 26px;
+              text-align: center;
             }
             h1 {
-              font-size: 20px;
-              margin: 0 0 8px;
+              font-size: 24px;
+              margin: 0;
+              letter-spacing: 0.02em;
+              text-transform: uppercase;
+              color: #000000;
+            }
+            .subtitle {
+              margin: 8px auto 0;
+              max-width: 390px;
+              font-size: 13px;
+              line-height: 1.45;
+              color: #000000;
+            }
+            .office {
+              margin: 14px auto 0;
+              padding: 8px 12px;
+              border: 0;
+              border-radius: 999px;
+              display: inline-block;
+              font-size: 13px;
+              font-weight: 700;
+              color: #000000;
+              background: #ffffff;
+              max-width: 100%;
             }
             p {
               margin: 6px 0;
               font-size: 13px;
-              color: #374151;
+              color: #000000;
             }
-            img {
-              width: 280px;
-              height: 280px;
-              margin: 18px auto;
+            .qr-frame {
+              width: 410px;
+              height: 410px;
+              margin: 22px auto 14px;
+              padding: 16px;
+              border: 4px solid #6b46c1;
+              border-radius: 18px;
+              background: #ffffff;
+              position: relative;
+            }
+            .qr-frame::before,
+            .qr-frame::after {
+              content: "";
+              position: absolute;
+              inset: 8px;
+              border: 1px solid #c4b5fd;
+              border-radius: 12px;
+              pointer-events: none;
+            }
+            .qr-frame img {
+              width: 372px;
+              height: 372px;
               display: block;
+              margin: 0 auto;
             }
-            .token {
-              font-family: Consolas, monospace;
-              word-break: break-all;
+            .scan-line {
+              margin: 0;
+              font-size: 16px;
+              font-weight: 700;
+              color: #000000;
+            }
+            .footer-note {
+              margin-top: 16px;
+              font-size: 11px;
+              color: #000000;
+              line-height: 1.4;
+            }
+            @media print {
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
             }
           </style>
         </head>
         <body>
-          <div class="qr-card">
-            <h1>Manual Feedback Approval QR</h1>
-            <p>${escapeHtml(generatedQr.officialOfficeName || generatedQr.office)}</p>
-            <img src="${buildQrImageUrl(generatedQr.url)}" alt="Feedback QR Code" />
-            <p class="token">Token: ${escapeHtml(generatedQr.token)}</p>
-            <p>${escapeHtml(approvalUseLabel)}</p>
-            <p>${escapeHtml(expiryLabel)}</p>
+          <div class="page">
+            <div class="qr-card">
+              <div class="header">
+                <div class="brand">
+                  <img class="bisu-logo" src="${bisuLogo}" alt="BISU Logo" />
+                  <div class="header-text">
+                    <p class="republic">Republic of the Philippines</p>
+                    <p class="school">BOHOL ISLAND STATE UNIVERSITY</p>
+                    <p class="address">Magsija, Balilihan 6342, Bohol, Philippines</p>
+                    <p class="header-office">${escapeHtml(qrOfficeName)}</p>
+                    <p class="tagline">Balance | Integrity | Stewardship | Uprightness</p>
+                  </div>
+                </div>
+                <div class="header-logos">
+                  <img class="bagong-logo" src="${bagongPilipinasLogo}" alt="Bagong Pilipinas Logo" />
+                  <img class="iso-logo" src="${tuvISOLogo}" alt="ISO 9001:2015 Certification" />
+                </div>
+              </div>
+
+              <div class="content">
+                <h1>Feedback QR Code</h1>
+                <p class="subtitle">Scan this code to open the digital Customer Satisfaction Feedback Form.</p>
+                <p class="office">${escapeHtml(qrOfficeName)}</p>
+
+                <div class="qr-frame">
+                  <img src="${buildQrImageUrl(generatedQr.url)}" alt="Feedback QR Code" />
+                </div>
+
+                <p class="scan-line">Scan to submit feedback</p>
+
+                <p class="footer-note">Keep this QR code visible and unobstructed. Reprint if the code becomes folded, faded, or difficult to scan.</p>
+              </div>
+            </div>
           </div>
           <script>
             window.onload = () => {
