@@ -6,6 +6,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -286,6 +287,35 @@ const getQrSortTime = (qr) => {
   return date ? date.getTime() : 0;
 };
 
+const getManualQrOfficeName = (qr) =>
+  toTrimmedText(qr?.office) ||
+  toTrimmedText(qr?.officeName) ||
+  toTrimmedText(qr?.officeVisited) ||
+  toTrimmedText(qr?.unitOfficeVisited) ||
+  toTrimmedText(qr?.manualSubmissionDefaults?.office) ||
+  toTrimmedText(qr?.manualSubmissionDefaults?.officeName) ||
+  toTrimmedText(qr?.manualSubmissionDefaults?.officeVisited) ||
+  toTrimmedText(qr?.manualSubmissionDefaults?.unitOfficeVisited) ||
+  "All Offices";
+
+const isManualQrTokenActive = (qr) => {
+  if (!qr || qr.revoked === true || qr.status === "revoked") return false;
+  if (qr.status && qr.status !== "active") return false;
+  if (qr.type === "single" && qr.used === true) return false;
+
+  const remainingUses = Number(qr.remainingUses);
+  if (Number.isFinite(remainingUses) && remainingUses <= 0) return false;
+
+  const expiresAt = toDateValue(qr.expiresAt);
+  if (expiresAt && expiresAt.getTime() <= Date.now()) return false;
+
+  return true;
+};
+
+const isManualQrOfficeConflict = (existingOffice, requestedOffice, offices = []) => {
+  return compareOfficeNames(existingOffice, requestedOffice, offices);
+};
+
 const Feedback = ({ user }) => {
   const [search, setSearch] = useState("");
   const [dayRange, setDayRange] = useState({ start: "", end: "" });
@@ -311,6 +341,7 @@ const Feedback = ({ user }) => {
     mode: "lifetime",
     expiresInHours: 24,
     maxUses: 1,
+    officeName: "",
   });
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [generatedQr, setGeneratedQr] = useState(null);
@@ -636,10 +667,13 @@ const Feedback = ({ user }) => {
       return;
     }
 
+    const defaultOfficeName = isOfficeAdmin ? user?.office || "" : office || "";
+
     setManualQrSettings({
       mode: "lifetime",
       expiresInHours: 24,
       maxUses: 1,
+      officeName: defaultOfficeName,
     });
     setManualQrSettingsOpen(true);
   };
@@ -652,7 +686,7 @@ const Feedback = ({ user }) => {
 
     const token = generateFeedbackToken();
     const accessKey = generateFeedbackToken();
-    const targetOffice = isOfficeAdmin ? user?.office : office;
+    const targetOffice = isOfficeAdmin ? user?.office : manualQrSettings.officeName;
     const approvedOffice = toTrimmedText(targetOffice) || "All Offices";
     const officialOfficeName =
       getOfficialOfficeName(approvedOffice, offices) || approvedOffice;
@@ -683,6 +717,36 @@ const Feedback = ({ user }) => {
     setIsGeneratingQr(true);
 
     try {
+      if (isLifetimeQr) {
+        const existingQrSnapshot = await getDocs(collection(db, "manualFeedbackTokens"));
+        const conflictingQr = existingQrSnapshot.docs
+          .map((tokenDoc) => ({
+            id: tokenDoc.id,
+            ...tokenDoc.data(),
+          }))
+          .find((qrToken) => {
+            if (qrToken.type !== "lifetime") return false;
+            if (!isManualQrTokenActive(qrToken)) return false;
+
+            return isManualQrOfficeConflict(
+              getManualQrOfficeName(qrToken),
+              approvedOffice,
+              offices,
+            );
+          });
+
+        if (conflictingQr) {
+          const conflictingOffice =
+            getOfficialOfficeName(getManualQrOfficeName(conflictingQr), offices) ||
+            getManualQrOfficeName(conflictingQr);
+
+          alert(
+            `An active lifetime feedback QR code already exists for ${conflictingOffice}. Revoke the existing lifetime QR code first before creating another one.`
+          );
+          return;
+        }
+      }
+
       const docRef = await addDoc(collection(db, "manualFeedbackTokens"), {
         token,
         accessKey,
@@ -691,6 +755,9 @@ const Feedback = ({ user }) => {
         type: manualQrSettings.mode,
         source: "manual-qr",
         office: approvedOffice,
+        officeName: approvedOffice,
+        officeVisited: approvedOffice,
+        unitOfficeVisited: approvedOffice,
         officialOfficeName,
         approvedBy,
         approvedByLabel: getUserIdentifier(user),
@@ -711,6 +778,9 @@ const Feedback = ({ user }) => {
           visitName: "",
           visitId: "",
           office: approvedOffice,
+          officeName: approvedOffice,
+          officeVisited: approvedOffice,
+          unitOfficeVisited: approvedOffice,
           officialOfficeName,
         },
       });
@@ -1361,11 +1431,29 @@ const Feedback = ({ user }) => {
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
                     Office
                   </label>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
-                    {isOfficeAdmin
-                      ? user?.office || "Assigned Office"
-                      : office || "All Offices"}
-                  </div>
+                  {isOfficeAdmin ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                      {user?.office || "Assigned Office"}
+                    </div>
+                  ) : (
+                    <select
+                      value={manualQrSettings.officeName}
+                      onChange={(event) =>
+                        setManualQrSettings((previous) => ({
+                          ...previous,
+                          officeName: event.target.value,
+                        }))
+                      }
+                      className="h-[42px] w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      <option value="">All Offices</option>
+                      {officeOptions.map((officeName) => (
+                        <option key={`manual-qr-office-${officeName}`} value={officeName}>
+                          {officeName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
