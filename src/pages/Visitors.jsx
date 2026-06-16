@@ -70,6 +70,16 @@ const formatPrintFooterDate = (value = new Date()) => {
   return `${month}/${day}/${year}`;
 };
 
+const formatPrintTableDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+};
+
 const getVisitorSortTime = (visitor) => {
   const sourceDate = visitor?.rawDate || visitor?.checkInTime || null;
   const parsed =
@@ -110,7 +120,7 @@ const PRINT_PAGE_MARGIN_BOTTOM_CM = 1.9;
 const PRINT_PAGE_MARGIN_LEFT_CM = 0.5;
 const PRINT_ROWS_PER_PAGE = 18;
 const PRINT_HEADER_ROW_HEIGHT_IN = 0.42;
-const PRINT_BODY_ROW_HEIGHT_IN = 0.31;
+const PRINT_BODY_ROW_HEIGHT_IN = 0.29;
 const PRINT_CONTACT_FONT_SIZE_PX = 11;
 
 const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
@@ -411,7 +421,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
       });
     }
 
-    return pages;
+    return pages.filter((page) => page.rows.length > 0);
   }, [printVisitors]);
 
   const currentOfficeRecord = useMemo(() => {
@@ -747,7 +757,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
                   <tbody>
                     {pageVisitors.map((visitor) => {
                       const dateObj = visitor.rawDate || new Date();
-                      const formattedDate = `${String(dateObj.getMonth() + 1).padStart(2, '0')} – ${String(dateObj.getDate()).padStart(2, '0')} - ${String(dateObj.getFullYear()).slice(-2)}`;
+                      const formattedDate = formatPrintTableDate(dateObj);
                       
                       const contactLines = visitor._printContactLines || [];
                       return (
@@ -871,17 +881,32 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
           .print-page {
             box-sizing: border-box;
+            max-height: calc(${PRINT_PAGE_HEIGHT_IN}in - ${PRINT_PAGE_MARGIN_TOP_CM}cm - ${PRINT_PAGE_MARGIN_BOTTOM_CM}cm);
+            overflow: hidden;
           }
 
           .print-page-table {
-            border: 0.5pt solid #000 !important;
+            border-collapse: separate !important;
+            border-spacing: 0 !important;
             table-layout: fixed;
           }
 
           .print-page-table th,
           .print-page-table td {
-            border: 0.5pt solid #000 !important;
+            position: relative;
+            border: 0 !important;
+            border-top: 0.5pt solid #000 !important;
+            border-left: 0.5pt solid #000 !important;
             box-sizing: border-box;
+          }
+
+          .print-page-table th:last-child,
+          .print-page-table td:last-child {
+            border-right: 0.5pt solid #000 !important;
+          }
+
+          .print-page-table tbody tr:last-child td {
+            border-bottom: 0.5pt solid #000 !important;
           }
 
           .print-header-row {
