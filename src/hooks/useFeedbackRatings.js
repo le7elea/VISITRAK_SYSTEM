@@ -365,10 +365,6 @@ const useFeedbackRatings = () => {
                   } catch (visitError) {
                     const visitErrorCode = String(visitError?.code || "");
                     if (visitErrorCode !== "permission-denied") {
-                      console.error(
-                        `Error fetching visit for visitId ${d.visitId}:`,
-                        visitError,
-                      );
                     }
                   }
                 }
@@ -443,8 +439,7 @@ const useFeedbackRatings = () => {
               setFeedbacks(data);
               setError(null);
               setLoading(false);
-            } catch (parseError) {
-              console.error("Error parsing feedback data:", parseError);
+            } catch  {
               setError(
                 new Error(
                   "Failed to parse feedback data. Please check the data format.",
@@ -454,7 +449,6 @@ const useFeedbackRatings = () => {
             }
           },
           (firebaseError) => {
-            console.error("Firebase error fetching feedbacks:", firebaseError);
 
             let errorMessage = "Failed to load feedback data.";
 
@@ -471,8 +465,7 @@ const useFeedbackRatings = () => {
             setLoading(false);
           },
         );
-      } catch (err) {
-        console.error("Error setting up feedbacks listener:", err);
+      } catch  {
         setError(new Error("Failed to initialize feedback listener."));
         setLoading(false);
       }

@@ -38,7 +38,6 @@ exports.sendPasswordReset = functions.https.onRequest(async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    console.log(`Password reset requested for: ${normalizedEmail}`);
 
     // Check if email exists in Firestore
     const officesRef = db.collection('offices');
@@ -70,10 +69,8 @@ exports.sendPasswordReset = functions.https.onRequest(async (req, res) => {
     const appUrl = process.env.APP_URL || functions.config().app?.url || 'https://visitrak-system.vercel.app';
 
     if (!sendgridApiKey) {
-      console.error('SendGrid API key not configured');
       // For development/testing, return the reset link
       const resetLink = `${appUrl}/reset-password?token=${token}`;
-      console.log('DEV MODE - Reset link:', resetLink);
       
       return res.status(200).json({
         success: true,
@@ -135,7 +132,6 @@ exports.sendPasswordReset = functions.https.onRequest(async (req, res) => {
     };
 
     await sgMail.send(msg);
-    console.log(`Password reset email sent to ${normalizedEmail}`);
 
     return res.status(200).json({
       success: true,
@@ -143,7 +139,6 @@ exports.sendPasswordReset = functions.https.onRequest(async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Password reset error:', error);
     
     return res.status(500).json({
       success: false,

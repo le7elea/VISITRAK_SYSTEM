@@ -25,7 +25,6 @@ export const registerOfficeUser = async (officeData) => {
   try {
     const { email, password, name, role, officialName } = officeData;
     
-    console.log("🔐 Starting user registration for:", email);
     
     // 1. Check if email already exists in Firestore
     const emailCheckQuery = query(
@@ -46,7 +45,6 @@ export const registerOfficeUser = async (officeData) => {
     );
     
     const user = userCredential.user;
-    console.log("✅ Firebase Auth user created:", user.uid);
     
     // 3. Update display name
     await updateProfile(user, {
@@ -71,11 +69,9 @@ export const registerOfficeUser = async (officeData) => {
     };
     
     await setDoc(doc(db, "offices", user.uid), officeDoc);
-    console.log("✅ Firestore office document created");
     
     // 5. Send email verification
     await sendEmailVerification(user);
-    console.log("✅ Email verification sent");
     
     return {
       ...officeDoc,
@@ -84,7 +80,6 @@ export const registerOfficeUser = async (officeData) => {
     };
     
   } catch (error) {
-    console.error("❌ Error registering office user:", error);
     
     // Handle specific errors
     if (error.code === 'auth/email-already-in-use') {
@@ -104,19 +99,16 @@ export const registerOfficeUser = async (officeData) => {
 // 🔹 Login office user
 export const loginOfficeUser = async (email, password) => {
   try {
-    console.log("🔐 Attempting login for:", email);
     
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    console.log("✅ Firebase Auth login successful:", user.uid);
     
     // Get office data from Firestore using UID
     const officeRef = doc(db, "offices", user.uid);
     const officeSnapshot = await getDoc(officeRef);
     
     if (!officeSnapshot.exists()) {
-      console.error("❌ Office document not found for UID:", user.uid);
       throw new Error("Office account not configured properly. Please contact administrator.");
     }
     
@@ -144,11 +136,9 @@ export const loginOfficeUser = async (email, password) => {
       }
     };
     
-    console.log("✅ Login successful for:", user.email);
     return userSession;
     
   } catch (error) {
-    console.error("❌ Login error:", error);
     
     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
       throw new Error("Invalid email or password.");
@@ -170,13 +160,11 @@ export const loginOfficeUser = async (email, password) => {
 export const logoutUser = async () => {
   try {
     await signOut(auth);
-    console.log("✅ User logged out");
     
     clearStoredSession();
     
     return true;
   } catch (error) {
-    console.error("❌ Error logging out:", error);
     throw error;
   }
 };
@@ -185,10 +173,8 @@ export const logoutUser = async () => {
 export const resetPassword = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email);
-    console.log("✅ Password reset email sent to:", email);
     return true;
   } catch (error) {
-    console.error("❌ Error sending password reset:", error);
     
     if (error.code === 'auth/user-not-found') {
       throw new Error("No account found with this email.");
@@ -231,10 +217,8 @@ export const changePassword = async (currentPassword, newPassword) => {
       updatedAt: new Date().toISOString()
     });
     
-    console.log("✅ Password changed successfully");
     return true;
   } catch (error) {
-    console.error("❌ Error changing password:", error);
     
     if (error.code === 'auth/wrong-password') {
       throw new Error("Current password is incorrect.");
@@ -270,12 +254,10 @@ export const verifyEmail = async () => {
     const user = auth.currentUser;
     if (user) {
       await sendEmailVerification(user);
-      console.log("✅ Email verification sent");
       return true;
     }
     return false;
   } catch (error) {
-    console.error("❌ Error sending email verification:", error);
     throw error;
   }
 };
@@ -295,12 +277,10 @@ export const updateUserProfile = async (updates) => {
         });
       }
       
-      console.log("✅ User profile updated");
       return true;
     }
     return false;
   } catch (error) {
-    console.error("❌ Error updating profile:", error);
     throw error;
   }
 };
@@ -316,8 +296,7 @@ export const getUserRole = async (uid) => {
       return officeData.role || "office";
     }
     return null;
-  } catch (error) {
-    console.error("Error getting user role:", error);
+  } catch  {
     return null;
   }
 };
@@ -367,23 +346,19 @@ export const initializeUserSession = async () => {
         id: user.uid
       }
     };
-  } catch (error) {
-    console.error("Error initializing user session:", error);
+  } catch  {
     return null;
   }
 };
 
 // 🔹 Set up auth state persistence
 export const setupAuthPersistence = () => {
-  console.log("✅ Auth persistence initialized");
   
   // Listen for auth state changes
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      console.log("👤 User signed in:", user.email);
       initializeUserSession();
     } else {
-      console.log("👤 User signed out");
       clearStoredSession();
     }
   });

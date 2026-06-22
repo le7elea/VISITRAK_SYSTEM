@@ -102,7 +102,6 @@ const server = createServer(async (req, res) => {
   try {
     await handler(req, adaptedRes);
   } catch (error) {
-    console.error(`Local API handler error for ${path}:`, error);
     if (!res.writableEnded) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");
@@ -118,5 +117,4 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Local API server running at http://localhost:${PORT}`);
 });

@@ -134,7 +134,6 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
-    console.error("admin-reset-office-password error:", error);
     const errorMessage = String(error?.message || "");
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||

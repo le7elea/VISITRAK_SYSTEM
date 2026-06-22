@@ -91,7 +91,6 @@ export default async function handler(req, res) {
       data: { id },
     });
   } catch (error) {
-    console.error("delete-visitor error:", error);
     const errorMessage = String(error?.message || "");
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||

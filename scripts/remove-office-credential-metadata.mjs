@@ -24,7 +24,6 @@ async function run() {
   const officesSnapshot = await db.collection("offices").get();
 
   if (officesSnapshot.empty) {
-    console.log("No office documents found.");
     return;
   }
 
@@ -57,12 +56,8 @@ async function run() {
     await batch.commit();
   }
 
-  console.log(
-    `Cleanup complete. Updated: ${updatedCount}. Skipped (already clean): ${skippedCount}.`
-  );
 }
 
 run().catch((error) => {
-  console.error("Failed to clean office credential metadata fields:", error);
   process.exitCode = 1;
 });

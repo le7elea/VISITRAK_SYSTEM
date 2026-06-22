@@ -84,8 +84,7 @@ const ResetPassword = () => {
       try {
         const email = await verifyPasswordResetCode(auth, oobCode);
         setAccountEmail(email || "");
-      } catch (error) {
-        console.error("Reset code validation error:", error);
+      } catch  {
         setModal({
           show: true,
           title: "Invalid or Expired Link",
@@ -189,8 +188,7 @@ const ResetPassword = () => {
             }
             await signOut(auth);
           }
-        } catch (statusError) {
-          console.error("Password status sync error:", statusError);
+        } catch  {
         }
       }
 
@@ -201,7 +199,6 @@ const ResetPassword = () => {
         redirect: "/login",
       });
     } catch (error) {
-      console.error("Reset password error:", error);
       let message = "Failed to reset password. Please request a new link.";
 
       if (error.code === "TOKEN_EXPIRED" || error.code === "auth/expired-action-code") {

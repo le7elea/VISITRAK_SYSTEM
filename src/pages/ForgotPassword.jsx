@@ -172,8 +172,7 @@ const ForgotPassword = () => {
       try {
         const payload = await getOfficePasswordResetRequestStatus(cleanUsername);
         setStatusData(payload || null);
-      } catch (error) {
-        console.error("Status check error:", error);
+      } catch  {
       } finally {
         if (showLoader) {
           setStatusLoading(false);
@@ -264,7 +263,6 @@ const ForgotPassword = () => {
       setRequestAnchorTime(Date.now());
       await loadRequestStatus(trackedUsername, { showLoader: true });
     } catch (error) {
-      console.error("Resend request error:", error);
       setModal({
         show: true,
         title: "Resend Failed",
@@ -368,7 +366,6 @@ const ForgotPassword = () => {
       await loadRequestStatus(resolvedUsername);
       setIdentifier("");
     } catch (error) {
-      console.error("Forgot password error:", error);
       setModal({
         show: true,
         title: "Request Failed",

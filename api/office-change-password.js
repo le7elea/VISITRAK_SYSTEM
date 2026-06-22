@@ -137,7 +137,6 @@ export default async function handler(req, res) {
       message: "Password updated successfully.",
     });
   } catch (error) {
-    console.error("office-change-password error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to update password.",

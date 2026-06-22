@@ -64,7 +64,6 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('Usage check error:', error);
     res.status(500).json({
       error: error.message,
       env: {

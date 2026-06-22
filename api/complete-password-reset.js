@@ -256,7 +256,6 @@ export default async function handler(req, res) {
       message: "Password reset successfully.",
     });
   } catch (error) {
-    console.error("complete-password-reset error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to reset password.",

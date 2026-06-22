@@ -342,7 +342,6 @@ export default async function handler(req, res) {
       expiresAt: expiresAt.toISOString(),
     });
   } catch (error) {
-    console.error("resolve-office-password-reset-request error:", error);
     const errorMessage = String(error?.message || "");
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||

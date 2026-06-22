@@ -224,7 +224,6 @@ export default async function handler(req, res) {
             },
     });
   } catch (error) {
-    console.error("create-office-account error:", error);
     const errorMessage = String(error?.message || "");
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||

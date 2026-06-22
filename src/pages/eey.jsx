@@ -1562,8 +1562,7 @@ const calculateTrafficByDay = (records = []) => {
 
       const dayIndex = (recordDate.getDay() + 6) % 7; // Monday=0
       counts[dayIndex]++;
-    } catch (error) {
-      console.error("Error parsing traffic record date:", sourceDate, error);
+    } catch  {
     }
   });
 
@@ -1693,8 +1692,7 @@ const getCurrentUser = () => {
     }
 
     return user;
-  } catch (error) {
-    console.error("Error parsing user from session storage:", error);
+  } catch  {
     return null;
   }
 };
@@ -1893,15 +1891,7 @@ const Analytics = ({ setActiveTab }) => {
     setCurrentUser(user);
 
     if (!user) {
-      console.warn("?? No user found in session storage");
     } else {
-      console.log("?? Current user:", user);
-      console.log(
-        "?? User office - Original:",
-        user.originalOffice,
-        "Normalized:",
-        user.office,
-      );
     }
   }, []);
 
@@ -1924,7 +1914,6 @@ const Analytics = ({ setActiveTab }) => {
         setOffices(data);
       },
       (error) => {
-        console.error("Error fetching offices:", error);
       },
     );
 
@@ -1942,11 +1931,6 @@ const Analytics = ({ setActiveTab }) => {
 
     setLoading(true);
 
-    console.log(
-      "?? Starting visits fetch for:",
-      currentUser.type,
-      currentUser.originalOffice || currentUser.office,
-    );
 
     // Fetch all visits
     const visitsQuery = query(
@@ -1986,9 +1970,6 @@ const Analytics = ({ setActiveTab }) => {
           };
         });
 
-        console.log(
-          `?? Fetched ${allVisits.length} total visits from Firestore`,
-        );
 
         // Filter visits by office if OfficeAdmin
         let filteredVisits = allVisits;
@@ -1998,7 +1979,6 @@ const Analytics = ({ setActiveTab }) => {
           currentUser.office
         ) {
           const userOffice = currentUser.originalOffice || currentUser.office;
-          console.log(`?? Filtering visits for office: "${userOffice}"`);
 
           filteredVisits = allVisits.filter((visit) => {
             if (!visit.office) return false;
@@ -2006,41 +1986,32 @@ const Analytics = ({ setActiveTab }) => {
             // Use flexible comparison
             const matches = compareOfficeNames(visit.office, userOffice);
             if (matches) {
-              console.log(`? Visit ${visit.id} matches office:`, visit.office);
             }
             return matches;
           });
 
-          console.log(
-            `?? After filtering: ${filteredVisits.length} visits for this office`,
-          );
 
           // Debug: Show unique office names found
           const uniqueOffices = [
             ...new Set(filteredVisits.map((v) => v.office).filter(Boolean)),
           ];
-          console.log("?? Unique offices in filtered visits:", uniqueOffices);
 
           // Also show all offices in database for debugging
           const allUniqueOffices = [
             ...new Set(allVisits.map((v) => v.office).filter(Boolean)),
           ];
-          console.log("?? All offices in database:", allUniqueOffices);
         } else {
-          console.log("?? SuperAdmin: Keeping all visits");
         }
 
         setVisits(filteredVisits);
         setLoading(false);
       },
       (error) => {
-        console.error("? Error fetching visits:", error);
         setLoading(false);
       },
     );
 
     return () => {
-      console.log("?? Cleaning up visits listener");
       if (visitsUnsub) visitsUnsub();
     };
   }, [currentUser]);
@@ -2137,13 +2108,9 @@ const Analytics = ({ setActiveTab }) => {
 
               return compareOfficeNames(feedback?.office, userOffice);
             });
-            console.log(
-              `After filtering: ${filteredData.length} feedbacks for office "${userOffice}"`,
-            );
             setFeedbacks(filteredData);
           },
           (error) => {
-            console.error("Error fetching feedbacks:", error);
           },
         );
       } else {
@@ -2209,16 +2176,13 @@ const Analytics = ({ setActiveTab }) => {
               };
             });
 
-            console.log(`Fetched ${data.length} feedbacks`);
             setFeedbacks(data);
           },
           (error) => {
-            console.error("Error fetching feedbacks:", error);
           },
         );
       }
-    } catch (error) {
-      console.error("Error setting up feedbacks listener:", error);
+    } catch  {
     }
 
     return () => {
@@ -3275,8 +3239,7 @@ const Analytics = ({ setActiveTab }) => {
       });
 
       saveAs(blob, getExcelDownloadFileName(excelReportMonthValue));
-    } catch (error) {
-      console.error("Error exporting Excel workbook:", error);
+    } catch  {
       alert("Failed to export Excel file. Please try again.");
     } finally {
       setIsExportingExcel(false);
@@ -3291,8 +3254,7 @@ const Analytics = ({ setActiveTab }) => {
         syncPrintFooterSnapshot();
         window.print();
       }, 0);
-    } catch (error) {
-      console.error("Error printing:", error);
+    } catch  {
       alert("Failed to print. Please try again.");
     }
   };

@@ -26,7 +26,6 @@ export const authPersistenceReady = setPersistence(
   auth,
   browserSessionPersistence
 ).catch((error) => {
-  console.error("Auth session persistence setup failed:", error);
 });
 export const db = getFirestore(app);
 

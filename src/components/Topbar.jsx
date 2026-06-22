@@ -48,8 +48,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
       if (savedUser) {
         try {
           userToUse = JSON.parse(savedUser);
-        } catch (error) {
-          console.error("❌ Error parsing user from session storage:", error);
+        } catch  {
         }
       }
     }
@@ -168,12 +167,10 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
           setLoading(false);
           
         }, (error) => {
-          console.error("❌ Firestore onSnapshot error:", error);
           setLoading(false);
         });
         
-      } catch (error) {
-        console.error("❌ Setup error:", error);
+      } catch  {
         setLoading(false);
       }
     };
@@ -268,8 +265,7 @@ const Topbar = ({ darkMode, setDarkMode, setActiveTab, user = { type: "SuperAdmi
       
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.5);
-    } catch (error) {
-      console.error("Error playing notification sound:", error);
+    } catch  {
     }
   };
 

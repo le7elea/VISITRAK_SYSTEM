@@ -125,8 +125,7 @@ function App() {
           const userData = buildSessionUser(authUser, officeProfile);
           setUser(userData);
           setStoredUser(userData);
-        } catch (error) {
-          console.error("Session restore error:", error);
+        } catch  {
           setUser(null);
           clearStoredSession();
         } finally {
@@ -149,8 +148,7 @@ function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch  {
     } finally {
       setUser(null);
       clearStoredSession();

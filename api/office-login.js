@@ -171,7 +171,6 @@ export default async function handler(req, res) {
       officeId: officeDoc.id,
     });
   } catch (error) {
-    console.error("office-login error:", error);
     const message = String(error?.message || "");
     const code = String(error?.code || "");
     const isQuotaError = isQuotaExceededError(error);

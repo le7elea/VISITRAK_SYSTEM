@@ -54,7 +54,6 @@ const useAdminVisitors = (user = { type: "SuperAdmin", office: null }) => {
         setVisitors(sorted);
       },
       (error) => {
-        console.error("useAdminVisitors onSnapshot error:", error);
         setVisitors([]);
       }
     );

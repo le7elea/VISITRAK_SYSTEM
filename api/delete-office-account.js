@@ -105,7 +105,6 @@ export default async function handler(req, res) {
       data: { id, uid },
     });
   } catch (error) {
-    console.error("delete-office-account error:", error);
     const errorMessage = String(error?.message || "");
     const isConfigError =
       errorMessage.includes("Firebase Admin credentials") ||

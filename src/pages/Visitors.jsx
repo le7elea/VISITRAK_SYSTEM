@@ -195,7 +195,6 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         setVisits(data);
       },
       (error) => {
-        console.error("Error fetching visits:", error);
       }
     );
 
@@ -227,7 +226,6 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         setLoading(false);
       },
       (error) => {
-        console.error("Error fetching feedbacks:", error);
         setLoading(false);
       }
     );
@@ -256,7 +254,6 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
         setOffices(data);
       },
       (error) => {
-        console.error("Error fetching offices:", error);
       }
     );
 
@@ -314,8 +311,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
       setTimeout(() => {
         window.print();
       }, 0);
-    } catch (error) {
-      console.error('Error printing:', error);
+    } catch  {
       alert('Failed to print. Please try again.');
     }
   };

@@ -80,12 +80,6 @@ const Profile = () => {
         }
         
         const parsedUser = JSON.parse(savedUser);
-        console.log("🔍 Loading user data:", {
-          email: parsedUser.email,
-          type: parsedUser.type,
-          role: parsedUser.role,
-          id: parsedUser.id
-        });
         
         const officesData = await fetchOffices();
         setOffices(officesData);
@@ -94,77 +88,56 @@ const Profile = () => {
         
         // ========== SPECIAL HANDLING FOR SUPERADMIN ==========
         if (parsedUser.type === "SuperAdmin" || parsedUser.role === "super") {
-          console.log("👑 SUPERADMIN DETECTED - Special handling");
           
           // For SuperAdmin, we have multiple strategies:
           
           // 1. FIRST: Try to find ANY super admin office (primary strategy)
-          console.log("🔍 Strategy 1: Looking for any super admin office");
           userOffice = officesData.find(office => office.role === "super");
           
           if (userOffice) {
-            console.log("✅ Found super admin office:", {
-              name: userOffice.name,
-              email: userOffice.email,
-              id: userOffice.id
-            });
             
             // Check if email matches - if not, we'll update the session cache
             if (userOffice.email !== parsedUser.email) {
-              console.log("🔄 SuperAdmin email changed:", {
-                old: parsedUser.email,
-                new: userOffice.email
-              });
             }
           }
           
           // 2. SECOND: If no super admin found, check if current user's ID exists
           if (!userOffice && parsedUser.id) {
-            console.log("🔍 Strategy 2: Looking by ID:", parsedUser.id);
             userOffice = officesData.find(office => office.id === parsedUser.id);
           }
           
           // 3. THIRD: Try email lookup (might fail if email changed)
           if (!userOffice && parsedUser.email) {
-            console.log("🔍 Strategy 3: Looking by email:", parsedUser.email);
             userOffice = officesData.find(
               office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
             );
           }
         } else {
           // ========== REGULAR OFFICE ADMIN HANDLING ==========
-          console.log("🏢 OFFICE ADMIN DETECTED");
           
           // Strategy 1: Try to find by ID first
           if (parsedUser.id) {
-            console.log("🔍 Strategy 1: Looking up by ID:", parsedUser.id);
             userOffice = officesData.find(office => office.id === parsedUser.id);
             if (userOffice) {
-              console.log("✅ Found user by ID:", userOffice.name);
             }
           }
           
           // Strategy 2: Try to find by email
           if (!userOffice && parsedUser.email) {
-            console.log("🔍 Strategy 2: Looking up by email:", parsedUser.email);
             userOffice = officesData.find(
               office => office.email && office.email.toLowerCase() === parsedUser.email.toLowerCase()
             );
             if (userOffice) {
-              console.log("✅ Found user by email:", userOffice.name);
             }
           }
           
           // Strategy 3: Use the info.services function
           if (!userOffice && parsedUser.email) {
-            console.log("🔍 Strategy 3: Using getOfficeByEmail function");
             try {
               userOffice = await getOfficeByEmail(parsedUser.email);
               if (userOffice) {
-                console.log("✅ Found user via getOfficeByEmail:", userOffice.name);
               }
-            } catch (error) {
-              console.log("getOfficeByEmail error:", error);
+            } catch  {
             }
           }
         }
@@ -216,23 +189,14 @@ const Profile = () => {
           
           setStoredUser(updatedUserData);
           
-          console.log("✅ User data loaded and session storage updated:", {
-            oldEmail: parsedUser.email,
-            newEmail: userOffice.email,
-            type: type,
-            isSuperAdmin: type === "SuperAdmin"
-          });
           
           await loadActivityLogs(completeUser);
         } else {
-          console.log("⚠️ User not found in database");
           
           // For SuperAdmin specifically, we can create a fallback
           if (parsedUser.type === "SuperAdmin" || parsedUser.role === "super") {
-            console.log("👑 Creating SuperAdmin fallback");
             
             // Check if there are ANY offices in the system
-            console.log("📊 Total offices in system:", officesData.length);
             
             const fallbackUser = {
               id: parsedUser.id || "superadmin-fallback",
@@ -272,8 +236,7 @@ const Profile = () => {
             await loadActivityLogs(fallbackUser);
           }
         }
-      } catch (error) {
-        console.error("❌ Error loading user data:", error);
+      } catch  {
         
         const savedUser = getStoredUser();
         if (savedUser) {
@@ -375,10 +338,8 @@ const Profile = () => {
         });
         
         await loadActivityLogs(completeUser);
-        console.log("✅ User data refreshed");
       }
-    } catch (error) {
-      console.error("Error refreshing user data:", error);
+    } catch  {
     } finally {
       setLoading(false);
     }
@@ -428,13 +389,11 @@ const Profile = () => {
           type: "SuperAdmin"
         });
         
-        console.log("✅ SuperAdmin refreshed with new email:", superAdminOffice.email);
         await loadActivityLogs(completeUser);
       } else {
         alert("No SuperAdmin found in the system!");
       }
     } catch (error) {
-      console.error("Error refreshing SuperAdmin:", error);
       alert("Error refreshing: " + error.message);
     } finally {
       setLoading(false);
@@ -443,11 +402,6 @@ const Profile = () => {
 
   const loadActivityLogs = async (userData) => {
     try {
-      console.log("🔍 Loading activity logs for user:", {
-        name: userData.name,
-        email: userData.email,
-        office: userData.office
-      });
       
       // Load ALL logs first, then filter in memory
       const allLogsQuery = query(
@@ -496,8 +450,7 @@ const Profile = () => {
       
       setActivityLogs(allLogs);
       
-    } catch (error) {
-      console.error("❌ Error loading activity logs:", error);
+    } catch  {
       setActivityLogs([]);
     }
   };
@@ -635,7 +588,7 @@ const Profile = () => {
             day: 'numeric'
           });
         }
-      } catch (e) {}
+      } catch  {}
       
       baseInfo.push({ label: "Account Created:", value: dateStr });
     }
@@ -760,8 +713,7 @@ const Profile = () => {
         });
         
         await loadActivityLogs(user);
-      } catch (logError) {
-        console.log("Activity log error:", logError);
+      } catch  {
       }
       
       alert("Password updated successfully!");
@@ -779,7 +731,6 @@ const Profile = () => {
       setConfirmPassword("");
       
     } catch (error) {
-      console.error("Error updating password:", error);
       let message = error.message || "Failed to update password.";
 
       if (error.code === "auth/invalid-credential") {

@@ -118,8 +118,7 @@ const Dashboard = ({
         oscillator.start(start);
         oscillator.stop(start + duration + 0.02);
       });
-    } catch (error) {
-      console.error("Error playing reset request sound:", error);
+    } catch  {
     }
   }, [getResetAudioContext]);
 
@@ -206,8 +205,7 @@ const Dashboard = ({
         }
 
         knownResetRequestIds.current = latestIds;
-      } catch (error) {
-        console.error("Error checking password reset requests:", error);
+      } catch  {
       }
     };
 

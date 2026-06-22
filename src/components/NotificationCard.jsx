@@ -38,8 +38,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
       if (savedUser) {
         try {
           userToUse = JSON.parse(savedUser);
-        } catch (error) {
-          console.error("Error parsing user from session storage:", error);
+        } catch  {
         }
       }
     }
@@ -151,12 +150,10 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
           setLoading(false);
           
         }, (error) => {
-          console.error("Error fetching notifications:", error);
           setLoading(false);
         });
         
-      } catch (error) {
-        console.error("Error setting up notification listener:", error);
+      } catch  {
         setLoading(false);
       }
     };
@@ -200,8 +197,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
         setIsModalOpen(true);
         markNotificationAsRead(notification.id);
       }
-    } catch (error) {
-      console.error("Error fetching visitor details:", error);
+    } catch  {
       setSelectedVisitor(notification);
       setIsModalOpen(true);
       markNotificationAsRead(notification.id);

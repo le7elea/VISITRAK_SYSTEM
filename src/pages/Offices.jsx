@@ -1240,8 +1240,7 @@ const Offices = () => {
       }
       const pendingRequests = await getOfficePasswordResetRequests("pending");
       setResetRequests(Array.isArray(pendingRequests) ? pendingRequests : []);
-    } catch (error) {
-      console.error("Error loading reset requests:", error);
+    } catch  {
     } finally {
       if (showLoader) {
         setResetRequestsLoading(false);
@@ -1259,7 +1258,6 @@ const Offices = () => {
 
         await loadPendingResetRequests({ showLoader: true });
       } catch (err) {
-        console.error("Error loading offices:", err);
         setError(`Failed to load offices: ${err.message}`);
       } finally {
         setLoading(false);
@@ -1436,7 +1434,6 @@ const Offices = () => {
         tone: "success",
       });
     } catch (err) {
-      console.error("Error in add office process:", err);
       setAddError(`Failed to add office: ${err.message}`);
       showNotification(`Failed to add office: ${err.message}`, {
         title: "Add Office Failed",
@@ -1625,8 +1622,7 @@ const Offices = () => {
         if (isApprove && response?.resetLink) {
           try {
             await navigator.clipboard.writeText(response.resetLink);
-          } catch (copyError) {
-            console.error("Failed to copy reset link to clipboard:", copyError);
+          } catch  {
           }
         }
       } catch (error) {
@@ -1870,7 +1866,6 @@ const Offices = () => {
         try {
           await updateOffice(updatedOffice);
         } catch (err) {
-          console.error("Error updating office in Firestore:", err);
           const revertedOffices = [...offices];
           revertedOffices[editIndex] = originalOffice;
           setOffices(prioritizeSuperAdmins(revertedOffices));
@@ -1887,7 +1882,6 @@ const Offices = () => {
       }, 0);
       
     } catch (err) {
-      console.error("Error in edit process:", err);
       setEditError(`Failed to update office: ${err.message}`);
       setEditLoading(false);
     }
@@ -1941,7 +1935,6 @@ const Offices = () => {
         try {
           await deleteOffice(officeToDelete.id);
         } catch (err) {
-          console.error("Error deleting office from Firestore:", err);
           setOffices((prev) => prioritizeSuperAdmins([...prev, originalOffice]));
           showNotification(
             `Warning: "${officeToDelete.name}" was restored due to database error: ${err.message}`,
@@ -1956,7 +1949,6 @@ const Offices = () => {
       }, 0);
       
     } catch (err) {
-      console.error("Error in delete process:", err);
       showNotification(`Failed to delete office: ${err.message}`, {
         title: "Delete Failed",
         tone: "error",

@@ -106,10 +106,8 @@ const createActivityLog = async (logData) => {
     };
     
     await addDoc(activityLogsCollection, logWithTimestamp);
-    console.log("✅ Activity log created:", logData.title, "for office:", logData.office);
     return true;
-  } catch (error) {
-    console.error("❌ Error creating activity log:", error);
+  } catch  {
     return false;
   }
 };
@@ -144,8 +142,7 @@ const getCurrentUser = () => {
       role: "system",
       office: "System"
     };
-  } catch (error) {
-    console.error("Error getting current user:", error);
+  } catch  {
     return {
       email: "system@admin.com",
       name: "System Administrator",
@@ -187,8 +184,7 @@ const parseExpirationDate = (firestoreTimestamp) => {
     }
     
     return null;
-  } catch (error) {
-    console.error("Error parsing expiration date:", error);
+  } catch  {
     return null;
   }
 };
@@ -198,14 +194,8 @@ const parseExpirationDate = (firestoreTimestamp) => {
  */
 export const validatePasswordResetToken = async (token, email = null) => {
   try {
-    console.log("🔍 [validatePasswordResetToken] Starting validation...", { 
-      token: token?.substring(0, 20) + (token?.length > 20 ? '...' : ''),
-      email: email || 'not provided',
-      currentTime: new Date().toISOString()
-    });
 
     if (!token || token.trim() === '') {
-      console.error("❌ Token is required");
       return null;
     }
 
@@ -216,13 +206,11 @@ export const validatePasswordResetToken = async (token, email = null) => {
     if (email) {
       try {
         cleanEmail = decodeURIComponent(email).trim().toLowerCase();
-      } catch (e) {
+      } catch  {
         cleanEmail = email.trim().toLowerCase();
       }
-      console.log("📧 Clean email for verification:", cleanEmail);
     }
 
-    console.log("🔑 Querying Firestore for token:", cleanToken.substring(0, 20) + '...');
 
     // ========== QUERY FIRESTORE FOR TOKEN ==========
     try {
@@ -234,10 +222,8 @@ export const validatePasswordResetToken = async (token, email = null) => {
 
       const querySnapshot = await getDocs(q);
       
-      console.log("📊 Firestore query results:", querySnapshot.size, "documents found");
       
       if (querySnapshot.empty) {
-        console.log("❌ Token not found in Firestore");
         return null;
       }
       
@@ -245,22 +231,14 @@ export const validatePasswordResetToken = async (token, email = null) => {
       const tokenData = docSnap.data();
       const tokenId = docSnap.id;
       
-      console.log("📄 Token document found:", {
-        id: tokenId,
-        email: tokenData.email,
-        used: tokenData.used,
-        expiresAtRaw: tokenData.expiresAt
-      });
 
       // STEP 1: Check if token is already used
       if (tokenData.used === true) {
-        console.log("❌ Token already used");
         
         // Clean up used token
         try {
           await deleteDoc(doc(db, "passwordResetTokens", tokenId));
-          console.log("🧹 Deleted used token");
-        } catch (e) {
+        } catch  {
           // Ignore cleanup errors
         }
         
@@ -271,33 +249,20 @@ export const validatePasswordResetToken = async (token, email = null) => {
       if (cleanEmail && tokenData.email) {
         const storedEmail = tokenData.email?.toLowerCase();
         if (storedEmail !== cleanEmail) {
-          console.log(`❌ Email mismatch: expected ${cleanEmail}, got ${storedEmail}`);
           return null;
         }
-        console.log("✅ Email verified successfully");
       }
 
       // STEP 3: CRITICAL - Check expiration PROPERLY
       const expiresAt = parseExpirationDate(tokenData.expiresAt);
       
       if (!expiresAt) {
-        console.log("❌ Token has no valid expiration date");
         return null;
       }
       
-      console.log("⏰ Expiration check DETAILED:", {
-        now: now.toISOString(),
-        nowMillis: now.getTime(),
-        expiresAt: expiresAt.toISOString(),
-        expiresAtMillis: expiresAt.getTime(),
-        timeDifferenceMs: expiresAt.getTime() - now.getTime(),
-        timeDifferenceMinutes: Math.round((expiresAt.getTime() - now.getTime()) / 60000),
-        isExpired: now.getTime() > expiresAt.getTime()
-      });
 
       // CRITICAL FIX: Use getTime() for accurate comparison
       if (now.getTime() > expiresAt.getTime()) {
-        console.log("❌ Token EXPIRED - Marking as used and cleaning up");
         
         // Mark as used
         try {
@@ -306,25 +271,19 @@ export const validatePasswordResetToken = async (token, email = null) => {
             expiredAt: serverTimestamp(),
             markedExpiredAt: new Date().toISOString()
           });
-          console.log("✅ Marked expired token as used");
-        } catch (updateError) {
-          console.error("Failed to mark token as expired:", updateError);
+        } catch  {
         }
         
         // Try to delete it
         try {
           await deleteDoc(doc(db, "passwordResetTokens", tokenId));
-          console.log("✅ Deleted expired token");
-        } catch (deleteError) {
-          console.error("Failed to delete expired token:", deleteError);
+        } catch  {
         }
         
         return null;
       }
 
       const timeLeftMinutes = Math.round((expiresAt.getTime() - now.getTime()) / 60000);
-      console.log(`✅ Token is VALID and ACTIVE`);
-      console.log(`   Time left: ${timeLeftMinutes} minutes`);
       
       return { 
         id: tokenId,
@@ -333,9 +292,7 @@ export const validatePasswordResetToken = async (token, email = null) => {
         timeLeftMinutes: timeLeftMinutes
       };
       
-    } catch (firestoreError) {
-      console.error("❌ Firestore query error:", firestoreError.message);
-      console.error("Error details:", firestoreError);
+    } catch  {
       
       // In development mode only, allow testing
       const isDevelopment = process.env.NODE_ENV === 'development' || 
@@ -344,16 +301,13 @@ export const validatePasswordResetToken = async (token, email = null) => {
                              window.location.hostname.includes('vercel')));
       
       if (isDevelopment) {
-        console.log("🔧 Development mode - checking if token looks valid");
         if (cleanToken && cleanToken.length >= 32 && /^[a-f0-9]+$/i.test(cleanToken)) {
-          console.log("⚠️ DEVELOPMENT MODE: Creating test token");
           
           // Create a test token with 15-minute expiration
           const testExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
           
           // IMPORTANT: In development, we still check if it would be expired
           if (now.getTime() > testExpiresAt.getTime()) {
-            console.log("❌ Development token would be expired");
             return null;
           }
           
@@ -378,8 +332,6 @@ export const validatePasswordResetToken = async (token, email = null) => {
     }
     
   } catch (error) {
-    console.error("❌ Error validating password reset token:", error);
-    console.error("Stack trace:", error.stack);
     throw error;
   }
 };
@@ -390,7 +342,6 @@ export const validatePasswordResetToken = async (token, email = null) => {
 export const debugTokenStatus = async (token) => {
   try {
     const cleanToken = token.trim();
-    console.log("🔍 DEBUG Token Status for:", cleanToken.substring(0, 20) + '...');
     
     const q = query(
       passwordResetTokensCollection,
@@ -400,7 +351,6 @@ export const debugTokenStatus = async (token) => {
     const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
-      console.log("❌ Token not found in database");
       return { found: false };
     }
     
@@ -415,16 +365,6 @@ export const debugTokenStatus = async (token) => {
     const isValid = !isUsed && !isExpired;
     const timeLeftMinutes = expiresAt ? Math.round((expiresAt.getTime() - now.getTime()) / 60000) : null;
     
-    console.log("📊 Token Status:", {
-      id: tokenId,
-      email: tokenData.email,
-      used: isUsed,
-      expiresAt: expiresAt?.toISOString(),
-      currentTime: now.toISOString(),
-      isExpired: isExpired,
-      isValid: isValid,
-      timeLeftMinutes: timeLeftMinutes
-    });
     
     return {
       found: true,
@@ -438,7 +378,6 @@ export const debugTokenStatus = async (token) => {
     };
     
   } catch (error) {
-    console.error("Debug error:", error);
     return { error: error.message };
   }
 };
@@ -448,11 +387,9 @@ export const debugTokenStatus = async (token) => {
  */
 export const markPasswordResetTokenUsed = async (tokenId) => {
   try {
-    console.log("🔐 Marking token as used:", tokenId);
     
     // Check if it's a development token
     if (tokenId.startsWith('dev_fallback_')) {
-      console.log("ℹ️ Development token marked as used:", tokenId);
       return true;
     }
     
@@ -462,7 +399,6 @@ export const markPasswordResetTokenUsed = async (tokenId) => {
     // Verify the token exists
     const tokenSnap = await getDoc(tokenRef);
     if (!tokenSnap.exists()) {
-      console.error("❌ Token not found:", tokenId);
       throw new Error("Token not found");
     }
     
@@ -471,10 +407,8 @@ export const markPasswordResetTokenUsed = async (tokenId) => {
       usedAt: serverTimestamp(),
     });
     
-    console.log("✅ Token marked as used:", tokenId);
     return true;
   } catch (error) {
-    console.error("❌ Error marking token as used:", error);
     throw error;
   }
 };
@@ -484,7 +418,6 @@ export const markPasswordResetTokenUsed = async (tokenId) => {
  */
 export const cleanupExpiredTokens = async () => {
   try {
-    console.log("🧹 Starting expired token cleanup...");
     
     const now = new Date();
     const nowMillis = now.getTime();
@@ -506,7 +439,6 @@ export const cleanupExpiredTokens = async () => {
       return token.expiresAt && nowMillis > token.expiresAt.getTime();
     });
     
-    console.log(`📊 Found ${tokens.length} active tokens, ${expiredTokens.length} expired`);
     
     // Mark expired tokens as used
     for (const token of expiredTokens) {
@@ -517,9 +449,7 @@ export const cleanupExpiredTokens = async () => {
           autoCleaned: true,
           cleanedAt: new Date().toISOString()
         });
-        console.log(`   ✅ Marked expired token: ${token.id} (expired at: ${token.expiresAt?.toISOString()})`);
-      } catch (error) {
-        console.error(`   ❌ Failed to mark token ${token.id}:`, error.message);
+      } catch  {
       }
     }
     
@@ -541,19 +471,16 @@ export const cleanupExpiredTokens = async () => {
     for (const tokenDoc of oldUsedTokens) {
       try {
         await deleteDoc(doc(db, "passwordResetTokens", tokenDoc.id));
-        console.log(`   🗑️ Deleted old used token: ${tokenDoc.id}`);
-      } catch (error) {
+      } catch  {
         // Ignore deletion errors
       }
     }
     
-    console.log(`✅ Cleanup completed. Marked ${expiredTokens.length} as expired, deleted ${oldUsedTokens.length} old tokens.`);
     return { 
       expiredMarked: expiredTokens.length, 
       oldDeleted: oldUsedTokens.length 
     };
   } catch (error) {
-    console.error("Error cleaning up tokens:", error);
     throw error;
   }
 };
@@ -578,7 +505,6 @@ export const getTokenById = async (tokenId) => {
     }
     return null;
   } catch (error) {
-    console.error("Error getting token by ID:", error);
     throw error;
   }
 };
@@ -589,10 +515,8 @@ export const getTokenById = async (tokenId) => {
 export const deleteTokenById = async (tokenId) => {
   try {
     await deleteDoc(doc(db, "passwordResetTokens", tokenId));
-    console.log("✅ Token deleted:", tokenId);
     return true;
   } catch (error) {
-    console.error("Error deleting token:", error);
     throw error;
   }
 };
@@ -616,10 +540,8 @@ export const getTokensByEmail = async (email) => {
       usedAt: parseExpirationDate(doc.data().usedAt)
     }));
     
-    console.log(`✅ Found ${tokens.length} tokens for email: ${email}`);
     return tokens;
   } catch (error) {
-    console.error("Error getting tokens by email:", error);
     throw error;
   }
 };
@@ -629,13 +551,11 @@ export const getTokensByEmail = async (email) => {
  */
 export const updateOfficePasswordByEmail = async (email, newPassword) => {
   try {
-    console.log("🔑 Updating password for email:", email);
     
     const q = query(officesCollection, where("email", "==", email));
     const snap = await getDocs(q);
     
     if (snap.empty) {
-      console.error("❌ Office not found with email:", email);
       throw new Error("Office not found");
     }
 
@@ -643,21 +563,14 @@ export const updateOfficePasswordByEmail = async (email, newPassword) => {
     const officeId = officeDoc.id;
     const officeData = officeDoc.data();
     
-    console.log("🏢 Found office:", {
-      id: officeId,
-      name: officeData.name,
-      email: officeData.email
-    });
 
     await updateDoc(doc(db, "offices", officeId), {
       password: newPassword,
       updatedAt: serverTimestamp(),
     });
 
-    console.log("✅ Password updated successfully for email:", email);
     return true;
   } catch (error) {
-    console.error("❌ Error updating password:", error);
     throw error;
   }
 };
@@ -667,7 +580,6 @@ export const updateOfficePasswordByEmail = async (email, newPassword) => {
  */
 export const createPasswordResetActivityLog = async (email) => {
   try {
-    console.log("📝 Creating password reset activity log for:", email);
     
     const logData = {
       title: "Password Reset",
@@ -682,10 +594,8 @@ export const createPasswordResetActivityLog = async (email) => {
     };
     
     await addDoc(activityLogsCollection, logData);
-    console.log("✅ Password reset activity log created for:", email);
     return true;
-  } catch (error) {
-    console.error("❌ Error creating password reset activity log:", error);
+  } catch  {
     return false;
   }
 };
@@ -710,7 +620,6 @@ export const checkEmailExists = async (email, excludeId = null) => {
     
     return true;
   } catch (error) {
-    console.error("Error checking email:", error);
     throw error;
   }
 };
@@ -737,7 +646,6 @@ export const checkUsernameExists = async (username, excludeId = null) => {
 
     return true;
   } catch (error) {
-    console.error("Error checking username:", error);
     throw error;
   }
 };
@@ -851,7 +759,6 @@ export const addOffice = async (office) => {
       action: "create"
     });
     
-    console.log(`✅ Office "${office.name}" added successfully with activity log`);
     
     return { 
       id: createdOffice.id, 
@@ -859,7 +766,6 @@ export const addOffice = async (office) => {
       createdAt: createdOffice.createdAt ? new Date(createdOffice.createdAt) : new Date()
     };
   } catch (error) {
-    console.error("Error adding office:", error);
     throw error;
   }
 };
@@ -886,7 +792,6 @@ export const getOfficeById = async (id) => {
     }
     return null;
   } catch (error) {
-    console.error("Error getting office by ID:", error);
     throw error;
   }
 };
@@ -916,7 +821,6 @@ export const getOfficeByEmail = async (email) => {
       staffToVisit: data.staffToVisit || []
     };
   } catch (error) {
-    console.error("Error getting office by email:", error);
     throw error;
   }
 };
@@ -945,7 +849,6 @@ export const getOfficeByUsername = async (username) => {
       staffToVisit: data.staffToVisit || [],
     };
   } catch (error) {
-    console.error("Error getting office by username:", error);
     throw error;
   }
 };
@@ -966,10 +869,8 @@ export const fetchOffices = async () => {
       staffToVisit: doc.data().staffToVisit || []
     }));
     
-    console.log(`✅ Fetched ${offices.length} offices`);
     return offices;
   } catch (error) {
-    console.error("Error fetching offices:", error);
     throw error;
   }
 };
@@ -1080,7 +981,6 @@ export const updateOffice = async (office) => {
       action: "update"
     });
     
-    console.log(`✅ Office "${office.name}" updated successfully with activity log`);
     
     return { 
       id: office.id, 
@@ -1092,7 +992,6 @@ export const updateOffice = async (office) => {
       staffToVisit: validatedOffice.staffToVisit
     };
   } catch (error) {
-    console.error("Error updating office:", error);
     throw error;
   }
 };
@@ -1130,7 +1029,6 @@ export const deleteOffice = async (id) => {
     
     await callProtectedApi("/api/delete-office-account", "DELETE", { id });
     
-    console.log(`✅ Office "${officeData.name}" deleted successfully with activity log`);
     return { 
       success: true, 
       id, 
@@ -1140,7 +1038,6 @@ export const deleteOffice = async (id) => {
       deletedStaffCount: officeData.staffToVisit?.length || 0
     };
   } catch (error) {
-    console.error("Error deleting office:", error);
     throw error;
   }
 }; 
@@ -1163,10 +1060,8 @@ export const createLoginActivityLog = async (userData) => {
     };
     
     await addDoc(activityLogsCollection, logData);
-    console.log("✅ Login activity log created for:", userData.name);
     return true;
-  } catch (error) {
-    console.error("❌ Error creating login activity log:", error);
+  } catch  {
     return false;
   }
 };
@@ -1185,10 +1080,8 @@ export const getOfficesByPurpose = async (purposeName) => {
       )
     );
     
-    console.log(`✅ Found ${filteredOffices.length} offices with purpose containing "${purposeName}"`);
     return filteredOffices;
   } catch (error) {
-    console.error("Error getting offices by purpose:", error);
     throw error;
   }
 };
@@ -1207,10 +1100,8 @@ export const getOfficesByStaff = async (staffName) => {
       )
     );
     
-    console.log(`✅ Found ${filteredOffices.length} offices with staff containing "${staffName}"`);
     return filteredOffices;
   } catch (error) {
-    console.error("Error getting offices by staff:", error);
     throw error;
   }
 };
@@ -1254,10 +1145,8 @@ export const addPurposeToOffice = async (officeId, purpose) => {
       action: "update"
     });
     
-    console.log(`✅ Purpose "${purpose.name}" added to office "${office.name}"`);
     return { success: true, purpose: newPurpose };
   } catch (error) {
-    console.error("Error adding purpose to office:", error);
     throw error;
   }
 };
@@ -1301,10 +1190,8 @@ export const addStaffToOffice = async (officeId, staff) => {
       action: "update"
     });
     
-    console.log(`✅ Staff "${staff.name}" added to office "${office.name}"`);
     return { success: true, staff: newStaff };
   } catch (error) {
-    console.error("Error adding staff to office:", error);
     throw error;
   }
 };
@@ -1347,10 +1234,8 @@ export const removePurposeFromOffice = async (officeId, purposeId) => {
       action: "update"
     });
     
-    console.log(`✅ Purpose "${purposeToRemove.name}" removed from office "${office.name}"`);
     return { success: true, purpose: purposeToRemove };
   } catch (error) {
-    console.error("Error removing purpose from office:", error);
     throw error;
   }
 };
@@ -1393,10 +1278,8 @@ export const removeStaffFromOffice = async (officeId, staffId) => {
       action: "update"
     });
     
-    console.log(`✅ Staff "${staffToRemove.name}" removed from office "${office.name}"`);
     return { success: true, staff: staffToRemove };
   } catch (error) {
-    console.error("Error removing staff from office:", error);
     throw error;
   }
 };
@@ -1436,10 +1319,8 @@ export const updateOfficeOfficialName = async (officeId, officialName) => {
       action: "update"
     });
     
-    console.log(`✅ Office "${currentData.name}" official name updated to: ${officialName || 'none'}`);
     return { success: true, officialName };
   } catch (error) {
-    console.error("Error updating office official name:", error);
     throw error;
   }
 };
@@ -1449,7 +1330,6 @@ export const updateOfficeOfficialName = async (officeId, officialName) => {
  */
 export const createPasswordResetRequestLog = async (email) => {
   try {
-    console.log("📝 Creating password reset request log for:", email);
     
     const logData = {
       title: "Password Reset Request",
@@ -1464,10 +1344,8 @@ export const createPasswordResetRequestLog = async (email) => {
     };
     
     await addDoc(activityLogsCollection, logData);
-    console.log("✅ Password reset request log created for:", email);
     return true;
-  } catch (error) {
-    console.error("❌ Error creating password reset request log:", error);
+  } catch  {
     return false;
   }
 };
@@ -1486,10 +1364,8 @@ export const getAllPasswordResetTokens = async () => {
       usedAt: parseExpirationDate(doc.data().usedAt)
     }));
     
-    console.log(`✅ Fetched ${tokens.length} password reset tokens`);
     return tokens;
   } catch (error) {
-    console.error("Error fetching password reset tokens:", error);
     throw error;
   }
 };
@@ -1500,7 +1376,6 @@ export const getAllPasswordResetTokens = async () => {
 export const debugAllPasswordTokens = async () => {
   try {
     const snapshot = await getDocs(passwordResetTokensCollection);
-    console.log("🔍 DEBUG: All password reset tokens in database:");
     
     const tokens = [];
     const now = new Date();
@@ -1518,21 +1393,12 @@ export const debugAllPasswordTokens = async () => {
         usedAt: parseExpirationDate(data.usedAt)
       });
       
-      console.log(`  ${index + 1}. ID: ${doc.id}`);
-      console.log(`     Token: ${data.token?.substring(0, 30)}... (${data.token?.length || 0} chars)`);
-      console.log(`     Email: ${data.email}`);
-      console.log(`     Used: ${data.used}`);
-      console.log(`     Expires: ${expiresAt?.toISOString()}`);
-      console.log(`     Expired: ${isExpired ? 'YES' : 'NO'}`);
-      console.log(`     Time left: ${expiresAt ? Math.round((expiresAt.getTime() - now.getTime()) / 60000) + " min" : "N/A"}`);
     });
     
     const validTokens = tokens.filter(t => !t.used && !t.isExpired);
-    console.log(`📊 Summary: ${tokens.length} total tokens, ${validTokens.length} valid unused tokens`);
     
     return tokens;
-  } catch (error) {
-    console.error("Debug error:", error);
+  } catch  {
     return [];
   }
 };
@@ -1549,8 +1415,7 @@ export const getActiveTokensCount = async () => {
     });
     
     return activeTokens.length;
-  } catch (error) {
-    console.error("Error getting active tokens count:", error);
+  } catch  {
     return 0;
   }
 };
@@ -1565,14 +1430,11 @@ export const setupTokenCleanup = () => {
       try {
         const result = await cleanupExpiredTokens();
         if (result.expiredMarked > 0 || result.oldDeleted > 0) {
-          console.log(`🔄 Periodic cleanup: ${result.expiredMarked} expired marked, ${result.oldDeleted} old deleted`);
         }
-      } catch (error) {
-        console.error("Periodic cleanup error:", error);
+      } catch  {
       }
     }, 30 * 60 * 1000); // 30 minutes
     
-    console.log("✅ Token cleanup scheduled (every 30 minutes)");
   }
 };
 

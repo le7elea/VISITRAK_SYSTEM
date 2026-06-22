@@ -425,7 +425,6 @@ const Feedback = ({ user }) => {
         setOffices(data);
       },
       (error) => {
-        console.error("Error fetching offices:", error);
       }
     );
 
@@ -453,7 +452,6 @@ const Feedback = ({ user }) => {
         setManualQrTokensLoading(false);
       },
       (error) => {
-        console.error("Error fetching manual feedback QR tokens:", error);
         setManualQrTokens([]);
         setManualQrTokensLoading(false);
       }
@@ -477,8 +475,7 @@ const Feedback = ({ user }) => {
       } else if (typeof createdAt === "string" || typeof createdAt === "number") {
         return toLocalDateInput(new Date(createdAt));
       }
-    } catch (err) {
-      console.error("Error parsing date:", err);
+    } catch  {
     }
     
     return "";
@@ -508,8 +505,7 @@ const Feedback = ({ user }) => {
         month: "short",
         day: "numeric",
       });
-    } catch (err) {
-      console.error("Error formatting date:", err);
+    } catch  {
       return "Invalid date";
     }
   };
@@ -623,8 +619,7 @@ const Feedback = ({ user }) => {
             originalData: f,
           };
         });
-    } catch (err) {
-      console.error("Error filtering feedbacks:", err);
+    } catch  {
       return [];
     }
   }, [feedbacks, search, dayRange, office, isOfficeAdmin, user?.office, offices]);
@@ -655,8 +650,7 @@ const Feedback = ({ user }) => {
       }
 
       return ["Main Office", "Branch Office", "Headquarters"];
-    } catch (err) {
-      console.error("Error generating office options:", err);
+    } catch  {
       return ["Main Office", "Branch Office", "Headquarters"];
     }
   }, [offices, feedbacks, isOfficeAdmin, user?.office]);
@@ -799,7 +793,6 @@ const Feedback = ({ user }) => {
       setManualQrSettingsOpen(false);
       setQrModalOpen(true);
     } catch (err) {
-      console.error("Error generating manual feedback QR token:", err);
       const errorDetail = err?.code || err?.message || "Unknown error";
       alert(`Failed to generate manual feedback QR code: ${errorDetail}`);
     } finally {
@@ -813,8 +806,7 @@ const Feedback = ({ user }) => {
     try {
       await navigator.clipboard.writeText(generatedQr.url);
       alert("Manual feedback QR link copied.");
-    } catch (err) {
-      console.error("Error copying QR link:", err);
+    } catch  {
       alert("Could not copy the link. Please copy it manually.");
     }
   };
@@ -839,7 +831,6 @@ const Feedback = ({ user }) => {
       });
       await deleteDoc(qrDocRef);
     } catch (err) {
-      console.error("Error revoking manual feedback QR token:", err);
       const errorDetail = err?.code || err?.message || "Unknown error";
       alert(`Failed to revoke QR code: ${errorDetail}`);
     } finally {
@@ -1094,8 +1085,7 @@ const Feedback = ({ user }) => {
       setTimeout(() => {
         window.print();
       }, 0);
-    } catch (error) {
-      console.error("Error printing:", error);
+    } catch  {
       alert("Failed to print. Please try again.");
     }
   };
@@ -1136,8 +1126,7 @@ const Feedback = ({ user }) => {
         cc3Rating: visitor.cc3Rating ?? null,
       };
       setSelectedVisitor(modalData);
-    } catch (err) {
-      console.error("Error opening modal:", err);
+    } catch  {
       alert("Failed to open feedback details. Please try again.");
     }
   };

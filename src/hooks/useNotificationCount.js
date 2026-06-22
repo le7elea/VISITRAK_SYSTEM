@@ -65,12 +65,10 @@ export const useNotificationCount = (user) => {
           setLoading(false);
           
         }, (error) => {
-          console.error("Error fetching notification count:", error);
           setLoading(false);
         });
         
-      } catch (error) {
-        console.error("Error setting up notification count listener:", error);
+      } catch  {
         setLoading(false);
       }
     };

@@ -20,7 +20,6 @@ export default async function handler(req, res) {
     const db = admin.firestore();
     const now = new Date();
     
-    console.log('🧹 Starting token cleanup...');
     
     // Find expired or used tokens
     const tokensQuery = db.collection('passwordResetTokens')
@@ -28,7 +27,6 @@ export default async function handler(req, res) {
     
     const tokensSnapshot = await tokensQuery.get();
     
-    console.log(`Found ${tokensSnapshot.size} expired tokens`);
     
     // Delete in batches to avoid quota issues
     const batch = db.batch();
@@ -41,7 +39,6 @@ export default async function handler(req, res) {
       // Commit every 100 deletes
       if (deletedCount % 100 === 0) {
         batch.commit();
-        console.log(`Deleted ${deletedCount} tokens...`);
       }
     });
     
@@ -50,7 +47,6 @@ export default async function handler(req, res) {
       await batch.commit();
     }
     
-    console.log(`✅ Cleanup complete. Deleted ${deletedCount} tokens.`);
     
     res.status(200).json({
       success: true,
@@ -60,7 +56,6 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('Cleanup error:', error);
     res.status(500).json({
       success: false,
       error: error.message,

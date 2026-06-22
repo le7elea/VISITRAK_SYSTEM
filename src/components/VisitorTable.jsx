@@ -76,7 +76,6 @@ const VisitorTable = ({
       setSelectedVisitor(null);
       
     } catch (error) {
-      console.error("Error deleting visitor:", error);
       setError(error?.message || "Failed to delete visitor. Please try again.");
     } finally {
       setIsDeleting(false);

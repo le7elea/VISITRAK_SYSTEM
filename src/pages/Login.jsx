@@ -66,8 +66,7 @@ const Login = ({ onLogin }) => {
       } else if (parsed?.email) {
         setIdentifier(parsed.email);
       }
-    } catch (error) {
-      console.error("Error parsing saved user:", error);
+    } catch  {
       clearStoredSession();
     }
   }, []);
@@ -87,8 +86,7 @@ const Login = ({ onLogin }) => {
       };
 
       await addDoc(collection(db, "activityLogs"), logData);
-    } catch (error) {
-      console.error("Error creating activity log:", error);
+    } catch  {
     }
   };
 
@@ -189,7 +187,6 @@ const Login = ({ onLogin }) => {
 
       navigate("/dashboard", { replace: true });
     } catch (error) {
-      console.error("Login error:", error);
 
       let errorMessage = "Login failed. Please try again.";
       if (error.code === "auth/invalid-credential") {

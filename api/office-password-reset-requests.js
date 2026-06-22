@@ -224,7 +224,6 @@ const findOfficeByIdentifier = async (db, identifier, admin = null) => {
         const code = String(error?.code || "");
         const isNotFound = code === "auth/user-not-found";
         if (!isNotFound) {
-          console.error("findOfficeByIdentifier auth email lookup error:", error);
         }
       }
     }
@@ -401,8 +400,7 @@ const sendSuperAdminAlert = async ({ superAdminEmails, officeName, username }) =
 
   try {
     await sgMail.sendMultiple(message);
-  } catch (error) {
-    console.error("sendSuperAdminAlert error:", error?.message || error);
+  } catch  {
   }
 };
 
@@ -1100,7 +1098,6 @@ export default async function handler(req, res) {
       message: "Method not allowed.",
     });
   } catch (error) {
-    console.error("office-password-reset-requests error:", error);
     const errorMessage = String(error?.message || "");
     const isQuotaError = isQuotaExceededError(error);
     const isConfigError =
