@@ -15,6 +15,8 @@ const SATISFACTION_DIMENSIONS = [
   "Outcome (Naangkon ang husto nga serbisyo).",
 ];
 
+const PRINT_OFFICE_HEADER = "Office of the Human Resource Management";
+
 const isPlaceholderText = (value = "") => {
   const text = String(value || "").trim().toLowerCase();
   return (
@@ -269,10 +271,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
   const cc2Value = normalizeCharterChoice(visitor.cc2Rating, 5);
   const cc3Value = normalizeCharterChoice(visitor.cc3Rating, 4);
   const ratedBy = getFeedbackDisplayName(visitor);
-  const headerOfficeName = getFieldValue(
-    visitor.officialOfficeName || visitor.office,
-    "Office of the College of Computing and Information Sciences",
-  );
+  const headerOfficeName = PRINT_OFFICE_HEADER;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -425,6 +424,10 @@ const buildPrintableFeedbackHtml = (visitor) => {
 
       .field.compact {
         flex: 0 0 auto;
+      }
+
+      .field.client-type {
+        flex: 1 1 0;
       }
 
       .field-label {
@@ -706,6 +709,16 @@ const buildPrintableFeedbackHtml = (visitor) => {
 
           <div class="field-row">
             <div class="field grow">
+              <span class="field-label">Unit / Office Visited</span>
+              <span class="field-sub">(Gibisita nga opisina):</span>
+              <span class="field-value">${escapeHtml(
+                getFieldValue(visitor.office || visitor.unitOfficeVisited),
+              )}</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field client-type">
               <span class="field-label">Client Type</span>
               <span class="field-sub">(Klase sa Bisita):</span>
               <span class="choice-group">
@@ -718,16 +731,6 @@ const buildPrintableFeedbackHtml = (visitor) => {
                   clientTypeValue,
                 )}
               </span>
-            </div>
-          </div>
-
-          <div class="field-row">
-            <div class="field grow">
-              <span class="field-label">Unit / Office Visited</span>
-              <span class="field-sub">(Gibisita nga opisina):</span>
-              <span class="field-value">${escapeHtml(
-                getFieldValue(visitor.office || visitor.unitOfficeVisited),
-              )}</span>
             </div>
             <div class="field compact">
               <span class="field-label">Sex:</span>

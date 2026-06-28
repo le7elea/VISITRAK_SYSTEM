@@ -19,6 +19,8 @@ import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
 
+const PRINT_OFFICE_HEADER = "Office of the Human Resource Management";
+
 const toTrimmedText = (value) => (typeof value === "string" ? value.trim() : "");
 
 const isAllOfficesOption = (value) =>
@@ -1131,18 +1133,7 @@ const Feedback = ({ user }) => {
     }
   };
 
-  // Get the official office name for print header
-  const printOfficeName = useMemo(() => {
-    if (isOfficeAdmin && user?.office) {
-      return (
-        getOfficialOfficeName(user.office, offices) ||
-        user.office
-      );
-    } else if (office && office !== "") {
-      return getOfficialOfficeName(office, offices) || office;
-    }
-    return "Office of the College of Computing and Information Sciences";
-  }, [isOfficeAdmin, user?.office, office, offices]);
+  const printOfficeName = PRINT_OFFICE_HEADER;
 
   const printRows = useMemo(() => {
     const rowsByOffice = new Map();
