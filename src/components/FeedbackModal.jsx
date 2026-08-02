@@ -656,10 +656,10 @@ const buildPrintableFeedbackHtml = (visitor) => {
       }
 
       .ref-line {
-        margin-top: 2px;
-        text-align: right;
+        margin: 3px 0 0;
+        text-align: left;
         font-size: calc(8.4px * var(--font-scale));
-        color: #4b5563;
+        color: #111827;
       }
 
       @media print {
@@ -926,6 +926,7 @@ const buildPrintableFeedbackHtml = (visitor) => {
         </div>
         <div class="closing-note">&quot;Salamat sa imong Feedback&quot;</div>
       </div>
+      <p class="ref-line">F-AQA-CSF-003 | Rev 3 | 07/01/24 | Page 1 of 1</p>
         </div>
       </div>
     </div>

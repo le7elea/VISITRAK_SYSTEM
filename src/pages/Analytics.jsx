@@ -4200,21 +4200,21 @@ const Analytics = ({ setActiveTab }) => {
                         <td>{renderActionValue(row.targetImplementation)}</td>
                         <td className="text-center">
                           {row.implementationStatus === "closed"
-                            ? "X"
+                            ? "✓"
                             : !row.implementationStatus
                               ? ""
                               : ""}
                         </td>
                         <td className="text-center">
                           {row.implementationStatus === "open"
-                            ? "X"
+                            ? "✓"
                             : !row.implementationStatus
                               ? ""
                               : ""}
                         </td>
                         <td className="text-center">
                           {row.implementationStatus === "notImplemented"
-                            ? "X"
+                            ? "✓"
                             : !row.implementationStatus
                               ? ""
                               : ""}

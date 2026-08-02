@@ -165,7 +165,7 @@ const toLocalDateInput = (dateObj) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatPrintFooterDate = () => "09/09/25";
+const formatPrintFooterDate = () => "07/01/24";
 
 const getOfficialOfficeName = (officeValue, offices = []) => {
   const normalizedOffice = toTrimmedText(officeValue).toLowerCase();
@@ -323,8 +323,8 @@ const Feedback = ({ user }) => {
     approved: "MARIETTA C. MACALOLOT, PhD",
   });
   const [printFooterFields, setPrintFooterFields] = useState({
-    documentCode: "F-AQA-CSF-002",
-    revisionNumber: "Rev. 3",
+    documentCode: "F-AQA-CSF-003",
+    revisionNumber: "Rev 3",
   });
   const [printTableFields, setPrintTableFields] = useState({});
   const [printFooterSnapshot, setPrintFooterSnapshot] = useState({
@@ -418,7 +418,8 @@ const Feedback = ({ user }) => {
 
         setOffices(data);
       },
-      (error) => {
+      () => {
+        setOffices([]);
       }
     );
 
@@ -445,7 +446,7 @@ const Feedback = ({ user }) => {
         setManualQrTokens(tokens);
         setManualQrTokensLoading(false);
       },
-      (error) => {
+      () => {
         setManualQrTokens([]);
         setManualQrTokensLoading(false);
       }
@@ -469,7 +470,8 @@ const Feedback = ({ user }) => {
       } else if (typeof createdAt === "string" || typeof createdAt === "number") {
         return toLocalDateInput(new Date(createdAt));
       }
-    } catch  {
+    } catch {
+      return "";
     }
     
     return "";
@@ -1253,13 +1255,13 @@ const Feedback = ({ user }) => {
   const approvedByNameForPrint =
     toTrimmedText(printSignatories.approved) || "________________________";
   const documentCodeForPrint =
-    toTrimmedText(printFooterFields.documentCode) || "F-AQA-CSF-002";
+    toTrimmedText(printFooterFields.documentCode) || "F-AQA-CSF-003";
   const revisionNumberForPrint =
-    toTrimmedText(printFooterFields.revisionNumber) || "Rev. 3";
+    toTrimmedText(printFooterFields.revisionNumber) || "Rev 3";
   const printedDateForPrint =
     printFooterSnapshot.printedDate || formatPrintFooterDate(new Date());
-  const printFooterContentPrefix = `${documentCodeForPrint} | ${revisionNumberForPrint} | ${printedDateForPrint} | Page `;
-  const printFooterPrefixCSS = JSON.stringify(printFooterContentPrefix);
+  const printFooterContent = `${documentCodeForPrint} | ${revisionNumberForPrint} | ${printedDateForPrint} | Page 1 of 1`;
+  const printFooterContentCSS = JSON.stringify(printFooterContent);
   const PRINT_PAGE_WIDTH_IN = 13;
   const PRINT_PAGE_HEIGHT_IN = 8.5;
   const PRINT_PAGE_MARGIN_TOP_CM = 1.27;
@@ -2071,7 +2073,7 @@ const Feedback = ({ user }) => {
                       </p>
                       <p className="mt-2 break-words text-sm text-slate-700">
                         {documentCodeForPrint} | {revisionNumberForPrint} |{" "}
-                        {formatPrintFooterDate(new Date())} | Page 1 of N
+                        {formatPrintFooterDate(new Date())} | Page 1 of 1
                       </p>
                     </div>
                   </div>
@@ -2259,7 +2261,7 @@ const Feedback = ({ user }) => {
             size: ${PRINT_PAGE_WIDTH_IN}in ${PRINT_PAGE_HEIGHT_IN}in;
             margin: ${PRINT_PAGE_MARGIN_TOP_CM}cm ${PRINT_PAGE_MARGIN_RIGHT_CM}cm ${PRINT_PAGE_MARGIN_BOTTOM_CM}cm ${PRINT_PAGE_MARGIN_LEFT_CM}cm;
             @bottom-left {
-              content: ${printFooterPrefixCSS} counter(page) " of " counter(pages);
+              content: ${printFooterContentCSS};
               font-family: Arial, sans-serif;
               font-size: 11px;
               font-weight: 400;
