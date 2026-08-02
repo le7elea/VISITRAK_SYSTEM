@@ -18,6 +18,9 @@ import { Bell, CheckCheck, Sparkles, Clock, Building2, User, Search, Filter } fr
 const getNotificationStorageKeyBase = (user) =>
   user?.uid || user?.id || user?.email || "anonymous";
 
+const notificationFeedCardClass =
+  "flex flex-col h-[calc(100vh-14rem)] bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 mt-6";
+
 const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -321,7 +324,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   if (loading) {
     return (
-      <section className="flex flex-col h-130 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 mt-6">
+      <section className={notificationFeedCardClass}>
         <div className="flex justify-between items-center border-b pb-4 mb-4 border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg">
@@ -347,7 +350,7 @@ const NotificationCard = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   return (
     <>
-      <section className="flex flex-col h-137 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 mt-6">
+      <section className={notificationFeedCardClass}>
         {/* Enhanced Header */}
         <div className="border-b pb-4 mb-4 border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex justify-between items-center mb-4">
