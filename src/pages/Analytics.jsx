@@ -2735,10 +2735,10 @@ const Analytics = ({ setActiveTab }) => {
     if (!currentUser) return formatPrintOfficeName(fallbackOfficeName);
     if (currentUser.type === "SuperAdmin") {
       return toOfficialOfficePrintName(
-        currentOfficeRecord?.officialName ||
-        currentOfficeRecord?.name ||
-        currentUser.originalOffice ||
-        currentUser.office ||
+        // currentOfficeRecord?.officialName ||
+        // currentOfficeRecord?.name ||
+        // currentUser.originalOffice ||
+        // currentUser.office ||
         fallbackOfficeName,
         offices,
       );
