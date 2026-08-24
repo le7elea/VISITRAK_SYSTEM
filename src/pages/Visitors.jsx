@@ -400,31 +400,31 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     return pages.filter((page) => page.rows.length > 0);
   }, [printVisitors]);
 
-  const currentOfficeRecord = useMemo(() => {
-    if (!user || offices.length === 0) return null;
+  // const currentOfficeRecord = useMemo(() => {
+  //   if (!user || offices.length === 0) return null;
 
-    if (user.id) {
-      const byId = offices.find(o => o.id === user.id);
-      if (byId) return byId;
-    }
+  //   if (user.id) {
+  //     const byId = offices.find(o => o.id === user.id);
+  //     if (byId) return byId;
+  //   }
 
-    const userEmail = user.email ? user.email.toLowerCase().trim() : "";
-    if (userEmail) {
-      const byEmail = offices.find(o => (o.email || "").toLowerCase().trim() === userEmail);
-      if (byEmail) return byEmail;
-    }
+  //   const userEmail = user.email ? user.email.toLowerCase().trim() : "";
+  //   if (userEmail) {
+  //     const byEmail = offices.find(o => (o.email || "").toLowerCase().trim() === userEmail);
+  //     if (byEmail) return byEmail;
+  //   }
 
-    if (user.office) {
-      const byOfficeName = offices.find(o => o.name === user.office);
-      if (byOfficeName) return byOfficeName;
-    }
+  //   if (user.office) {
+  //     const byOfficeName = offices.find(o => o.name === user.office);
+  //     if (byOfficeName) return byOfficeName;
+  //   }
 
-    if (user.type === "SuperAdmin") {
-      return offices.find(o => o.role === "super") || null;
-    }
+  //   if (user.type === "SuperAdmin") {
+  //     return offices.find(o => o.role === "super") || null;
+  //   }
 
-    return null;
-  }, [user, offices]);
+  //   return null;
+  // }, [user, offices]);
 
   // Get the official office name for print header
   const printOfficeName = useMemo(() => {
@@ -437,9 +437,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
     if (user.type === "SuperAdmin" && officeFilter === "All Offices") {
       return (
-        currentOfficeRecord?.officialName ||
-        currentOfficeRecord?.name ||
-        user.office ||
+        // currentOfficeRecord?.officialName ||
+        // currentOfficeRecord?.name ||
+        // user.office ||
         fallbackOfficeName
       );
     }
@@ -450,7 +450,9 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
     }
 
     return fallbackOfficeName;
-  }, [user, officeFilter, offices, currentOfficeRecord]);
+  }, [user, officeFilter, offices,
+    // currentOfficeRecord
+  ]);
 
   const documentCodeForPrint =
     String(printFooterFields.documentCode || "").trim() ||
