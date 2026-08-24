@@ -19,7 +19,7 @@ import bisuLogo from "../assets/bisulogo.png";
 import bagongPilipinasLogo from "../assets/bagong_pilipinas_logo.png";
 import tuvISOLogo from "../assets/tuvISO_logo.png";
 
-const PRINT_OFFICE_HEADER = "Office of the Human Resource Management";
+const PRINT_OFFICE_HEADER = "Human Resource Management Office";
 
 const toTrimmedText = (value) => (typeof value === "string" ? value.trim() : "");
 

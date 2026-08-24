@@ -35,10 +35,10 @@ const normalizeQuestionRatings = (answers) => {
             `Question ${index + 1}`,
           rating: getNumericRating(
             answer.rating ??
-              answer.score ??
-              answer.value ??
-              answer.answer ??
-              answer.selected
+            answer.score ??
+            answer.value ??
+            answer.answer ??
+            answer.selected
           ),
         };
       }
@@ -126,7 +126,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const [visits, setVisits] = useState([]);
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [offices, setOffices] = useState([]); 
+  const [offices, setOffices] = useState([]);
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [showPrintFooterModal, setShowPrintFooterModal] = useState(false);
   const [printFooterFields, setPrintFooterFields] = useState({
@@ -174,10 +174,10 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
             }),
             timeOut: checkOutTime
               ? checkOutTime.toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: true,
-                })
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })
               : "-",
             // For filtering by exact date
             rawDate: checkInTime,
@@ -282,7 +282,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const visitsWithRatings = useMemo(() => {
     return visits.map(visit => {
       const feedback = feedbacks.find(f => f.visitId === visit.id);
-      
+
       return {
         ...visit,
         questionRatings: feedback?.questionRatings || [],
@@ -305,7 +305,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
       setTimeout(() => {
         window.print();
       }, 0);
-    } catch  {
+    } catch {
       alert('Failed to print. Please try again.');
     }
   };
@@ -318,11 +318,11 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   const uniqueOffices = useMemo(() => {
     const offices = visitsWithRatings
       .map(v => v.office)
-      .filter((office, index, self) => 
+      .filter((office, index, self) =>
         office && office.trim() !== "" && self.indexOf(office) === index
       )
       .sort();
-    
+
     return ["All Offices", ...offices];
   }, [visitsWithRatings]);
 
@@ -337,16 +337,16 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
   // Apply search, office dropdown (if SuperAdmin), and date range filters
   const filteredVisitors = useMemo(() => {
     return officeFiltered.filter((v) => {
-      const matchSearch = 
+      const matchSearch =
         v.name.toLowerCase().includes(search.toLowerCase()) ||
         (v.email && v.email.toLowerCase().includes(search.toLowerCase())) ||
         (v.phone && v.phone.includes(search));
-      
+
       const matchOffice =
         user.type === "SuperAdmin"
           ? officeFilter === "All Offices" || v.office === officeFilter
           : true;
-      
+
       const visitorDate = v.rawDate ? new Date(v.rawDate) : new Date();
       let matchesStart = true;
       let matchesEnd = true;
@@ -428,7 +428,7 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
 
   // Get the official office name for print header
   const printOfficeName = useMemo(() => {
-    const fallbackOfficeName = "Office of the College of Computing and Information Sciences";
+    const fallbackOfficeName = "Human Resource Management Office";
 
     if (user.type === "OfficeAdmin" && user.office) {
       const office = offices.find(o => o.name === user.office);
@@ -631,159 +631,158 @@ const Visitors = ({ user = { type: "SuperAdmin", office: null } }) => {
           return (
             <div
               key={pageIndex}
-              className={`page-break print-page px-2 py-1${
-                shouldForcePageBreak ? " page-break-after" : ""
-              }`}
+              className={`page-break print-page px-2 py-1${shouldForcePageBreak ? " page-break-after" : ""
+                }`}
             >
-                 {/* Header */}
-                 <div
-                   className="flex items-start justify-between mb-1"
-                   style={{ paddingInline: "18px" }}
-                 >
-                   <div
-                     className="flex items-center"
-                     style={{ marginLeft: "4px" }}
-                   >
-                     <div className="w-24 h-16 flex items-center justify-center">
-                       <img 
-                         src={bisuLogo} 
-                         alt="BISU Logo" 
-                         className="w-full h-full object-contain"
-                       />
-                     </div>
-                     <div className="leading-tight text-left font-normal">
-                       <p
-                         className="text-[14.67px]"
-                         style={{ fontFamily: "Arial, sans-serif" }}
-                       >
-                         Republic of the Philippines
-                       </p>
-                       <h1
-                         className="text-[16px] font-bold tracking-wide leading-none"
-                         style={{ fontFamily: "Arial, sans-serif" }}
-                       >
-                         BOHOL ISLAND STATE UNIVERSITY
-                       </h1>
-                       <p
-                         className="text-[13.33px]"
-                         style={{ fontFamily: "Arial, sans-serif" }}
-                       >
-                         Magsija, Balilihan 6342, Bohol, Philippines
-                       </p>
-                       <p
-                         className="text-[13.33px]"
-                         style={{ fontFamily: "Arial, sans-serif" }}
-                       >
-                         {printOfficeName}
-                       </p>
-                       <p
-                         className="text-[13.33px] italic"
-                         style={{ fontFamily: '"Times New Roman", Times, serif' }}
-                       >
-                         Balance | Integrity | Stewardship | Uprightness
-                       </p>
-                     </div>
-                   </div>
-                   
-                   <div
-                     className="flex gap-2"
-                     style={{ marginRight: "8px" }}
-                   >
-                     <div className="w-20 h-24 flex items-center justify-center">
-                       <img 
-                         src={bagongPilipinasLogo} 
-                         alt="Bagong Pilipinas Logo" 
-                         className="w-full h-full object-contain"
-                       />
-                     </div>
-                     <div className="w-36 h-24 flex items-center justify-center">
-                       <img 
-                         src={tuvISOLogo} 
-                         alt="ISO 9001:2015 Certification" 
-                         className="w-full h-full object-contain"
-                       />
-                    </div>
+              {/* Header */}
+              <div
+                className="flex items-start justify-between mb-1"
+                style={{ paddingInline: "18px" }}
+              >
+                <div
+                  className="flex items-center"
+                  style={{ marginLeft: "4px" }}
+                >
+                  <div className="w-24 h-16 flex items-center justify-center">
+                    <img
+                      src={bisuLogo}
+                      alt="BISU Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="leading-tight text-left font-normal">
+                    <p
+                      className="text-[14.67px]"
+                      style={{ fontFamily: "Arial, sans-serif" }}
+                    >
+                      Republic of the Philippines
+                    </p>
+                    <h1
+                      className="text-[16px] font-bold tracking-wide leading-none"
+                      style={{ fontFamily: "Arial, sans-serif" }}
+                    >
+                      BOHOL ISLAND STATE UNIVERSITY
+                    </h1>
+                    <p
+                      className="text-[13.33px]"
+                      style={{ fontFamily: "Arial, sans-serif" }}
+                    >
+                      Magsija, Balilihan 6342, Bohol, Philippines
+                    </p>
+                    <p
+                      className="text-[13.33px]"
+                      style={{ fontFamily: "Arial, sans-serif" }}
+                    >
+                      {printOfficeName}
+                    </p>
+                    <p
+                      className="text-[13.33px] italic"
+                      style={{ fontFamily: '"Times New Roman", Times, serif' }}
+                    >
+                      Balance | Integrity | Stewardship | Uprightness
+                    </p>
                   </div>
                 </div>
 
-                {/* Title */}
-                <h2 className="text-center text-base font-bold mb-1 uppercase">Visitors' Log Sheet</h2>
-                {/* Table */}
-                <table className="print-page-table w-full table-fixed border-collapse border-1 border-black">
-                  <thead>
-                    <tr className="bg-white print-header-row">
-                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[15%]">
-                        Date<br/>(MM-DD-YY)
-                      </th>
-                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[12%]">
-                        Time In
-                      </th>
-                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[23%]">
-                        Name
-                      </th>
-                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
-                        Purpose
-                      </th>
-                      <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
-                        Contact Number /<br/>email address
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageVisitors.map((visitor) => {
-                      const dateObj = visitor.rawDate || new Date();
-                      const formattedDate = formatPrintTableDate(dateObj);
-                      
-                      const contactLines = visitor._printContactLines || [];
-                      return (
-                        <tr key={visitor.id} className="print-body-row">
-                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
-                            <span className="print-cell-text">{formattedDate}</span>
-                          </td>
-                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
-                            <span className="print-cell-text">{visitor.timeIn}</span>
-                          </td>
-                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
-                            <span className="print-cell-text">{visitor.name}</span>
-                          </td>
-                          <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
-                            <span className="print-cell-text">{visitor.purpose}</span>
-                          </td>
-                          <td
-                            className="print-body-cell print-contact-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center"
-                          >
-                            {contactLines.length > 0 ? (
-                              <div className="print-contact-text">
-                                {contactLines.map((detail, detailIndex) => (
-                                  <div
-                                    key={`${visitor.id}-contact-${detailIndex}`}
-                                    className="print-contact-line"
-                                  >
-                                    {detail}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="print-cell-text">&nbsp;</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {/* Add empty rows to complete 18 rows per page */}
-                    {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
-                      <tr key={`empty-${i}`} className="print-body-row">
-                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
-                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
-                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
-                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
-                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div
+                  className="flex gap-2"
+                  style={{ marginRight: "8px" }}
+                >
+                  <div className="w-20 h-24 flex items-center justify-center">
+                    <img
+                      src={bagongPilipinasLogo}
+                      alt="Bagong Pilipinas Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="w-36 h-24 flex items-center justify-center">
+                    <img
+                      src={tuvISOLogo}
+                      alt="ISO 9001:2015 Certification"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
               </div>
-            );
+
+              {/* Title */}
+              <h2 className="text-center text-base font-bold mb-1 uppercase">Visitors' Log Sheet</h2>
+              {/* Table */}
+              <table className="print-page-table w-full table-fixed border-collapse border-1 border-black">
+                <thead>
+                  <tr className="bg-white print-header-row">
+                    <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[15%]">
+                      Date<br />(MM-DD-YY)
+                    </th>
+                    <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[12%]">
+                      Time In
+                    </th>
+                    <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[23%]">
+                      Name
+                    </th>
+                    <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
+                      Purpose
+                    </th>
+                    <th className="print-header-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight font-bold text-center w-[25%]">
+                      Contact Number /<br />email address
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageVisitors.map((visitor) => {
+                    const dateObj = visitor.rawDate || new Date();
+                    const formattedDate = formatPrintTableDate(dateObj);
+
+                    const contactLines = visitor._printContactLines || [];
+                    return (
+                      <tr key={visitor.id} className="print-body-row">
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                          <span className="print-cell-text">{formattedDate}</span>
+                        </td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                          <span className="print-cell-text">{visitor.timeIn}</span>
+                        </td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                          <span className="print-cell-text">{visitor.name}</span>
+                        </td>
+                        <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">
+                          <span className="print-cell-text">{visitor.purpose}</span>
+                        </td>
+                        <td
+                          className="print-body-cell print-contact-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center"
+                        >
+                          {contactLines.length > 0 ? (
+                            <div className="print-contact-text">
+                              {contactLines.map((detail, detailIndex) => (
+                                <div
+                                  key={`${visitor.id}-contact-${detailIndex}`}
+                                  className="print-contact-line"
+                                >
+                                  {detail}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="print-cell-text">&nbsp;</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Add empty rows to complete 18 rows per page */}
+                  {Array.from({ length: emptyRowsNeeded }).map((_, i) => (
+                    <tr key={`empty-${i}`} className="print-body-row">
+                      <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                      <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                      <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                      <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                      <td className="print-body-cell border-2 border-black px-1 py-0 text-[13.33px] leading-tight text-center">&nbsp;</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
         })}
       </div>
 

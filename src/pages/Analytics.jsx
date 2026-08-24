@@ -2730,7 +2730,7 @@ const Analytics = ({ setActiveTab }) => {
 
   const printOfficeName = useMemo(() => {
     const fallbackOfficeName =
-      "Office of the College of Computing and Information Sciences";
+      "Human Resource Management Office";
 
     if (!currentUser) return formatPrintOfficeName(fallbackOfficeName);
     if (currentUser.type === "SuperAdmin") {
