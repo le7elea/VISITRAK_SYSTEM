@@ -365,6 +365,7 @@ const useFeedbackRatings = () => {
                   } catch (visitError) {
                     const visitErrorCode = String(visitError?.code || "");
                     if (visitErrorCode !== "permission-denied") {
+                      //
                     }
                   }
                 }
@@ -374,9 +375,9 @@ const useFeedbackRatings = () => {
                   ? rawAnswers
                   : rawAnswers && typeof rawAnswers === "object"
                     ? Object.entries(rawAnswers).map(([question, rating]) => ({
-                        question,
-                        rating,
-                      }))
+                      question,
+                      rating,
+                    }))
                     : [];
 
                 const officeValue = getOfficeValue(d, visitData || {});
@@ -402,9 +403,9 @@ const useFeedbackRatings = () => {
                   averageRating: getNumericRating(d.averageRating) ?? 0,
                   commendation: readTextField(
                     d.commendation ||
-                      d.commendations ||
-                      d.positiveFeedback ||
-                      d.compliment,
+                    d.commendations ||
+                    d.positiveFeedback ||
+                    d.compliment,
                   ),
                   suggestion: readTextField(d.suggestion || d.recommendation),
                   questions: Array.isArray(d.questions) ? d.questions : [],
@@ -439,7 +440,7 @@ const useFeedbackRatings = () => {
               setFeedbacks(data);
               setError(null);
               setLoading(false);
-            } catch  {
+            } catch {
               setError(
                 new Error(
                   "Failed to parse feedback data. Please check the data format.",
@@ -465,7 +466,7 @@ const useFeedbackRatings = () => {
             setLoading(false);
           },
         );
-      } catch  {
+      } catch {
         setError(new Error("Failed to initialize feedback listener."));
         setLoading(false);
       }

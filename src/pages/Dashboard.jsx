@@ -17,6 +17,113 @@ import { getOfficePasswordResetRequests } from "../lib/info.services";
 
 const RESET_REQUEST_CHECK_INTERVAL_MS = 30000;
 
+// ---------- Date helpers (shared by visitors + feedback) ----------
+
+// Handles: JS Date, Firestore Timestamp (instance with .toDate(), or a
+// plain { seconds, nanoseconds } object), epoch values, and date strings
+// (including "M/D/YYYY").
+const parseFlexibleDate = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+
+  // Firestore Timestamp instance
+  if (typeof value?.toDate === "function") {
+    const d = value.toDate();
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Plain object shaped like a Firestore Timestamp ({ seconds, nanoseconds })
+  if (typeof value === "object" && typeof value.seconds === "number") {
+    const d = new Date(value.seconds * 1000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const direct = new Date(value);
+  if (!isNaN(direct.getTime())) return direct;
+
+  if (typeof value === "string" && value.includes("/")) {
+    const [month, day, year] = value.split("/");
+    const parsed = new Date(year, month - 1, day);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  return null;
+};
+
+const isSameDay = (dateValue, referenceDate) => {
+  const parsed = parseFlexibleDate(dateValue);
+  if (!parsed) return false;
+  return parsed.toLocaleDateString() === referenceDate.toLocaleDateString();
+};
+
+const isWithinLastDays = (dateValue, referenceDate, days) => {
+  const parsed = parseFlexibleDate(dateValue);
+  if (!parsed) return false;
+  const diffDays = (referenceDate - parsed) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= days;
+};
+
+// ---------- Name / field helpers ----------
+const getVisitorName = (v) => v?.name || v?.visitorName || v?.fullName || "";
+
+// useFeedbackRatings already normalizes this onto `name`.
+const getFeedbackName = (f) => f?.name || "";
+
+// Prefer the actual visit time, then fall back to when the feedback doc
+// was created. Both can be Firestore Timestamps — parseFlexibleDate handles that.
+const getFeedbackDate = (f) => f?.visitDateTime || f?.createdAt;
+
+const normalizeName = (name) => (name || "").trim().toLowerCase();
+
+/**
+ * Counts unique "people" across a visitor list and a feedback list for the
+ * same period, treating a visitor and a feedback entry as ONE person if
+ * their (normalized) names match. Unnamed entries can't be matched, so
+ * each is still counted individually rather than dropped.
+ */
+const countUniquePeople = (visitorList, feedbackList) => {
+  const countedNames = new Set();
+  let total = 0;
+
+  visitorList.forEach((v) => {
+    const name = normalizeName(getVisitorName(v));
+    if (!name) {
+      total += 1; // can't dedupe an unnamed record, still count it
+      return;
+    }
+    if (!countedNames.has(name)) {
+      countedNames.add(name);
+      total += 1;
+    }
+  });
+
+  feedbackList.forEach((f) => {
+    const name = normalizeName(getFeedbackName(f));
+    if (!name) {
+      total += 1;
+      return;
+    }
+    if (!countedNames.has(name)) {
+      countedNames.add(name);
+      total += 1;
+    }
+  });
+
+  return total;
+};
+
+// A feedback record can carry its own office (office / unitOfficeVisited,
+// already resolved by useFeedbackRatings), or we fall back to looking up
+// its visitId in the visitor office map.
+const isFeedbackForOffice = (f, office, visitorOfficeMap) => {
+  const directOffice = f?.office || f?.unitOfficeVisited;
+  if (directOffice) return directOffice === office;
+  return visitorOfficeMap[f?.visitId] === office;
+};
+
 const ResetRequestNotificationModal = ({ show, title, message, onOk }) => {
   if (!show) return null;
 
@@ -129,7 +236,7 @@ const Dashboard = ({
       if (!audioContext) return;
 
       if (audioContext.state === "suspended") {
-        void audioContext.resume().catch(() => {});
+        void audioContext.resume().catch(() => { });
       }
     };
 
@@ -145,7 +252,7 @@ const Dashboard = ({
   useEffect(
     () => () => {
       if (resetAudioContextRef.current?.state !== "closed") {
-        void resetAudioContextRef.current?.close().catch(() => {});
+        void resetAudioContextRef.current?.close().catch(() => { });
       }
     },
     []
@@ -255,79 +362,84 @@ const Dashboard = ({
     }
   }, [activeTab, allowedTabs]);
 
-  
   const filteredVisitors = useMemo(() => {
     return user.type === "OfficeAdmin"
       ? visitors.filter((v) => v.office === user.office)
       : visitors;
   }, [visitors, user]);
 
- 
+  // Map visitId -> office, used as a fallback to attribute a feedback entry
+  // to an office when the feedback record itself has no office field.
+  const visitorOfficeMap = useMemo(() => {
+    const map = {};
+    visitors.forEach((v) => {
+      if (v.id) map[v.id] = v.office;
+    });
+    return map;
+  }, [visitors]);
+
+  // Feedback scoped to the current admin's office (or all, for SuperAdmin).
+  const filteredFeedbacks = useMemo(() => {
+    if (!feedbacks) return [];
+    if (user.type === "OfficeAdmin" && user.office) {
+      return feedbacks.filter((f) =>
+        isFeedbackForOffice(f, user.office, visitorOfficeMap)
+      );
+    }
+    return feedbacks;
+  }, [feedbacks, visitorOfficeMap, user.type, user.office]);
+
   const todaysVisitors = useMemo(() => {
     const today = new Date().toLocaleDateString();
     return filteredVisitors.filter((v) => v.date === today);
   }, [filteredVisitors]);
 
-  
-  const visitorsToday = useMemo(() => todaysVisitors.length, [todaysVisitors]);
+  const todaysFeedbacks = useMemo(() => {
+    const now = new Date();
+    return filteredFeedbacks.filter((f) => isSameDay(getFeedbackDate(f), now));
+  }, [filteredFeedbacks]);
 
-  
-  const visitorsThisWeek = useMemo(() => {
+  // Visitors today + feedback today, de-duplicated by name so someone who
+  // both visited and left feedback today is only counted once.
+  const visitorsToday = useMemo(
+    () => countUniquePeople(todaysVisitors, todaysFeedbacks),
+    [todaysVisitors, todaysFeedbacks]
+  );
+
+  const visitorsThisWeekList = useMemo(() => {
     const today = new Date();
-    return filteredVisitors.filter((v) => {
-      const visitorDate = new Date(v.date);
-      if (isNaN(visitorDate.getTime())) {
-        const [month, day, year] = v.date.split("/");
-        const parsedDate = new Date(year, month - 1, day);
-        if (!isNaN(parsedDate.getTime())) {
-          const diffDays = (today - parsedDate) / (1000 * 60 * 60 * 24);
-          return diffDays <= 7 && diffDays >= 0;
-        }
-        return false;
-      }
-      const diffDays = (today - visitorDate) / (1000 * 60 * 60 * 24);
-      return diffDays <= 7 && diffDays >= 0;
-    }).length;
+    return filteredVisitors.filter((v) => isWithinLastDays(v.date, today, 7));
   }, [filteredVisitors]);
 
- 
+  const feedbacksThisWeek = useMemo(() => {
+    const today = new Date();
+    return filteredFeedbacks.filter((f) =>
+      isWithinLastDays(getFeedbackDate(f), today, 7)
+    );
+  }, [filteredFeedbacks]);
+
+  // Same de-duplication for the weekly count.
+  const visitorsThisWeek = useMemo(
+    () => countUniquePeople(visitorsThisWeekList, feedbacksThisWeek),
+    [visitorsThisWeekList, feedbacksThisWeek]
+  );
+
   const currentlyCheckedIn = useMemo(
     () => filteredVisitors.filter((v) => v.status === "Check In").length,
     [filteredVisitors]
   );
 
-  
   const avgSatisfaction = useMemo(() => {
-    if (!feedbacks || feedbacks.length === 0) return "0.0";
+    if (!filteredFeedbacks || filteredFeedbacks.length === 0) return "0.0";
 
-    let relevantFeedbacks = feedbacks;
-
-    // Filter feedbacks by office if needed
-    if (user.type === "OfficeAdmin" && user.office) {
-      // Since feedbacks might not have office field, let's try to match with visitors
-      // Create a map of visitId to office from visitors
-      const visitorOfficeMap = {};
-      visitors.forEach((v) => {
-        if (v.id) visitorOfficeMap[v.id] = v.office;
-      });
-
-      // Filter feedbacks where the corresponding visitor has the right office
-      relevantFeedbacks = feedbacks.filter((f) => {
-        const visitorOffice = visitorOfficeMap[f.visitId];
-        return visitorOffice === user.office;
-      });
-    }
-
-    if (relevantFeedbacks.length === 0) return "0.0";
-
-    const totalRating = relevantFeedbacks.reduce(
+    const totalRating = filteredFeedbacks.reduce(
       (sum, f) => sum + (f.averageRating || 0),
       0
     );
-    const average = totalRating / relevantFeedbacks.length;
+    const average = totalRating / filteredFeedbacks.length;
 
     return average.toFixed(1);
-  }, [feedbacks, visitors, user.type, user.office]);
+  }, [filteredFeedbacks]);
 
   // Format average satisfaction with /5 suffix
   const formattedAvgSatisfaction = useMemo(() => {
@@ -337,9 +449,8 @@ const Dashboard = ({
 
   return (
     <div
-      className={`flex h-screen transition-colors ${
-        darkMode ? "dark bg-[#1f1f1f] text-white" : "bg-white text-gray-900"
-      }`}
+      className={`flex h-screen transition-colors ${darkMode ? "dark bg-[#1f1f1f] text-white" : "bg-white text-gray-900"
+        }`}
     >
       <Sidebar
         menu={menu}
@@ -382,7 +493,7 @@ const Dashboard = ({
           {activeTab === "analytics" && user.type === "SuperAdmin" && (
             <Analytics
               visitors={filteredVisitors}
-              feedbacks={feedbacks}
+              feedbacks={filteredFeedbacks}
               setActiveTab={setActiveTab}
             />
           )}
@@ -391,7 +502,7 @@ const Dashboard = ({
           {activeTab === "feedback" && user.type === "SuperAdmin" && (
             <Feedback
               visitors={filteredVisitors}
-              feedbacks={feedbacks}
+              feedbacks={filteredFeedbacks}
               user={user}
             />
           )}
