@@ -15,7 +15,7 @@ const SATISFACTION_DIMENSIONS = [
   "Outcome (Naangkon ang husto nga serbisyo).",
 ];
 
-const PRINT_OFFICE_HEADER = "Office of the Human Resource Management";
+const PRINT_OFFICE_HEADER = "Human Resource Management Office";
 
 const isPlaceholderText = (value = "") => {
   const text = String(value || "").trim().toLowerCase();
